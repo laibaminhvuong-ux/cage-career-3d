@@ -157,6 +157,11 @@ function pinFighter(f, target) {
   STATS.forEach((s, i) => f.set(s, vals[i]));
 }
 
+/** What to call a fighter holding n belts at once. */
+function beltWord(n) {
+  return ["Champion", "Champion", "Champ-champ", "Triple champ", "Quadruple champ"][n] || n + "-belt champion";
+}
+
 // ------------------------------------------------------------------ staff
 
 const ROLES = ["head", "striking", "wrestling", "bjj", "snc", "physio", "manager"];
@@ -696,7 +701,7 @@ export class Fight {
     return {
       round: this.round, rounds: this.rounds, title: this.title, finished: this.finished, winner: this.winner,
       methodType: this.methodType, method: this.method, endRound: this.endRound, endTime: this.endTime,
-      player: this.p.toJson(), opponent: this.o.toJson(), logs: this.logs,
+      player: this.p.toJson(), opponent: this.o.toJson(), logs: this.logs, belt: this.belt || null,
       cards: this.finished ? this.cards() : null,
       scout: this.coachStars >= 3 && !this.finished ? this.oppNext : null,
       oppFiredUp: this.o.bonus > 0,
@@ -714,6 +719,8 @@ const GYM_MULT = [1.0, 1.25, 1.5, 1.8, 2.1];
 const GYM_FEE = [50, 150, 400, 1000, 2500];
 const CONTENDER_WINS = 3, CONTENDER_OVR = 52, RANKED = 16, DIVISION_COOLDOWN = 26;
 const GRUDGE_HEAT = 60, GRUDGE_GAP = 20;
+// a champion who goes this long without defending a belt is stripped of it (a year and a half)
+const STRIP_WEEKS = 78, STRIP_WARN = 66;
 
 export class Offer {
   constructor(opp, weeks, purse, winBonus, rounds, title, contender) {
@@ -728,6 +735,8 @@ export class Offer {
     this.talkLevel = 0;
     /** Stat bonus the opponent brings into the fight after being provoked. */
     this.oppBonus = 0;
+    /** "title", "interim", "unify", "eliminator", "main" or null. */
+    this.kind = title ? "title" : null;
   }
 }
 Offer.tag = "Offer";
@@ -768,6 +777,7 @@ export class Career {
     this.rivalHeat = this.rivalWins = this.rivalLosses = this.weeksWithoutRival = 0;
     this.lastRivalFight = -999;
     this.rivalries = [];
+    this.migrate();
     this.buildDivision();
     this.log(this.me.name + " turns pro out of a " + GYM_NAMES[0] + ". The journey begins.");
     const r = Fighter.generate(this.me.overall() + 1, weightClass);
@@ -781,6 +791,158 @@ export class Career {
   buildDivision() {
     this.rankings = [];
     for (let i = 0; i < RANKED; i++) this.rankings.push(Fighter.generate(88 - i * 1.2, this.weightClass));
+    this.interim = null;
+    this.champOut = this.champOutStart = 0;
+    this.nextInLine = false;
+    this.recordChamp(this.rankings[0], "Reigning champion");
+  }
+
+  // ---------------------------------------------------------------- the belt
+  // Like the UFC: one undisputed champion per division (rank 0). An injured or idle champion
+  // leads to an interim title and then a unification bout; a champion who won't defend within a
+  // year is stripped; a champion can move up or down and hold two belts at once.
+
+  /** Older saves predate the belt system. */
+  migrate() {
+    if (!this.heldBelts) this.heldBelts = {};
+    if (!this.lineage) this.lineage = {};
+    if (this.interim === undefined) this.interim = null;
+    if (this.champOut === undefined) this.champOut = this.champOutStart = 0;
+    if (this.nextInLine === undefined) this.nextInLine = false;
+    if (!this.lastTitleWeek) this.lastTitleWeek = this.week || 1;
+  }
+
+  division() { return WEIGHT_CLASSES[this.weightClass]; }
+
+  /** Adds a new champion to the division's lineage. */
+  recordChamp(f, how, interim = false) {
+    const L = (this.lineage[this.division()] ||= []);
+    L.push({ name: f.displayName(), player: f === this.me, date: this.dateLabel(), how, interim, defenses: 0 });
+    while (L.length > 40) L.shift();
+  }
+
+  addDefense(interim = false) {
+    const L = this.lineage[this.division()] || [];
+    for (let i = L.length - 1; i >= 0; i--) if (!!L[i].interim === interim) { L[i].defenses++; return; }
+  }
+
+  /** The NPC champion is out injured (an interim title is coming). */
+  champOutNow() {
+    return this.champOut > this.week && !this.isChamp();
+  }
+
+  /** A fight between two NPCs, decided by overall. Returns { w, l, how }. */
+  npcBout(a, b) {
+    const pa = 1 / (1 + Math.exp((b.overall() - a.overall()) / 5));
+    const w = rnd() < pa ? a : b, l = w === a ? b : a;
+    const r = rnd();
+    const m = r < 0.4 ? "KO" : r < 0.6 ? "SUB" : "DEC";
+    w.recordResult("W", m);
+    l.recordResult("L", m);
+    return { w, l, how: m === "KO" ? "KO/TKO" : m === "SUB" ? "submission" : "decision" };
+  }
+
+  /** Puts a fighter at a ranking spot (0 = champion, 1 = top contender / interim champion). */
+  moveTo(f, i) {
+    const R = this.rankings;
+    removeItem(R, f);
+    R.splice(Math.min(i, R.length), 0, f);
+    this.trim();
+  }
+
+  /**
+   * Weekly belt politics: interim titles, unification and stripping. A fighter can hold belts in
+   * several divisions at once (heldBelts) — double, triple, any-number champion — but every belt
+   * has to be defended within STRIP_WEEKS or the GFC strips it.
+   */
+  beltWeek() {
+    const R = this.rankings, me = this.me;
+    if (!this.gfc || R.length < 4) return;
+    for (const d of Object.keys(this.heldBelts)) {
+      const idle = this.week - this.heldBelts[d].since;
+      if (idle === STRIP_WARN) this.log("Your " + d + " belt hasn't been defended in " + idle + " weeks. Defend it soon or it will be stripped.");
+      if (idle >= STRIP_WEEKS) {
+        delete this.heldBelts[d];
+        this.log("STRIPPED! The GFC takes your " + d + " belt after a year and a half without a defense.");
+      }
+    }
+    if (this.interim && this.interim !== me && !R.includes(this.interim)) this.interim = null;
+    const booked = (f) => this.scheduled && this.scheduled.opp === f;
+    if (this.isChamp()) {
+      const idle = this.week - this.lastTitleWeek;
+      const titleBooked = this.scheduled && this.scheduled.title;
+      if (titleBooked) return;
+      if (idle >= STRIP_WEEKS) return this.strip();
+      if (idle === STRIP_WARN) this.log("The GFC wants a title defense soon — go a year and a half without one and you'll be stripped.");
+      if (!this.interim && (this.injuryWeeks >= 8 || idle >= 30)) {
+        const a = R[1], b = R[2];
+        if (booked(a) || booked(b)) return;
+        const { w, l, how } = this.npcBout(a, b);
+        this.interim = w;
+        this.moveTo(w, 1);
+        this.recordChamp(w, "Won the interim title vs " + l.lastName() + " by " + how, true);
+        this.log("INTERIM TITLE: " + w.displayName() + " def. " + l.lastName() + " by " + how + " while you were out. Next: unify the belts.");
+        if (!this.scheduled) this.generateOffers();
+      }
+      return;
+    }
+    if (this.champOut) {
+      if (this.week >= this.champOut) {
+        // the champion is healthy again
+        if (this.interim === me || !this.interim) {
+          this.champOut = this.champOutStart = 0;
+          if (this.interim === me && !this.scheduled) this.generateOffers();
+        } else if (this.week >= this.champOut + 4 && !booked(R[0]) && !booked(this.interim)) {
+          const champ = R[0], ic = this.interim;
+          const { w, l, how } = this.npcBout(champ, ic);
+          this.interim = null;
+          this.champOut = this.champOutStart = 0;
+          if (w === ic) {
+            this.moveTo(ic, 0);
+            this.recordChamp(ic, "Unified the belts vs " + l.lastName() + " by " + how);
+            this.log("UNIFIED! Interim champ " + ic.displayName() + " def. " + champ.lastName() + " by " + how + " to become undisputed champion.");
+          } else {
+            this.addDefense();
+            this.log("Champion " + champ.displayName() + " returns and unifies the belts, beating " + ic.lastName() + " by " + how + ".");
+          }
+        }
+      } else if (!this.interim && this.week >= this.champOutStart + 6 && !(this.scheduled && this.scheduled.kind === "interim")) {
+        const pair = R.slice(1).filter((f) => f !== me && !booked(f)).slice(0, 2);
+        if (pair.length < 2) return;
+        const { w, l, how } = this.npcBout(pair[0], pair[1]);
+        this.interim = w;
+        this.moveTo(w, 1);
+        this.recordChamp(w, "Won the interim title vs " + l.lastName() + " by " + how, true);
+        this.log("INTERIM TITLE: " + w.displayName() + " def. " + l.lastName() + " by " + how + " for the interim " + this.division() + " belt.");
+      }
+    } else if (rnd() < 0.008 && !booked(R[0])) {
+      this.champOutStart = this.week;
+      this.champOut = this.week + 18 + nextInt(14);
+      this.log("Champion " + R[0].displayName() + " is injured and out for months. The GFC will crown an interim champion.");
+      if (!this.scheduled) this.generateOffers();
+    }
+  }
+
+  /** A champion who hasn't defended in a year and a half loses the belt. */
+  strip() {
+    const R = this.rankings, me = this.me;
+    removeItem(R, me);
+    let champ, how;
+    if (this.interim && this.interim !== me && R.includes(this.interim)) {
+      champ = this.interim;
+      how = "Promoted from interim champion";
+    } else {
+      const b = this.npcBout(R[0], R[1]);
+      champ = b.w;
+      how = "Won the vacant title vs " + b.l.lastName() + " by " + b.how;
+    }
+    this.interim = null;
+    this.moveTo(champ, 0);
+    R.splice(1, 0, me);
+    this.trim();
+    this.recordChamp(champ, how);
+    this.log("STRIPPED! The GFC takes the " + this.division() + " belt for inactivity. " + champ.displayName() + " is the new champion.");
+    if (!this.scheduled) this.generateOffers();
   }
 
   // ---------------------------------------------------------------- weekly actions
@@ -1137,6 +1299,7 @@ export class Career {
     const me = this.me;
     const old = this.weightClass;
     const oldRank = this.gfc ? this.rankings.indexOf(me) : -1;
+    if (this.gfc && oldRank === 0) this.heldBelts[WEIGHT_CLASSES[old]] = { since: this.lastTitleWeek };
     for (const s of STATS) me.add(s, Fighter.weightAdj(wc, s) - Fighter.weightAdj(old, s));
     if (wc < old) me.add("cardio", -2);
     this.weightClass = wc;
@@ -1146,10 +1309,21 @@ export class Career {
     let note;
     this.offers = [];
     this.offersAge = 0;
-    if (this.gfc && oldRank === 0) {
-      this.log("Vacates the " + WEIGHT_CLASSES[old] + " belt to chase gold at " + WEIGHT_CLASSES[wc] + "!");
+    const held = this.heldBelts[WEIGHT_CLASSES[wc]];
+    if (this.gfc && held) {
+      // back in a division whose belt you never gave up
+      delete this.heldBelts[WEIGHT_CLASSES[wc]];
+      this.moveTo(me, 0);
+      this.lastTitleWeek = held.since;
+      this.recordChamp(me, "Returned as the reigning champion");
+      this.generateOffers();
+      note = "You're back — and still the " + WEIGHT_CLASSES[wc] + " champion.";
+    } else if (this.gfc && oldRank === 0) {
+      this.log("Keeps the " + WEIGHT_CLASSES[old] + " belt and moves to " + WEIGHT_CLASSES[wc] + " to chase a second one!");
       this.offers.push(this.titleOffer(this.rankings[0]));
-      note = "Champion vs champion! A superfight for the " + WEIGHT_CLASSES[wc] + " title is on the table.";
+      const n = Object.keys(this.heldBelts).length + 1;
+      note = "Champion vs champion! Win the " + WEIGHT_CLASSES[wc] + " superfight and you're a " + beltWord(n).toLowerCase() + ". You keep your "
+        + Object.keys(this.heldBelts).join(", ") + " belt" + (n > 2 ? "s" : "") + ".";
     } else {
       if (this.gfc && oldRank > 0 && oldRank <= 5) {
         this.rankings.splice(10, 0, me);
@@ -1175,6 +1349,15 @@ export class Career {
     const s = this.scheduled;
     this.pinOthers();
     this.fight = new Fight(this.me, s.opp, s.rounds, s.title, this.npcOverall ? 0 : s.oppBonus, this.stars("head"));
+    if (s.title) {
+      const kind = s.kind || "title";
+      const holder = (f) => this.rankings[0] === f || (kind === "interim" && this.interim === f);
+      this.fight.belt = {
+        kind,
+        label: (kind === "interim" ? "interim " : kind === "unify" ? "undisputed " : "") + "GFC " + this.division() + " championship",
+        champ: holder(this.me) ? "p" : holder(s.opp) ? "o" : null,
+      };
+    }
     return null;
   }
 
@@ -1252,7 +1435,7 @@ export class Career {
     } else if (!this.gfc) {
       if (won) this.regionalWins++;
     } else {
-      careerNote = this.updateRankings(won, lost, opp, o.title, wasChamp);
+      careerNote = this.updateRankings(won, lost, opp, o.title, wasChamp, o.kind);
     }
 
     let rivalNote = "";
@@ -1270,7 +1453,8 @@ export class Career {
 
     this.history.unshift({
       date: this.dateLabel(), result: res, opponent: opp.displayName(), method: f.method, round: f.endRound, time: f.endTime,
-      event: (o.contender ? "Contender Series" : o.title ? "GFC Title Fight" : this.gfc ? "GFC" : "Iron Cage Regional")
+      event: (o.contender ? "Contender Series" : o.kind === "interim" ? "GFC Interim Title Fight" : o.kind === "unify" ? "GFC Title Unification"
+        : o.title ? "GFC Title Fight" : o.kind === "eliminator" ? "GFC Title Eliminator" : o.kind === "main" ? "GFC Main Event" : this.gfc ? "GFC" : "Iron Cage Regional")
         + (vsRival ? " · Grudge" : "") + " · " + WEIGHT_CLASSES[this.weightClass],
     });
     this.lastResult = {
@@ -1284,21 +1468,93 @@ export class Career {
 
   isChamp() { return this.gfc && this.rankings.length > 0 && this.rankings[0] === this.me; }
 
-  updateRankings(won, lost, opp, title, wasChamp) {
+  updateRankings(won, lost, opp, title, wasChamp, kind) {
     const me = this.me, R = this.rankings, wcName = WEIGHT_CLASSES[this.weightClass];
+    kind = title ? kind || "title" : kind;
+    if (title) this.nextInLine = false;
+    if (kind === "eliminator") {
+      this.nextInLine = won;
+      if (won) this.log("Wins the title eliminator — next in line for a shot at the belt!");
+    }
+    if (kind === "interim") {
+      if (won) {
+        const defended = this.interim === me;
+        this.interim = me;
+        this.moveTo(me, 1);
+        if (defended) {
+          this.addDefense(true);
+          return "And STILL interim champion! Unify the belts when the champ returns.";
+        }
+        this.recordChamp(me, "Won the interim title vs " + opp.lastName(), true);
+        this.log("AND NEW! " + me.displayName() + " is the GFC interim " + wcName + " champion!");
+        return "AND NEW GFC INTERIM " + wcName.toUpperCase() + " CHAMPION! Next: unify the belts.";
+      }
+      if (lost) {
+        this.interim = opp;
+        this.moveTo(opp, 1);
+        this.dropDown(me, 1);
+        this.recordChamp(opp, "Won the interim title vs " + me.lastName(), true);
+        const r = R.indexOf(me);
+        return opp.lastName() + " takes the interim belt." + (r > 0 ? " You drop to #" + r + "." : "");
+      }
+      return "A draw — no interim champion crowned.";
+    }
+    if (kind === "unify") {
+      this.interim = null;
+      this.champOut = this.champOutStart = 0;
+      if (wasChamp) {
+        if (won) {
+          this.titleDefenses++;
+          this.lastTitleWeek = this.week;
+          this.addDefense();
+          this.log("UNDISPUTED! " + me.displayName() + " unifies the " + wcName + " belts.");
+          return "And STILL — and UNDISPUTED! Title defense #" + this.titleDefenses + ".";
+        }
+        if (lost) {
+          this.moveTo(opp, 0);
+          this.dropDown(me, 1);
+          this.recordChamp(opp, "Unified the belts vs " + me.lastName());
+          this.log(opp.displayName() + " unifies the belts and takes your title.");
+          return "The interim champion takes your belt.";
+        }
+        this.lastTitleWeek = this.week;
+        return "A draw — the champion keeps the belt.";
+      }
+      if (won) {
+        this.titlesWon++;
+        addOnce(this.divisionsWon, wcName);
+        this.moveTo(me, 0);
+        this.lastTitleWeek = this.week;
+        this.recordChamp(me, "Unified the belts vs " + opp.lastName());
+        this.log("AND NEW! " + me.displayName() + " is the UNDISPUTED GFC " + wcName + " Champion!");
+        return "AND NEW UNDISPUTED GFC " + wcName.toUpperCase() + " CHAMPION!";
+      }
+      this.addDefense();
+      this.dropDown(me, 1);
+      const r = R.indexOf(me);
+      return lost ? "The champion unifies the belts." + (r > 0 ? " You drop to #" + r + "." : "") : "A draw — the champion keeps the belt.";
+    }
     if (won) {
       if (title) {
+        this.lastTitleWeek = this.week;
         if (wasChamp) {
           this.titleDefenses++;
+          this.addDefense();
           this.log("Successful title defense #" + this.titleDefenses + "!");
           return "And STILL champion! Title defense #" + this.titleDefenses + ".";
         }
         this.titlesWon++;
         addOnce(this.divisionsWon, wcName);
-        this.placeAbove(me, opp);
+        this.moveTo(me, 0);
+        if (this.interim === me) this.interim = null;
+        this.recordChamp(me, "Beat " + opp.lastName());
         this.log("AND NEW! " + me.displayName() + " is the GFC " + wcName + " Champion!");
+        const belts = Object.keys(this.heldBelts);
+        const word = beltWord(belts.length + 1);
+        if (belts.length) this.log(word.toUpperCase() + "! " + me.displayName() + " holds the " + [wcName, ...belts].join(", ") + " belts at the same time!");
         if (this.divisionsWon.length >= 2) this.log("History made: a " + this.divisionsWon.length + "-division GFC champion!");
-        return "AND NEW GFC " + wcName.toUpperCase() + " CHAMPION!";
+        return belts.length ? "AND NEW — " + word.toUpperCase() + "! GFC " + [wcName, ...belts].join(" & ").toUpperCase() + " CHAMPION!"
+          : "AND NEW GFC " + wcName.toUpperCase() + " CHAMPION!";
       }
       if (R.includes(opp)) {
         this.placeAbove(me, opp);
@@ -1312,9 +1568,11 @@ export class Career {
     if (lost) {
       if (title && wasChamp) {
         this.placeAbove(opp, me);
+        this.recordChamp(opp, "Beat " + me.lastName());
         this.log(opp.displayName() + " takes the belt.");
         return "You lost the belt.";
       }
+      if (title) this.addDefense();
       if (R.includes(me)) {
         this.placeAbove(opp, me);
         this.dropDown(me, title ? 1 : 2);
@@ -1322,7 +1580,8 @@ export class Career {
       const r = this.rankings.indexOf(me);
       return r > 0 ? "You drop to #" + r + "." : "You're outside the rankings.";
     }
-    return "A draw doesn't move the needle.";
+    if (title && wasChamp) this.lastTitleWeek = this.week;
+    return title ? "A draw — the champion keeps the belt." : "A draw doesn't move the needle.";
   }
 
   /** Moves winner directly above loser if winner isn't already ranked higher. */
@@ -1375,6 +1634,7 @@ export class Career {
     if ((this.week - 1) % 52 === 0) this.newYear();
     if (this.retired) return;
     this.npcWeek();
+    this.beltWeek();
     this.rivalWeek();
     if (++this.marketAge >= 8) this.refreshMarket();
     if (this.scheduled) {
@@ -1439,6 +1699,7 @@ export class Career {
     const j = Math.min(R.length - 1, i + 1 + nextInt(3));
     const a = R[i], b = R[j];
     if (a === this.me || b === this.me) return;
+    if (this.interim === a || this.interim === b || (i === 0 && this.champOut)) return;
     if (this.scheduled && (a === this.scheduled.opp || b === this.scheduled.opp)) return;
     const pa = 1 / (1 + Math.exp((b.overall() - a.overall()) / 5));
     const w = rnd() < pa ? a : b, l = w === a ? b : a;
@@ -1447,6 +1708,10 @@ export class Career {
     w.recordResult("W", m);
     l.recordResult("L", m);
     if (w === b) this.placeAbove(b, a);
+    if (i === 0 && this.gfc) {
+      if (w === a) this.addDefense();
+      else this.recordChamp(b, "Beat " + a.lastName() + " by " + (m === "KO" ? "KO/TKO" : m === "SUB" ? "submission" : "decision"));
+    }
     if (this.gfc) {
       const how = m === "KO" ? "KO/TKO" : m === "SUB" ? "submission" : "decision";
       const tag = w === this.rival ? "Your rival " : l === this.rival ? "Your rival loses! " : "";
@@ -1474,15 +1739,33 @@ export class Career {
       }
     } else {
       const r = R.indexOf(me);
+      const ic = this.interim && this.interim !== me && R.includes(this.interim) ? this.interim : null;
       if (r === 0) {
-        for (let i = 1; i <= 3 && i < R.length; i++) offers.push(this.titleOffer(R[i]));
+        if (ic) offers.push(this.titleOffer(ic, "unify"));
+        else for (let i = 1; i <= 3 && i < R.length; i++) offers.push(this.titleOffer(R[i]));
       } else {
-        if (this.titleShotEligible()) offers.push(this.titleOffer(R[0]));
-        if (r > 0) {
+        if (this.interim === me) {
+          // interim champion: unify when the champion is back, defend the interim belt meanwhile
+          if (!this.champOutNow()) offers.push(this.titleOffer(R[0], "unify"));
+          else {
+            const next = R.find((f, i) => i > 0 && f !== me);
+            if (next) offers.push(this.titleOffer(next, "interim"));
+          }
+        } else if (this.champOutNow() && !ic && (r === 1 || r === 2)) {
+          offers.push(this.titleOffer(R.find((f, i) => i > 0 && i <= 3 && f !== me), "interim"));
+        } else if (this.titleShotEligible() && !this.champOutNow() && !ic) {
+          offers.push(this.titleOffer(R[0]));
+        }
+        if (r > 0 && this.interim !== me) {
           const pool = [];
-          for (let i = Math.max(1, r - 3); i <= Math.min(R.length - 1, r + 3); i++) if (i !== r) pool.push(i);
+          for (let i = Math.max(1, r - 3); i <= Math.min(R.length - 1, r + 3); i++) if (i !== r && R[i] !== ic) pool.push(i);
           shuffle(pool);
-          for (let k = 0; k < Math.min(3, pool.length); k++) offers.push(this.gfcOffer(R[pool[k]]));
+          // #2-#5 without a shot yet can fight another contender in a title eliminator
+          if (r >= 2 && r <= 5 && !this.nextInLine && !this.titleShotEligible()) {
+            const e = pool.findIndex((i) => i >= 1 && i <= 5);
+            if (e >= 0) offers.push(this.gfcOffer(R[pool.splice(e, 1)[0]], "eliminator"));
+          }
+          for (let k = 0; offers.length < 3 && k < pool.length; k++) offers.push(this.gfcOffer(R[pool[k]]));
         } else {
           if (me.streak >= 1 || this.fame >= 40) offers.push(this.gfcOffer(R[Math.min(R.length - 1, 12 + nextInt(4))]));
           while (offers.length < 3) offers.push(this.gfcOffer(Fighter.generate(62 + nextInt(6), this.weightClass)));
@@ -1514,20 +1797,28 @@ export class Career {
 
   managed(purse) { return Math.round(purse * (1 + 0.05 * this.stars("manager"))); }
 
-  gfcOffer(opp) {
-    const rank = this.rankings.indexOf(opp);
-    const purse = this.managed(12000 + this.fame * 400 + (rank > 0 ? (RANKED - rank) * 3000 : 0));
-    return new Offer(opp, 6 + nextInt(5), purse, purse, 3, false, false);
+  gfcOffer(opp, kind = null) {
+    const rank = this.rankings.indexOf(opp), mine = this.rankings.indexOf(this.me);
+    let purse = this.managed(12000 + this.fame * 400 + (rank > 0 ? (RANKED - rank) * 3000 : 0));
+    // two top contenders headline the card: five rounds, like a UFC main event
+    if (!kind && rank > 0 && rank <= 5 && mine > 0 && mine <= 10) kind = "main";
+    if (kind === "eliminator") purse = Math.round(purse * 1.5);
+    const o = new Offer(opp, 6 + nextInt(5), purse, purse, kind === "main" ? 5 : 3, false, false);
+    o.kind = kind;
+    return o;
   }
 
-  titleOffer(opp) {
-    const purse = this.managed(100000 + this.fame * 1500 + this.titleDefenses * 25000);
-    return new Offer(opp, 8 + nextInt(5), purse, Math.trunc(purse / 2), 5, true, false);
+  titleOffer(opp, kind = "title") {
+    const purse = this.managed((kind === "interim" ? 70000 : 100000) + this.fame * 1500 + this.titleDefenses * 25000);
+    const o = new Offer(opp, 8 + nextInt(5), purse, Math.trunc(purse / 2), 5, true, false);
+    o.kind = kind;
+    return o;
   }
 
+  /** Like the UFC: the #1 contender, the winner of a title eliminator, or a top-5 fighter on a real run. */
   titleShotEligible() {
     const r = this.rankings.indexOf(this.me);
-    return this.gfc && (r === 1 || (r > 1 && r <= 3 && this.me.streak >= 2));
+    return this.gfc && r > 0 && (r === 1 || this.nextInLine || (r <= 3 && this.me.streak >= 2) || (r <= 5 && this.me.streak >= 3));
   }
 
   contenderEligible() {
@@ -1583,18 +1874,30 @@ export class Career {
     }
     const r = this.rankings.indexOf(this.me);
     const d = this.titleDefenses;
-    if (r === 0) return "You're the champion! Defend the belt" + (this.divisionsWon.length < 2 ? " — or move divisions and chase a second one." : ".")
-      + " (" + d + " defense" + (d === 1 ? "" : "s") + ")";
+    if (r === 0) {
+      const idle = this.week - this.lastTitleWeek;
+      if (idle >= STRIP_WARN) return "Defend the belt within " + (STRIP_WEEKS - idle) + " weeks or the GFC will strip you!";
+      if (this.interim && this.interim !== this.me) return "There's an interim champion. Unify the belts and prove who's the real champ.";
+      const old = Object.entries(this.heldBelts).find(([, h]) => this.week - h.since >= STRIP_WARN);
+      if (old) return "Your " + old[0] + " belt will be stripped in " + (STRIP_WEEKS - (this.week - old[1].since)) + " weeks — go back and defend it!";
+      const n = Object.keys(this.heldBelts).length + 1;
+      const two = n > 1;
+      return (two ? beltWord(n) + " — " + n + " belts! " : "You're the champion! ") + "Defend the belt" + (this.divisionsWon.length < 2 && !two ? " — or move divisions and chase a second one." : ".")
+        + " (" + d + " defense" + (d === 1 ? "" : "s") + ")";
+    }
+    if (this.interim === this.me) return this.champOutNow() ? "You're the interim champion. Defend it until the champ is healthy, then unify." : "The champion is back. Unify the belts!";
+    if (this.champOutNow() && (r === 1 || r === 2)) return "The champion is injured — you're in line for the interim title fight!";
+    if (this.nextInLine) return "You won the eliminator — the next title shot is yours.";
     if (r < 0) return "Win back-to-back fights or beat a ranked fighter to crack the GFC top 15.";
     if (this.titleShotEligible()) return "A title shot is on the table — take it!";
-    if (r <= 3) return "You're #" + r + ". Get a 2-fight win streak (or reach #1) for a title shot.";
+    if (r <= 5) return "You're #" + r + ". Win a title eliminator, reach #1, or go on a win streak for a title shot.";
     return "You're #" + r + ". Climb into the top 3 for a shot at the belt.";
   }
 
   offerJson(o, index) {
     return {
       index, opponent: o.opp.toJson(), oppRank: this.gfc ? this.rankings.indexOf(o.opp) : -1, weeks: o.weeks,
-      purse: o.purse, winBonus: o.winBonus, rounds: o.rounds, title: o.title, contender: o.contender,
+      purse: o.purse, winBonus: o.winBonus, rounds: o.rounds, title: o.title, contender: o.contender, kind: o.kind || null,
       grudge: o.opp === this.rival, oppBonus: o.oppBonus,
     };
   }
@@ -1646,7 +1949,20 @@ export class Career {
       scheduled: this.scheduled ? this.offerJson(this.scheduled, -1) : null,
       fightNight: this.fightNight(),
       rankings: this.rankings.map((f, i) => ({ rank: i, name: f.displayName(), record: f.record(), overall: f.overall(),
-        style: f.style, player: f === this.me, rival: f === this.rival })),
+        style: f.style, player: f === this.me, rival: f === this.rival, interim: f === this.interim })),
+      belt: this.gfc ? {
+        division: this.division(),
+        champion: this.rankings[0] ? this.rankings[0].displayName() : null,
+        interim: this.interim ? this.interim.displayName() : null,
+        interimIsMe: this.interim === this.me,
+        champInjured: this.champOutNow() ? this.champOut - this.week : 0,
+        idle: this.isChamp() ? this.week - this.lastTitleWeek : null,
+        stripWeeks: STRIP_WEEKS, stripWarn: STRIP_WARN,
+        held: Object.keys(this.heldBelts),
+        heldIdle: Object.values(this.heldBelts).map((h) => this.week - h.since),
+        nextInLine: this.nextInLine,
+        lineage: (this.lineage[this.division()] || []).slice(-15).reverse(),
+      } : null,
       news: this.news,
       history: this.history,
       fight: this.fight ? this.fight.toJson() : null,
@@ -1779,6 +2095,7 @@ export class Game {
   call(path, p = {}) {
     const prof = this.profile;
     let career = this.active();
+    if (career) career.migrate(); // older saves predate some fields
     let msg = null;
     const int = (v) => (v === undefined || v === null || v === "" || isNaN(Number(v)) ? -1 : Math.trunc(Number(v)));
     let profileChanged = false;
@@ -1850,7 +2167,10 @@ export class Game {
         throw new GameError("Unknown action: " + path);
     }
     career = this.active();
-    if (career) career.pinOthers();
+    if (career) {
+      career.migrate();
+      career.pinOthers();
+    }
     this.induct(career);
     if (path !== "state") {
       if (career) this.store.setCareer(prof.active, packCareer(career));

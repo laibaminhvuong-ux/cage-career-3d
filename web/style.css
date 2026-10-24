@@ -343,3 +343,14 @@ input:focus, select:focus { outline: 2px solid var(--red); outline-offset: 1px; 
 .ask-panel { width: min(420px, 100%); background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 20px; }
 .ask-panel p { margin: 0 0 6px; font-size: 16px; }
 .topbar { top: env(safe-area-inset-top, 0px); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+
+/* the belt */
+.belt-box { border: 1px solid var(--gold); border-radius: 10px; padding: 10px 12px; margin: 0 0 12px; background: linear-gradient(135deg, rgba(244, 185, 66, .12), rgba(244, 185, 66, .02)); }
+.belt-title { font-weight: 800; color: var(--gold); margin-bottom: 6px; letter-spacing: .02em; }
+.belt-box .kv { font-size: 13px; }
+.belt-box details { margin-top: 8px; font-size: 13px; }
+.belt-box summary { cursor: pointer; color: var(--gold); font-weight: 600; }
+.lineage { margin: 6px 0 0; padding-left: 20px; max-height: 220px; overflow: auto; }
+.lineage li { margin: 4px 0; }
+.lineage li.me b { color: var(--gold); }
+.lineage .muted { font-size: 12px; }

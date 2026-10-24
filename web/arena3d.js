@@ -170,6 +170,7 @@ class PreviewView {
     if (looks.length === 2 && looks[0].shorts === looks[1].shorts) looks[1].shorts = (looks[1].shorts + 3) % 8;
     this.fighters = list.map((d, i) => {
       const f = new Fighter3D({ look: looks[i], weightClass: d.weightClass, style: d.style, glove: i ? BLUE : RED });
+      f.setBelt(d.belt || null);
       this.scene.add(f.root);
       return f;
     });
@@ -525,6 +526,8 @@ class ArenaView {
     for (const s of [this.P, this.O]) {
       s.fixedYaw = null;
       s.f.setBase(f.round === 0 ? "relaxed" : "stance");
+      // the champion walks out with the belt over the shoulder
+      s.f.setBelt(f.round === 0 && f.belt && f.belt.champ === s.tag ? "shoulder" : null);
     }
     if (f.round === 0) {
       this.P.pos.copy(this.cornerSpot.p).multiplyScalar(0.5);
@@ -595,6 +598,7 @@ class ArenaView {
           this.C.set(0, 0, 0);
           for (const s of [this.P, this.O]) {
             s.fixedYaw = null;
+            s.f.setBelt(null);
             act(s, SEQUENCES.touch, "stance");
           }
           if (!instant) {
@@ -602,7 +606,8 @@ class ArenaView {
             audio.roar(0.5);
             this.excite = 0.7;
             const n = Number((e.text.match(/Round (\d+)/) || [])[1]) || f.round;
-            audio.announce(n === f.rounds && f.rounds > 1 ? "Final round!" : `Round ${["one", "two", "three", "four", "five"][n - 1] || n}!`);
+            const call = n === f.rounds && f.rounds > 1 ? "Final round!" : `Round ${["one", "two", "three", "four", "five"][n - 1] || n}!`;
+            audio.announce(n === 1 && f.belt ? `This contest is scheduled for five rounds, and it is for the ${f.belt.label} of the world! ${call}` : call);
           }
           ms = 2300;
         } else {
@@ -934,12 +939,15 @@ class ArenaView {
         this.mode = "ended";
         this.decision = { W, L };
         for (const s of [this.P, this.O]) s.f.setBase(W ? (s === W ? "victory" : "dejected") : "relaxed");
+        // a draw leaves the belt with the champion
+        const keeper = W || (f.belt && this.side(f.belt.champ));
+        if (f.belt && keeper) keeper.f.setBelt("waist");
         if (W) this.ref.f.setBase("refRaise");
       };
       if (instant) go();
       else {
         audio.sfx("bell3");
-        audio.announce(W ? `Your winner, by ${f.method.toLowerCase()}... ${W.tag === "p" ? f.player.name : f.opponent.name}!` : "This one is a draw!");
+        audio.announce(W ? `Your winner, by ${f.method.toLowerCase()}... ${f.belt ? (W.tag === f.belt.champ ? "and STILL" : "and NEW") + " " : ""}${W.tag === "p" ? f.player.name : f.opponent.name}!` : "This one is a draw!");
         this.later(1.2, go);
       }
       return 4200;
@@ -957,7 +965,7 @@ class ArenaView {
         if (!instant) this.ref.f.play(SEQUENCES.waveOff, "ref");
         this.refIn = true;
       }, instant);
-      this.later(2.0, () => this.endPoses(W, L, "sitting", instant), instant);
+      this.later(2.0, () => this.endPoses(W, L, "sitting", instant, f), instant);
       return 4600;
     }
 
@@ -971,11 +979,11 @@ class ArenaView {
       if (!doctor) this.closeUp(L, 1.8);
       this.refIn = true;
     }
-    this.later(1.6, () => this.endPoses(W, L, doctor ? "dejected" : "down", instant), instant);
+    this.later(1.6, () => this.endPoses(W, L, doctor ? "dejected" : "down", instant, f), instant);
     return 4400;
   }
 
-  endPoses(W, L, loserBase, instant) {
+  endPoses(W, L, loserBase, instant, f) {
     this.mode = "ended";
     this.decision = null;
     // the winner walks off toward the fence to celebrate; the loser stays where they fell
@@ -987,6 +995,10 @@ class ArenaView {
     L.f.setBase(loserBase);
     W.f.setBase("victory");
     if (!instant) W.f.play(SEQUENCES.celebrate, "victory");
+    if (f && f.belt) {
+      W.f.setBelt("waist");
+      if (!instant) audio.announce(`${W.tag === f.belt.champ ? "And STILL" : "And NEW"}, ${f.belt.label.replace(/^GFC /, "G F C ")}... ${W.tag === "p" ? f.player.name : f.opponent.name}!`);
+    }
   }
 
   // ------------------------------------------------------------ positions

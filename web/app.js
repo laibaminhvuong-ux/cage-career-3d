@@ -51,6 +51,7 @@ function money(n) {
   return (v < 0 ? "-$" : "$") + Math.abs(v).toLocaleString();
 }
 function rankLabel(r) {
+  if (r > 0 && state && state.belt && state.belt.interimIsMe) return "Interim champion";
   return r === 0 ? "Champion" : r > 0 ? "#" + r : "Unranked";
 }
 function bar(value, color, cls = "") {
@@ -273,9 +274,11 @@ function syncSoundButtons() {
 
 function showcaseFighters() {
   const s = state;
-  const me = { look: s.fighter.look, name: s.fighter.name, weightClass: s.weightClassIndex, style: s.fighter.style };
-  const opp = s.scheduled && !s.retired ? s.scheduled.opponent : null;
-  return opp ? [me, { look: opp.look, name: opp.name, weightClass: s.weightClassIndex, style: opp.style }] : [me];
+  const champ = s.rank === 0 || (s.belt && (s.belt.interimIsMe || s.belt.held.length > 0));
+  const me = { look: s.fighter.look, name: s.fighter.name, weightClass: s.weightClassIndex, style: s.fighter.style, belt: champ && !s.retired ? "waist" : null };
+  const o = s.scheduled && !s.retired ? s.scheduled : null;
+  const opp = o ? o.opponent : null;
+  return opp ? [me, { look: opp.look, name: opp.name, weightClass: s.weightClassIndex, style: opp.style, belt: o.oppRank === 0 ? "shoulder" : null }] : [me];
 }
 
 function renderShowcaseCaption() {
@@ -328,8 +331,12 @@ function renderFighter() {
   const f = state.fighter;
   const s = state;
   const badges = [];
-  if (s.rank === 0) badges.push(`<span class="badge gold">GFC CHAMPION</span>`);
+  const belts = s.belt ? (s.rank === 0 ? 1 : 0) + s.belt.held.length : 0;
+  if (belts > 1) badges.push(`<span class="badge gold">🏆 ${["", "", "CHAMP-CHAMP", "TRIPLE CHAMP", "QUADRUPLE CHAMP"][belts] || belts + "-BELT CHAMP"}</span>`);
+  if (s.rank === 0) badges.push(`<span class="badge gold">🏆 GFC ${esc(s.weightClass).toUpperCase()} CHAMPION</span>`);
+  else if (s.belt && s.belt.interimIsMe) badges.push(`<span class="badge gold">INTERIM CHAMPION</span>`);
   else if (s.rank > 0) badges.push(`<span class="badge red">GFC #${s.rank}</span>`);
+  if (s.belt) for (const d of s.belt.held) badges.push(`<span class="badge gold">🏆 ${esc(d)} champion</span>`);
   badges.push(`<span class="badge">${esc(s.org)}</span>`);
   if (f.streak >= 2) badges.push(`<span class="badge green">${f.streak}-fight win streak</span>`);
   if (f.streak <= -2) badges.push(`<span class="badge red">${-f.streak}-fight skid</span>`);
@@ -359,8 +366,13 @@ function difficulty(opp) {
 
 function offerHtml(o, withButton) {
   const opp = o.opponent;
-  const tag = (o.grudge ? "⚔ GRUDGE MATCH · " : "") + (o.title ? "🏆 TITLE FIGHT · 5 rounds" : o.contender ? "⭐ CONTENDER SERIES" : `${o.rounds} rounds`);
-  const rank = o.oppRank === 0 ? "Champion" : o.oppRank > 0 ? `#${o.oppRank}` : "";
+  const kinds = {
+    interim: "🏆 INTERIM TITLE FIGHT · 5 rounds", unify: "🏆 TITLE UNIFICATION · 5 rounds", title: "🏆 TITLE FIGHT · 5 rounds",
+    eliminator: "🎯 TITLE ELIMINATOR · winner gets the next shot", main: "★ MAIN EVENT · 5 rounds",
+  };
+  const tag = (o.grudge ? "⚔ GRUDGE MATCH · " : "") + (o.title ? kinds[o.kind] || kinds.title : kinds[o.kind] || (o.contender ? "⭐ CONTENDER SERIES" : `${o.rounds} rounds`));
+  const isInterim = state.belt && state.belt.interim && !state.belt.interimIsMe && o.opponent.displayName === state.belt.interim;
+  const rank = o.oppRank === 0 ? "Champion" : isInterim ? "Interim champion" : o.oppRank > 0 ? `#${o.oppRank}` : "";
   return `
     <div class="offer ${o.title ? "title" : ""} ${o.contender || o.grudge ? "contender" : ""}">
       <div class="offer-top">
@@ -407,7 +419,7 @@ function renderFightCard() {
       <h2>Next fight</h2>
       <div class="fight-night">
         <h3>FIGHT NIGHT</h3>
-        <p>${o.title ? "🏆 For the GFC title — " : ""}vs <b>${esc(o.opponent.displayName)}</b></p>
+        <p>${o.title ? (o.kind === "interim" ? "🏆 For the interim GFC title — " : o.kind === "unify" ? "🏆 To unify the GFC belts — " : "🏆 For the GFC title — ") : o.kind === "eliminator" ? "🎯 Title eliminator — " : o.kind === "main" ? "★ Main event — " : ""}vs <b>${esc(o.opponent.displayName)}</b></p>
       </div>
       <button class="btn primary big" data-startfight>Walk out to the cage</button>`;
     return;
@@ -491,13 +503,30 @@ function renderStatus() {
 
 function renderRankings() {
   const s = state;
+  const b = s.belt;
+  const beltBox = b ? `
+    <div class="belt-box">
+      <div class="belt-title">🏆 GFC ${esc(b.division)} Championship</div>
+      <div class="kv">
+        <span>Champion</span><b>${esc(b.champion || "Vacant")}${s.rank === 0 ? " (you)" : ""}</b>
+        ${b.interim ? `<span>Interim champion</span><b>${esc(b.interim)}${b.interimIsMe ? " (you)" : ""}</b>` : ""}
+        ${b.champInjured ? `<span>Status</span><b style="color:var(--orange)">Champion injured · ${b.champInjured}w</b>` : ""}
+        ${b.idle !== null ? `<span>Last title fight</span><b style="color:${b.idle >= b.stripWarn ? "var(--red)" : "var(--text)"}">${b.idle} weeks ago${b.idle >= b.stripWarn ? ` — stripped in ${b.stripWeeks - b.idle}w` : ""}</b>` : ""}
+        ${b.held.map((d, i) => `<span>${esc(d)} belt</span><b style="color:${b.heldIdle[i] >= b.stripWarn ? "var(--red)" : "var(--gold)"}">Yours · stripped in ${b.stripWeeks - b.heldIdle[i]}w unless defended</b>`).join("")}
+        ${b.nextInLine ? `<span>Title shot</span><b style="color:var(--gold)">You're next in line</b>` : ""}
+      </div>
+      ${b.lineage.length ? `<details><summary>Belt lineage</summary><ol class="lineage">${b.lineage.map((l) => `
+        <li class="${l.player ? "me" : ""}"><b>${esc(l.name)}</b>${l.interim ? ` <span class="badge">interim</span>` : ""}
+          <div class="muted">${esc(l.how)} · ${esc(l.date)}${l.defenses ? ` · ${l.defenses} defense${l.defenses === 1 ? "" : "s"}` : ""}</div></li>`).join("")}</ol></details>` : ""}
+    </div>` : "";
   $("rankCard").innerHTML = `
     <h2>GFC ${esc(s.weightClass)} rankings</h2>
     ${s.gfc ? "" : `<p class="muted" style="font-size:13px">You're not in the GFC yet. These are the fighters you're chasing.</p>`}
+    ${beltBox}
     <ul class="ranks scroll">
       ${s.rankings.map((r) => `
-        <li class="${r.player ? "me" : ""} ${r.rank === 0 ? "champ" : ""} ${r.rival ? "rivalrow" : ""}">
-          <span class="rk">${r.rank === 0 ? "C" : r.rank}</span>
+        <li class="${r.player ? "me" : ""} ${r.rank === 0 || r.interim ? "champ" : ""} ${r.rival ? "rivalrow" : ""}">
+          <span class="rk">${r.rank === 0 ? "C" : r.interim ? "IC" : r.rank}</span>
           <span>${esc(r.name)} <span class="muted">${r.record}</span></span>
           <span class="muted">${r.overall}</span>
         </li>`).join("")}
@@ -679,7 +708,7 @@ function renderModal() {
     const opts = [i - 1, i + 1].filter((x) => x >= 0 && x < s.weightClasses.length);
     body.innerHTML = `
       <h1>Change division</h1>
-      <p class="muted">You fight at <b style="color:var(--text)">${esc(s.weightClass)}</b>. Moving up adds power and chin but costs speed; cutting down adds speed, costs power, and the weight cut drains cardio. You start over in the new division's rankings${s.rank === 0 ? " — but as a champion, you get an immediate superfight for the other belt" : s.rank > 0 && s.rank <= 5 ? " — your reputation lands you at #10" : ""}.</p>
+      <p class="muted">Champions keep their belt when they change division, so you can hold several at once, but each belt must be defended within a year and a half or it's stripped. You fight at <b style="color:var(--text)">${esc(s.weightClass)}</b>. Moving up adds power and chin but costs speed; cutting down adds speed, costs power, and the weight cut drains cardio. You start over in the new division's rankings${s.rank === 0 ? " — but as a champion, you get an immediate superfight for the other belt" : s.rank > 0 && s.rank <= 5 ? " — your reputation lands you at #10" : ""}.</p>
       ${s.divisionCooldown ? `<p class="badge red" style="display:inline-block">Your body needs ${s.divisionCooldown} more weeks before another move.</p>` : ""}
       <div class="btn-row">${opts.map((x) => `<button class="btn ${x > i ? "" : ""}" data-movediv="${x}" ${s.divisionCooldown ? "disabled" : ""}>${x > i ? "▲ Move up to" : "▼ Cut down to"} ${esc(s.weightClasses[x])}</button>`).join("")}</div>`;
   } else if (modal.kind === "hof") {
@@ -755,7 +784,7 @@ function introHtml(f) {
         <span>${esc(f.player.style)}</span><span class="muted">style</span><span>${esc(f.opponent.style)}</span>
       </div>
     </div>
-    <div class="ev round">${f.title ? "This one is for the GFC championship. Five rounds." : `${f.rounds} rounds.`} Pick your game plan.</div>`;
+    <div class="ev round">${f.belt ? `This one is for the ${esc(f.belt.label)}. Five rounds.` : f.title ? "This one is for the GFC championship. Five rounds." : `${f.rounds} rounds.`} Pick your game plan.</div>`;
 }
 
 function eventEl(e, animate) {

@@ -835,7 +835,61 @@ export class Fighter3D {
     this.walk = 0;       // walking phase
     this.speed = 0;
     this.lastPos = new THREE.Vector3();
+    if (!opts.ref) this.buildBelt(width);
     this.applyPose(this.cur);
+  }
+
+  /** The championship belt: worn around the waist, or carried over the shoulder on the walk out. */
+  buildBelt(width) {
+    const gold = mat("#e8b93a", { roughness: 0.25, metalness: 0.85 });
+    const leather = mat("#141414", { roughness: 0.6 });
+    const gem = mat("#c8102e", { roughness: 0.2, metalness: 0.3 });
+    const plate = (parent, x, y, z, big) => {
+      const g = new THREE.Group();
+      g.position.set(x, y, z);
+      parent.add(g);
+      const p = mesh(geo(big ? "beltPlate" : "beltSide", () => new THREE.CylinderGeometry(big ? 0.085 : 0.045, big ? 0.085 : 0.045, 0.018, big ? 20 : 12)), gold, g);
+      p.rotation.x = Math.PI / 2;
+      p.scale.set(1, 1, big ? 0.78 : 1);
+      if (big) {
+        const inner = mesh(geo("beltGem", () => new THREE.CylinderGeometry(0.03, 0.03, 0.022, 14)), gem, g, 0, 0, 0.004);
+        inner.rotation.x = Math.PI / 2;
+        mesh(geo("beltRim", () => new THREE.TorusGeometry(0.075, 0.008, 6, 24)), gold, g, 0, 0, 0.011).scale.set(1, 0.78, 1);
+      }
+      return g;
+    };
+    // around the waist, over the shorts
+    const waist = new THREE.Group();
+    waist.position.y = 0.035;
+    this.j.hips.add(waist);
+    const strap = new THREE.CylinderGeometry(0.172 * width, 0.172 * width, 0.075, 24, 1, true);
+    mesh(strap, leather, waist).scale.z = 0.76;
+    plate(waist, 0, 0, 0.172 * width * 0.76 + 0.006, true);
+    for (const sx of [-1, 1]) {
+      const side = plate(waist, sx * 0.13 * width, 0, 0.09, false);
+      side.rotation.y = sx * 0.85;
+    }
+    // over the left shoulder and across the chest
+    const sash = new THREE.Group();
+    sash.position.set(0, 0.1, 0);
+    sash.rotation.z = 0.55;
+    this.j.chest.add(sash);
+    const loop = new THREE.TorusGeometry(0.26, 0.024, 6, 30);
+    loop.scale(0.66, 1, 1.6);
+    mesh(loop, leather, sash).rotation.y = Math.PI / 2;
+    // the gold plate rides on the chest where the strap crosses it
+    const front = plate(this.j.chest, -0.02, 0.1, 0.125 * width + 0.01, true);
+    front.rotation.z = 0.55;
+    sash.userData.plate = front;
+    waist.visible = sash.visible = front.visible = false;
+    this.belt = { waist, sash };
+  }
+
+  /** null, "waist" or "shoulder". */
+  setBelt(mode) {
+    if (!this.belt) return;
+    this.belt.waist.visible = mode === "waist";
+    this.belt.sash.visible = this.belt.sash.userData.plate.visible = mode === "shoulder";
   }
 
   buildHead(head, skin, hairM, dark, look, ref) {
