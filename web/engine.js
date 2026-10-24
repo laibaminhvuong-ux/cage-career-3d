@@ -1719,6 +1719,23 @@ export class Game {
         msg = "Loaded " + this.careers.get(cid).me.displayName() + ".";
         break;
       }
+      case "save/import": {
+        if (prof.slots.length >= MAX_SLOTS) throw new GameError(`All ${MAX_SLOTS} save slots are full. Delete a save first.`);
+        let c;
+        try {
+          c = unpackCareer(String(p.text || ""));
+          if (!c || !(c.me instanceof Fighter)) throw new Error("no fighter");
+        } catch (e) {
+          throw new GameError("That save code or file isn't a Cage Career 3D career.");
+        }
+        const cid = newId();
+        prof.slots.push(cid);
+        prof.active = cid;
+        this.careers.set(cid, c);
+        profileChanged = true;
+        msg = "Loaded " + c.me.displayName() + ".";
+        break;
+      }
       case "save/delete": {
         const cid = this.slot(int(p.slot));
         const c = this.careers.get(cid);
@@ -1746,6 +1763,11 @@ export class Game {
   saveAll() {
     this.store.setProfile(this.profileDoc());
     for (const [cid, c] of this.careers) this.store.setCareer(cid, packCareer(c));
+  }
+
+  /** The packed save of one slot, for exporting to a file or code. */
+  exportSave(i) {
+    return packCareer(this.careers.get(this.slot(i)));
   }
 
   slot(i) {

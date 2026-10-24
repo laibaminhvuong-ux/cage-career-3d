@@ -119,6 +119,81 @@ async function act(path, params) {
   if (await api(path, params)) render();
 }
 
+// ------------------------------------------------------------------ save codes and files
+// A save code is "CC3D1." + base64url(gzip(packed save)), short enough to paste into a chat.
+// A save file is the packed save itself (JSON). Import accepts either.
+
+const CODE_PREFIX = "CC3D1.";
+
+async function gzip(bytes, decompress) {
+  const stream = new Blob([bytes]).stream().pipeThrough(decompress ? new DecompressionStream("gzip") : new CompressionStream("gzip"));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+async function saveToCode(text) {
+  const bytes = await gzip(new TextEncoder().encode(text));
+  let bin = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return CODE_PREFIX + btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+async function codeToSave(input) {
+  const t = String(input || "").trim();
+  if (t.startsWith("{")) return t;
+  const at = t.indexOf(CODE_PREFIX);
+  if (at < 0) throw new Error("not a save code");
+  const b64 = t.slice(at + CODE_PREFIX.length).replace(/\s+/g, "").replace(/-/g, "+").replace(/_/g, "/");
+  const bin = atob(b64 + "=".repeat((4 - (b64.length % 4)) % 4));
+  const bytes = Uint8Array.from(bin, (ch) => ch.charCodeAt(0));
+  return new TextDecoder().decode(await gzip(bytes, true));
+}
+
+async function importSave(input) {
+  let text;
+  try {
+    text = await codeToSave(input);
+  } catch {
+    toast("That save code or file isn't a Cage Career 3D career.", true);
+    return;
+  }
+  if (await api("save/import", { text })) { modal = null; resetFightScreen(); render(); }
+}
+
+/** Offers a file to save: through claude.ai's download prompt there, a plain download link elsewhere. */
+async function offerFile(filename, text) {
+  let downloads = null;
+  try {
+    if (window.claude && typeof window.claude.use === "function") downloads = await window.claude.use("downloads");
+  } catch { /* not available */ }
+  if (downloads) {
+    try {
+      await downloads.save({ filename, data: text });
+    } catch (e) {
+      if (e && e.code !== "declined") toast("Couldn't save the file here. Copy the save code instead.", true);
+    }
+    return;
+  }
+  const url = URL.createObjectURL(new Blob([text], { type: "application/json" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    toast("Save code copied.");
+  } catch {
+    const box = $("exportCode");
+    if (box) { box.focus(); box.select(); }
+    toast("Select the code and copy it.");
+  }
+}
+
 // ------------------------------------------------------------------ rendering
 
 function render() {
@@ -128,8 +203,9 @@ function render() {
     $("dash").classList.add("hidden");
     $("topstats").innerHTML = "";
     $("fightScreen").classList.add("hidden");
-    $("createSaves").innerHTML = state.saves.length
-      ? `<p><button class="btn small" data-saves>← Back to your ${state.saves.length} saved fighter${state.saves.length === 1 ? "" : "s"}</button></p>` : "";
+    $("createSaves").innerHTML = `<p class="btn-row">${state.saves.length
+      ? `<button class="btn small" data-saves>← Back to your ${state.saves.length} saved fighter${state.saves.length === 1 ? "" : "s"}</button>` : ""}
+      <button class="btn small" data-importopen>📂 Load a saved career</button></p>`;
     fillCreateForm();
     renderLookPickers();
     renderModal();
@@ -533,10 +609,33 @@ function renderModal() {
           </div>
           <div class="btn-row">
             ${v.active || v.missing ? "" : `<button class="btn small primary" data-slot="${v.slot}">Play</button>`}
+            ${v.missing ? "" : `<button class="btn small" data-export="${v.slot}">Export</button>`}
             <button class="btn small ghost" data-delslot="${v.slot}" data-name="${esc(v.name || "this save")}">Delete</button>
           </div>
         </div>`).join("") : `<p class="muted">No saved fighters yet.</p>`}
-      <div class="btn-row"><button class="btn primary" data-newsave ${full ? "disabled" : ""}>+ New fighter${full ? " (slots full)" : ""}</button></div>`;
+      <div class="btn-row">
+        <button class="btn primary" data-newsave ${full ? "disabled" : ""}>+ New fighter${full ? " (slots full)" : ""}</button>
+        <button class="btn" data-importopen ${full ? "disabled" : ""}>📂 Load a career</button>
+      </div>`;
+  } else if (modal.kind === "import") {
+    body.innerHTML = `
+      <h1>📂 Load a career</h1>
+      <p class="muted">Bring in a fighter exported from Cage Career 3D, from this device or any other. It goes into a free save slot and starts playing.</p>
+      <div class="btn-row"><label class="btn primary">Choose save file<input type="file" id="importFile" accept=".json,application/json,text/plain" hidden></label></div>
+      <p class="muted" style="margin-top:14px">…or paste a save code:</p>
+      <textarea id="importCode" rows="5" spellcheck="false" placeholder="CC3D1.…" style="width:100%;box-sizing:border-box;font-family:monospace;font-size:12px;background:#0e1014;color:inherit;border:1px solid #333a48;border-radius:8px;padding:8px"></textarea>
+      <div class="btn-row"><button class="btn primary" data-importcode>Load code</button><button class="btn ghost" data-saves>← Back</button></div>`;
+    $("importFile").addEventListener("change", async (ev) => {
+      const f = ev.target.files && ev.target.files[0];
+      if (f) importSave(await f.text());
+    });
+  } else if (modal.kind === "export") {
+    body.innerHTML = `
+      <h1>⬆️ Export ${esc(modal.name)}</h1>
+      <p class="muted">Use this to move the fighter to another device or browser, or to share them. Open 💾 Saves → 📂 Load a career there.</p>
+      <div class="btn-row"><button class="btn primary" data-savefile>Save as file</button><button class="btn" data-copycode ${modal.code ? "" : "disabled"}>Copy save code</button></div>
+      <textarea id="exportCode" rows="5" readonly spellcheck="false" style="width:100%;box-sizing:border-box;font-family:monospace;font-size:12px;background:#0e1014;color:inherit;border:1px solid #333a48;border-radius:8px;padding:8px;margin-top:10px">${esc(modal.code || "Preparing code…")}</textarea>
+      <div class="btn-row"><button class="btn ghost" data-saves>← Back</button></div>`;
   } else if (modal.kind === "market") {
     body.innerHTML = `
       <h1>Staff market</h1>
@@ -825,6 +924,28 @@ document.addEventListener("click", async (ev) => {
     if (await api("save/switch", { slot: d.slot })) { modal = null; resetFightScreen(); render(); }
     return;
   }
+  if (d.importopen !== undefined) return openModal("import");
+  if (d.importcode !== undefined) {
+    const code = $("importCode").value;
+    if (!code.trim()) return toast("Paste a save code first.", true);
+    return importSave(code);
+  }
+  if (d.export !== undefined) {
+    let text;
+    try { text = game.exportSave(Number(d.export)); } catch (e) { return toast("Couldn't read that save.", true); }
+    const v = state.saves[Number(d.export)];
+    modal = { kind: "export", text, name: v ? v.name : "fighter", code: null };
+    renderModal();
+    const mine = modal;
+    try { mine.code = await saveToCode(text); } catch { mine.code = null; }
+    if (modal === mine) renderModal();
+    return;
+  }
+  if (d.savefile !== undefined) {
+    const safe = String(modal.name || "fighter").replace(/[^\w\- ]+/g, "").trim() || "fighter";
+    return offerFile(safe + " - Cage Career 3D.json", modal.text);
+  }
+  if (d.copycode !== undefined) return copyText(modal.code);
   if (d.delslot !== undefined) {
     if (await ask(`Delete ${d.name}? This can't be undone.`, "Delete")) {
       if (await api("save/delete", { slot: d.delslot })) { resetFightScreen(); render(); }
