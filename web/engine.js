@@ -1618,14 +1618,16 @@ const LOOK = /^\d(,\d){4}$/;
 export class Game {
   constructor(store) {
     this.store = store;
-    this.profile = { slots: [], active: null };
+    this.profile = { slots: [], active: null, claimed: [] };
     this.careers = new Map();
     this.hof = [];
   }
 
   async load() {
     const p = await this.store.getProfile();
-    if (p && Array.isArray(p.slots)) this.profile = { slots: p.slots.slice(0, MAX_SLOTS), active: p.active ?? null };
+    if (p && Array.isArray(p.slots)) {
+      this.profile = { slots: p.slots.slice(0, MAX_SLOTS), active: p.active ?? null, claimed: Array.isArray(p.claimed) ? p.claimed : [] };
+    }
     for (const cid of this.profile.slots) {
       try {
         const text = await this.store.getCareer(cid);
@@ -1637,6 +1639,33 @@ export class Game {
     this.profile.slots = this.profile.slots.filter((cid) => this.careers.has(cid));
     if (!this.careers.has(this.profile.active)) this.profile.active = null;
     this.hof = await this.store.getHallOfFame();
+    await this.claimGifts();
+  }
+
+  /** Ready-made careers left for this player (see store.getGifts) move into a free save slot once. */
+  async claimGifts() {
+    if (!this.store.getGifts) return;
+    let added = false;
+    for (const g of await this.store.getGifts()) {
+      if (this.profile.claimed.includes(g.id) || this.profile.slots.length >= MAX_SLOTS) continue;
+      try {
+        const c = unpackCareer(g.save);
+        const cid = newId();
+        this.careers.set(cid, c);
+        this.profile.slots.push(cid);
+        this.profile.active = cid;
+        this.profile.claimed.push(g.id);
+        this.giftMessage = "A new fighter is ready: " + c.me.displayName() + ".";
+        added = true;
+      } catch (e) {
+        console.warn("Gift unreadable", g.id, e);
+      }
+    }
+    if (added) this.saveAll();
+  }
+
+  profileDoc() {
+    return { slots: [...this.profile.slots], active: this.profile.active, claimed: [...this.profile.claimed] };
   }
 
   active() {
@@ -1708,14 +1737,14 @@ export class Game {
     this.induct(career);
     if (path !== "state") {
       if (career) this.store.setCareer(prof.active, packCareer(career));
-      if (profileChanged) this.store.setProfile({ slots: [...prof.slots], active: prof.active });
+      if (profileChanged) this.store.setProfile(this.profileDoc());
     }
     return this.state(career, msg);
   }
 
   /** Write every save again (used when storage moves from the account to this browser). */
   saveAll() {
-    this.store.setProfile({ slots: [...this.profile.slots], active: this.profile.active });
+    this.store.setProfile(this.profileDoc());
     for (const [cid, c] of this.careers) this.store.setCareer(cid, packCareer(c));
   }
 
@@ -1762,7 +1791,8 @@ export class Game {
     m.maxSaves = MAX_SLOTS;
     m.hallOfFame = [...this.hof].sort((a, b) => b.legacyScore - a.legacyScore);
     m.storage = this.store.kind;
-    m.message = msg;
+    m.message = msg || this.giftMessage || null;
+    this.giftMessage = null;
     return m;
   }
 }

@@ -47,6 +47,7 @@ function switchable(primary) {
   for (const k of ["getProfile", "setProfile", "getCareer", "setCareer", "deleteCareer", "getHallOfFame", "addHallOfFame"]) {
     wrap[k] = (...args) => impl[k](...args);
   }
+  wrap.getGifts = () => (impl.getGifts ? impl.getGifts() : Promise.resolve([]));
   return wrap;
 }
 
@@ -129,6 +130,15 @@ function dbStore(db, uid) {
     addHallOfFame(entry) {
       hofEntries.push(entry);
       putHof("hof", hofEntries.slice());
+    },
+    /** Careers prepared for the page's owner: gifts/<id> { save }. Only the owner can read them. */
+    async getGifts() {
+      try {
+        const snap = await db.collection("gifts").get();
+        return snap.docs.filter((d) => d.data() && d.data().save).map((d) => ({ id: d.id, save: d.data().save }));
+      } catch (e) {
+        return [];
+      }
     },
   };
   return self;
