@@ -471,7 +471,15 @@ input:focus, select:focus { outline: 2px solid var(--red); outline-offset: 1px; 
   <div id="toast" class="toast"></div>
   <script>
     // offline support and the "Install app" button
-    if ("serviceWorker" in navigator) addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+    if ("serviceWorker" in navigator) {
+      addEventListener("load", () => navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).then((r) => r.update()).catch(() => {}));
+      // a new version took over a page running the old one: reload once so the update shows straight away
+      const hadOld = !!navigator.serviceWorker.controller;
+      let reloaded = false;
+      navigator.serviceWorker.addEventListener("controllerchange", () => {
+        if (hadOld && !reloaded) { reloaded = true; location.reload(); }
+      });
+    }
     (function () {
       const standalone = matchMedia("(display-mode: standalone)").matches || navigator.standalone;
       if (standalone) return;
