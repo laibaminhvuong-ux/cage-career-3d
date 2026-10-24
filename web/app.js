@@ -1005,4 +1005,24 @@ $("createForm").addEventListener("submit", (ev) => {
   }
   $("boot").classList.add("hidden");
   act("state");
+  loadLinkedCareer();
 })();
+
+/** A link like ?career=minh-vuong offers to load a ready-made career from saves/minh-vuong.json. */
+async function loadLinkedCareer() {
+  let name = null;
+  try { name = new URLSearchParams(location.search).get("career"); } catch { /* no query */ }
+  if (!name || !/^[a-z0-9-]+$/.test(name)) return;
+  try { history.replaceState(null, "", location.pathname); } catch { /* keep the url */ }
+  let text;
+  try {
+    const r = await fetch("saves/" + name + ".json", { cache: "no-store" });
+    if (!r.ok) throw new Error(r.status);
+    text = await r.text();
+  } catch {
+    toast("Couldn't find that career.", true);
+    return;
+  }
+  const who = name.split("-").map((w) => w[0].toUpperCase() + w.slice(1)).join(" ");
+  if (await ask(`Load ${who} into a save slot and start playing?`, "Load")) importSave(text);
+}
