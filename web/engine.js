@@ -249,11 +249,30 @@ const PLANS = {
 const aggression = (plan) => PLANS[plan][0];
 const drainOf = (plan) => PLANS[plan][1];
 const COMBOS = ["jab-cross", "stiff jab", "overhand right", "left hook", "body kick", "leg kick", "uppercut",
-  "spinning back fist", "knee up the middle", "1-2-hook combination", "straight left", "calf kick"];
+  "spinning back fist", "knee up the middle", "1-2-hook combination", "straight left", "calf kick",
+  "teep to the body", "oblique kick", "switch kick to the body", "spinning back kick to the body", "superman punch", "front kick"];
 const BIG_SHOTS = ["crushing overhand right", "perfectly timed left hook", "head kick", "flying knee", "short uppercut", "counter right hand"];
-const TAKEDOWNS = ["shoots a double-leg", "hits a single-leg", "secures a body lock", "times a reactive takedown", "trips from the clinch"];
-const SUBS_TOP = ["rear-naked choke", "arm-triangle choke", "kimura", "D'Arce choke", "armbar", "guillotine choke"];
+// the highlight-reel techniques: rarer, and the better the striker the more of them they throw
+const FLASHY = ["spinning back kick", "spinning heel kick", "spinning back elbow", "superman punch", "front kick to the face",
+  "question mark kick", "cartwheel kick", "tornado kick", "rolling thunder kick", "Showtime kick", "axe kick", "hook kick",
+  "jumping switch kick", "jumping spinning back fist", "flying knee", "spinning back fist"];
+// [what the log says, the technique]
+const TAKEDOWNS = [["shoots a double-leg", "double-leg"], ["hits a single-leg", "single-leg"], ["secures a body lock", "body lock"],
+  ["times a reactive takedown", "reactive takedown"], ["trips from the clinch", "trip"], ["hits a huge suplex", "suplex"],
+  ["picks up and SLAMS", "slam"], ["launches a judo hip toss on", "judo throw"], ["snatches an ankle pick on", "ankle pick"]];
+// where each submission is finished from: top subs move to their position first
+const SUB_POS = {
+  "rear-naked choke": "back", "arm-triangle choke": "side", "kimura": "side", "D'Arce choke": "headlock", "armbar": "mount",
+  "guillotine choke": "headlock", "americana": "side",
+};
+const SUBS_TOP = Object.keys(SUB_POS);
 const SUBS_BOTTOM = ["triangle choke", "armbar", "guillotine choke", "kimura", "heel hook", "omoplata"];
+// ground positions, worst to best for the fighter on top
+const POSITIONS = ["guard", "half", "side", "mount", "back"];
+const POS_TEXT = {
+  half: " passes into half guard.", side: " passes to side control.", mount: " climbs to full mount!", back: " takes the back!",
+  headlock: " snaps down into a front headlock.",
+};
 
 const an = (noun) => ("aeiou".includes(noun[0].toLowerCase()) ? "an " : "a ") + noun;
 const fmt = (sec) => Math.floor(sec / 60) + ":" + String(sec % 60).padStart(2, "0");
@@ -305,6 +324,7 @@ export class Fight {
     this.current = null;
     this.ground = false;
     this.topTag = null;
+    this.pos = null; // ground position (see POSITIONS) while on the mat
     this.clock = 0;
     this.oppNext = this.aiPlan(1);
   }
@@ -322,6 +342,7 @@ export class Fight {
     this.o.newRound();
     this.ground = false;
     this.top = null;
+    this.pos = null;
     this.clock = 0;
     this.current = [];
     this.logs.push(this.current);
@@ -391,9 +412,11 @@ export class Fight {
       }
     }
     a.stamina = Math.max(0, a.stamina - this.drain(a));
+    // how often a fighter goes for the spectacular stuff
+    const flash = 0.05 + Math.max(0, a.s("striking") + a.s("speed") - 110) / 300;
     if (landed === 0) {
       if (rnd() < 0.35) {
-        const combo = pickOf(COMBOS);
+        const combo = rnd() < flash * 2 ? pickOf(FLASHY) : pickOf(COMBOS);
         this.ev("miss", a, a.n() + " throws " + an(combo) + " but " + d.n() + " slips it.", combo, 0);
       }
       return;
@@ -403,7 +426,7 @@ export class Fight {
     if (big) {
       dmg += 6 + a.s("power") / 8;
       this.hit(a, d, dmg);
-      const shot = pickOf(BIG_SHOTS);
+      const shot = rnd() < 0.25 + flash ? pickOf(FLASHY) : pickOf(BIG_SHOTS);
       const kdChance = (a.s("power") / 100) * 0.55 * (1.25 - d.s("chin") / 100) + d.damage / 250;
       if (rnd() < kdChance) {
         a.kd++;
@@ -422,7 +445,7 @@ export class Fight {
       }
     } else {
       this.hit(a, d, dmg);
-      const combo = pickOf(COMBOS);
+      const combo = rnd() < flash ? pickOf(FLASHY) : pickOf(COMBOS);
       let text;
       if (counter) text = a.n() + " fires back with " + an(combo) + ".";
       else if (landed >= 4) text = a.n() + " unloads a flurry — " + landed + " strikes land on " + d.n() + ".";
@@ -440,9 +463,15 @@ export class Fight {
     if (rnd() < ch) {
       a.td++;
       a.totTd++;
+      const [verb, tech] = pickOf(TAKEDOWNS);
       this.ground = true;
       this.top = a;
-      this.ev("td", a, a.n() + " " + pickOf(TAKEDOWNS) + " and takes " + d.n() + " down.");
+      const r = rnd();
+      // big throws land in a dominant spot more often
+      const good = tech === "slam" || tech === "suplex" || tech === "judo throw" ? 0.35 : 0;
+      this.pos = r < 0.08 + good / 3 ? "mount" : r < 0.2 + good ? "side" : r < 0.42 + good ? "half" : "guard";
+      const text = /SLAMS|on$/.test(verb) ? a.n() + " " + verb + " " + d.n() + "!" : a.n() + " " + verb + " and takes " + d.n() + " down.";
+      this.ev("td", a, text, tech, 0);
     } else {
       this.ev("stuff", d, d.n() + " stuffs a takedown attempt from " + a.n() + ".");
     }
@@ -461,10 +490,16 @@ export class Fight {
         if (rnd() < ch) {
           if (b.s("grappling") > t.s("grappling") && rnd() < 0.3) {
             this.top = b;
-            this.ev("sweep", b, b.n() + " hits a slick sweep and ends up on top!");
+            this.pos = rnd() < 0.3 ? "mount" : "guard";
+            this.ev("sweep", b, b.n() + " hits a slick sweep and ends up " + (this.pos === "mount" ? "in full mount!" : "on top!"));
+          } else if (this.position() >= 2 && rnd() < 0.5) {
+            // from the bad spots, escaping means getting back to guard first
+            this.pos = "guard";
+            this.ev("ground", b, b.n() + " shrimps out and recovers guard.");
           } else {
             this.ground = false;
             this.top = null;
+            this.pos = null;
             this.ev("info", b, b.n() + " scrambles back to the feet.");
           }
         } else if (rnd() < 0.4) {
@@ -473,11 +508,26 @@ export class Fight {
       }
     } else {
       const goesForSub = (t.plan === "SUBMIT" || (t.s("grappling") > 70 && rnd() < 0.25)) && rnd() < 0.6;
+      const pass = 0.18 + (t.s("grappling") - b.s("grappling")) * 0.006;
       if (goesForSub) this.submission(t, b, false);
+      else if (this.position() < 4 && rnd() < clamp(pass, 0.05, 0.45)) this.advance(t);
       else this.groundAndPound(t, b);
     }
     t.stamina = Math.max(0, t.stamina - this.drain(t) * 0.8);
     b.stamina = Math.max(0, b.stamina - this.drain(b) * 1.1);
+  }
+
+  /** How dominant the top fighter's position is, 0 (guard) to 4 (back). */
+  position() {
+    return Math.max(0, POSITIONS.indexOf(this.pos || "guard"));
+  }
+
+  advance(t) {
+    const i = this.position();
+    // from half guard or side control a top fighter can also jump straight to the back
+    const next = i >= 1 && i < 3 && rnd() < 0.2 ? "back" : POSITIONS[i + 1];
+    this.pos = next;
+    this.ev("ground", t, t.n() + POS_TEXT[next]);
   }
 
   groundAndPound(t, b) {
@@ -488,7 +538,7 @@ export class Fight {
     for (let i = 0; i < thrown; i++) {
       if (rnd() < acc) {
         landed++;
-        dmg += (0.4 + t.s("power") / 80) * (0.5 + rnd());
+        dmg += (0.4 + t.s("power") / 80) * (0.5 + rnd()) * [1, 1.05, 1.1, 1.3, 1.2][this.position()];
       }
     }
     if (landed === 0) {
@@ -498,7 +548,8 @@ export class Fight {
     t.sig += landed;
     t.totSig += landed;
     this.hit(t, b, dmg);
-    if (landed >= 3) this.ev("gnp", t, t.n() + " rains down ground and pound — " + landed + " shots land!", "punches", landed);
+    const from = { mount: " from full mount", back: " from back control", side: " from side control" }[this.pos] || "";
+    if (landed >= 3) this.ev("gnp", t, t.n() + " rains down ground and pound" + from + " — " + landed + " shots land!", "punches", landed);
     else this.ev("gnp", t, t.n() + " lands " + (landed === 1 ? "a short elbow" : "short punches") + " from top.", landed === 1 ? "elbow" : "punches", landed);
     this.checkStoppage(t, b, "ground and pound");
   }
@@ -506,6 +557,15 @@ export class Fight {
   submission(a, d, fromBottom) {
     a.subAtt++;
     const sub = pickOf(fromBottom ? SUBS_BOTTOM : SUBS_TOP);
+    if (!fromBottom && SUB_POS[sub] !== this.pos) {
+      // get to where the hold is finished from
+      this.pos = SUB_POS[sub];
+      this.ev("ground", a, a.n() + (POS_TEXT[this.pos] || " moves to " + this.pos + "."));
+    }
+    if (fromBottom) {
+      // bottom submissions come from guard (or a dive on the legs)
+      this.pos = sub === "heel hook" ? "legs" : "guard";
+    }
     let ch = 0.07 + (a.s("grappling") - d.s("grappling")) * 0.006 + d.damage / 400 + (d.stamina < 35 ? 0.07 : 0);
     if (fromBottom) ch *= 0.7;
     ch = clamp(ch * a.sf(), 0.01, 0.55);
@@ -516,9 +576,12 @@ export class Fight {
       return;
     }
     this.ev("info", d, d.n() + " defends and escapes the " + sub + ".");
+    if (this.pos === "legs" || this.pos === "headlock") this.pos = "guard";
+    else if (!fromBottom && rnd() < 0.5) this.pos = POSITIONS[Math.max(0, this.position() - 2)];
     if (!fromBottom && rnd() < 0.25) {
       this.ground = false;
       this.top = null;
+      this.pos = null;
       this.ev("info", d, d.n() + " uses the scramble to get back up.");
     }
   }
@@ -611,6 +674,7 @@ export class Fight {
    *  and the technique and strikes landed, so the 3D arena can act it out. */
   ev(type, side, text, move = null, landed = 0) {
     const e = { t: fmt(this.clock), type, side: side ? side.tag : "n", text, g: this.ground && this.topTag ? this.topTag : "" };
+    if (this.ground && this.topTag) e.p = this.pos || "guard";
     if (move != null) e.move = move;
     if (landed > 0) e.n = landed;
     this.current.push(e);

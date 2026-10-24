@@ -2,7 +2,7 @@
 // dashboard) and the fight arena (octagon, crowd, referee, cameras, and a director that
 // turns each fight-engine event into choreography).
 import * as THREE from "./vendor/three.module.min.js";
-import { Fighter3D, SEQUENCES, attack, lookFromName, parseLook } from "./fighter3d.js";
+import { Fighter3D, GROUND_POSES, POSES, SEQUENCES, attack, groundShift, lookFromName, parseLook, submission, takedown } from "./fighter3d.js";
 import * as audio from "./audio.js";
 
 const R = 4.4; // cage radius to the fence posts
@@ -386,10 +386,22 @@ class Side {
     this.lunge = 0;
     this.lungeTarget = 0;
     this.lungeUntil = 0;
-    this.spin = 0; // remaining spin (radians)
     this.ring = null;
   }
 }
+
+// Where the fighter on top kneels, sits or lies relative to the one underneath, who lies at G facing gDir:
+// a = distance along gDir, c = distance to the bottom fighter's left, yaw = turn relative to the bottom fighter.
+const GROUND = {
+  guard: { a: 0.46, c: 0, yaw: Math.PI },
+  half: { a: 0.4, c: 0.06, yaw: Math.PI },
+  mount: { a: -0.3, c: 0, yaw: Math.PI },
+  side: { a: -0.3, c: 0.5, yaw: -Math.PI / 2 },
+  back: { a: -0.3, c: 0, yaw: 0 },
+  headlock: { a: 0.85, c: 0, yaw: Math.PI },
+  legs: { a: 0.85, c: 0, yaw: Math.PI },
+  armbar: { a: -0.3, c: 0.5, yaw: -Math.PI / 2 },
+};
 
 // how long (ms, at 1x) the director needs to act out each event
 const BASE_MS = { strike: 1000, miss: 800, big: 1500, kd: 2100, td: 1500, stuff: 1300, sweep: 1400, ground: 900, gnp: 1000, subatt: 1800, info: 1100, round: 2000, finish: 3800 };
@@ -499,6 +511,8 @@ class ArenaView {
     this.cam.shake = 0;
     this.mode = f.round === 0 ? "intro" : "stand";
     this.top = this.down = null;
+    this.gpos = null;
+    this.holding = false;
     this.lastInfo = "";
     this.lastG = "";
     this.refIn = false;
@@ -609,8 +623,7 @@ class ArenaView {
           break;
         }
         A.lungeTarget = a.fwd || 0.15;
-        A.lungeUntil = this.t + 0.35;
-        if (a.spin) A.spin = TAU;
+        A.lungeUntil = this.t + (a.lungeFor || 0.35);
         let at = 0, first = true, hits = 0;
         for (const fr of a.frames) {
           if (fr[3]) {
@@ -645,22 +658,29 @@ class ArenaView {
         break;
       }
 
-      case "td":
-        act(A, SEQUENCES.shoot, null);
+      case "td": {
         if (instant) {
-          this.goGround(g || A.tag, true);
+          this.goGround(g || A.tag, true, e.p);
           break;
         }
-        A.lungeTarget = 0.55;
-        A.lungeUntil = this.t + 0.5;
-        this.later(0.5, () => {
-          this.goGround(g || A.tag, false);
-          audio.sfx("slam");
-          audio.roar(0.6);
-          this.cam.shake = 0.12;
-          this.excite = 0.8;
+        if (this.mode !== "stand") this.standUp(true, act);
+        const td = takedown(e.move, e.text);
+        A.f.play(td.att, null);
+        D.f.play(td.def, null);
+        A.lungeTarget = td.fwd;
+        D.lungeTarget = td.dFwd;
+        A.lungeUntil = D.lungeUntil = this.t + td.mat;
+        if (td.big) this.closeUp(D, td.mat + 0.6, true);
+        this.later(td.mat, () => {
+          this.goGround(g || A.tag, false, e.p);
+          audio.sfx("slam", td.big ? 1.6 : 1);
+          audio.roar(td.big ? 1 : 0.6);
+          this.cam.shake = td.big ? 0.24 : 0.12;
+          this.excite = td.big ? 1 : 0.8;
         });
+        ms = Math.max(ms, td.mat * 1000 + 700);
         break;
+      }
 
       case "stuff": {
         // the side that stuffs it is e.side; the other fighter shot in
@@ -681,24 +701,28 @@ class ArenaView {
           audio.roar(0.7);
           this.excite = 0.8;
         }
-        this.goGround(g || A.tag, instant);
+        this.goGround(g || A.tag, instant, e.p);
         break;
 
-      case "ground":
-        if (this.mode !== "ground") this.goGround(g || A.tag, instant);
+      case "ground": {
+        if (this.mode !== "ground") this.goGround(g || A.tag, instant, e.p);
+        else if (e.p && (e.p !== this.gpos || this.holding)) this.setGroundPos(e.p, instant);
         if (!instant) {
           const top = this.side(this.top), bot = this.other(top);
-          top.f.play(SEQUENCES.topShift, "top");
-          bot.f.play(SEQUENCES.bottomShift, "bottom");
+          top.f.play(groundShift(top.f.base), top.f.base);
+          bot.f.play(groundShift(bot.f.base), bot.f.base);
+          if (e.p && /back|mount/.test(e.p)) audio.roar(0.5);
         }
         break;
+      }
 
       case "gnp": {
-        if (this.mode !== "ground" || this.top !== A.tag) this.goGround(A.tag, instant);
-        const a = attack(e.move, e.n || 1, true);
-        act(A, a.frames, "top");
+        if (this.mode !== "ground" || this.top !== A.tag) this.goGround(A.tag, instant, e.p);
+        else if (e.p && (e.p !== this.gpos || this.holding)) this.setGroundPos(e.p, true);
+        const a = attack(e.move, e.n || 1, true, POSES[A.f.base]);
+        act(A, a.frames, A.f.base);
         if (instant) break;
-        D.f.play(SEQUENCES.block, "bottom");
+        if (/^(top|bottom|half)/i.test(D.f.base) || D.f.base === "mountBottom") D.f.play(SEQUENCES.block, D.f.base);
         let at = 0;
         for (const fr of a.frames) {
           if (fr[3]) this.later(at + 0.06, () => this.impact(A, D, "ground", 0.8 + (e.n || 1) * 0.1));
@@ -710,15 +734,22 @@ class ArenaView {
 
       case "subatt": {
         const topTag = g || this.top || D.tag;
-        if (this.mode !== "ground" || this.top !== topTag) this.goGround(topTag, instant);
+        if (this.mode !== "ground" || this.top !== topTag) this.goGround(topTag, true, e.p);
         const fromBottom = this.top !== A.tag;
+        const sub = submission(e.move, fromBottom);
+        this.setGroundPos(sub.layout, instant);
+        // the hold stays on until the next event: an escape or the tap
+        this.holding = true;
+        A.f.setBase(sub.attHold);
+        D.f.setBase(sub.defHold);
         if (!instant) {
-          A.f.play(fromBottom ? SEQUENCES.bottomSub : SEQUENCES.topSub, fromBottom ? "bottom" : "top");
-          D.f.play(fromBottom ? SEQUENCES.trappedTop : SEQUENCES.trappedBottom, fromBottom ? "top" : "bottom");
-          this.closeUp(this.other(this.side(this.top)), 1.8, true);
+          A.f.play(sub.att, sub.attHold);
+          D.f.play(sub.def, sub.defHold);
+          this.closeUp(this.side(this.top) === A ? D : A, 2.2, true);
           audio.roar(0.7);
           this.excite = 0.9;
         }
+        ms = 2200;
         break;
       }
 
@@ -746,7 +777,9 @@ class ArenaView {
     if (e.type !== "finish" && e.type !== "round" && !(e.type === "info" && e.side === "n")) {
       if (g === "" && this.mode === "ground") this.standUp(instant, act);
       else if (g && (this.mode !== "ground" || this.top !== g) && e.type !== "td") {
-        this.goGround(g, instant);
+        this.goGround(g, instant, e.p);
+      } else if (g && this.mode === "ground" && e.type !== "subatt" && (this.holding || (e.p && e.p !== this.gpos))) {
+        this.setGroundPos(e.p || this.gpos, instant);
       }
     }
     this.lastG = g;
@@ -831,7 +864,7 @@ class ArenaView {
     this.cam.shake = 0.15;
   }
 
-  goGround(topTag, instant) {
+  goGround(topTag, instant, pos) {
     const top = this.side(topTag);
     const bot = this.other(top);
     if (this.mode !== "ground") {
@@ -846,12 +879,22 @@ class ArenaView {
     this.mode = "ground";
     this.top = topTag;
     this.down = null;
-    top.f.setBase("top");
-    bot.f.setBase("bottom");
     if (!instant) {
       top.f.stopActions();
       bot.f.stopActions();
     }
+    this.setGroundPos(pos || "guard", instant);
+  }
+
+  /** Move both fighters into a ground position (see GROUND_POSES). */
+  setGroundPos(pos, instant) {
+    if (!GROUND_POSES[pos]) pos = "guard";
+    this.gpos = pos;
+    this.holding = false;
+    const top = this.side(this.top), bot = this.other(top);
+    const [tb, bb] = GROUND_POSES[pos];
+    top.f.setBase(tb);
+    bot.f.setBase(bb);
   }
 
   standUp(instant, act) {
@@ -859,6 +902,8 @@ class ArenaView {
     const bottomTag = wasGround && this.top ? this.other(this.side(this.top)).tag : this.down;
     this.mode = "stand";
     this.top = this.down = null;
+    this.gpos = null;
+    this.holding = false;
     this.C.copy(this.P.pos).add(this.O.pos).multiplyScalar(0.5).setY(0);
     this.theta = Math.atan2(this.O.pos.z - this.P.pos.z, this.O.pos.x - this.P.pos.x);
     for (const s of [this.P, this.O]) {
@@ -968,10 +1013,12 @@ class ArenaView {
       }
       case "ground": {
         const top = this.side(this.top), bot = this.other(top);
+        const L = GROUND[this.gpos] || GROUND.guard;
+        const left = new THREE.Vector3(this.gDir.z, 0, -this.gDir.x);
         bot.target.copy(this.G);
-        top.target.copy(this.G).addScaledVector(this.gDir, 0.46);
+        top.target.copy(this.G).addScaledVector(this.gDir, L.a).addScaledVector(left, L.c);
         bot.fixedYaw = Math.atan2(this.gDir.x, this.gDir.z);
-        top.fixedYaw = bot.fixedYaw + Math.PI;
+        top.fixedYaw = bot.fixedYaw + L.yaw;
         ref.target.copy(this.G).addScaledVector(this.farSide(), this.refIn ? 0.9 : 1.8).addScaledVector(this.gDir, 0.2);
         break;
       }
@@ -1032,14 +1079,9 @@ class ArenaView {
     s.yaw = angleLerp(s.yaw, face, damp(8, dt));
     if (this.t > s.lungeUntil) s.lungeTarget = 0;
     s.lunge += (s.lungeTarget - s.lunge) * damp(14, dt);
-    let spin = 0;
-    if (s.spin > 0) {
-      s.spin = Math.max(0, s.spin - dt * 16);
-      spin = s.spin;
-    }
     const r = s.f.root;
     r.position.set(s.pos.x + Math.sin(s.yaw) * s.lunge, 0, s.pos.z + Math.cos(s.yaw) * s.lunge);
-    r.rotation.y = s.yaw + spin;
+    r.rotation.y = s.yaw;
     if (s.ring) s.ring.position.set(r.position.x, 0.012, r.position.z);
   }
 

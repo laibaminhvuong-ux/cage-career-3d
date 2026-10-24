@@ -166,7 +166,6 @@ const KNEE = pose(S, {
   hipR: [-1.75, 0, 0], knR: [1.9, 0, 0], hipL: [0, 0, 0.06], knL: [0.08, 0, 0],
 });
 const FLYING_KNEE = pose(KNEE, { hipsPos: [0, 0.38, 0.25], hipL: [0.5, 0, 0.1], knL: [1.4, 0, 0], shL: [-0.4, 0, 0.6], elL: [-1.2, 0, 0] });
-const SPIN_FIST = pose(S, { shR: [-0.05, 0, -1.5], elR: [-0.1, 0, 0], chest: [0, -0.3, 0], neck: [0, -0.6, 0] });
 const SLIP = pose(S, { hipsPos: [0, -0.15, 0], spine: [0.2, 0, -0.35], chest: [0.15, 0, -0.2], neck: [0.15, 0, -0.2] });
 const SHOOT = pose(null, {
   hipsPos: [0, -0.42, 0.25], hips: [0.25, 0, 0], spine: [0.75, 0, 0], chest: [0.25, 0, 0], neck: [-0.7, 0, 0],
@@ -181,16 +180,6 @@ const SPRAWL = pose(null, {
 const CLINCH = pose(S, { shL: [-1.7, 0, -0.2], elL: [-1.3, 0, 0], shR: [-1.7, 0, 0.2], elR: [-1.3, 0, 0], spine: [0.35, 0, 0], neck: [0.25, 0, 0], hipsPos: [0, -0.1, 0.1] });
 const TOUCH = pose(S, { shL: [-1.45, 0, 0.0], elL: [-0.15, 0, 0], shR: [-1.45, 0, 0.0], elR: [-0.15, 0, 0], chest: [0.1, 0, 0] });
 const T = POSES.top, B = POSES.bottom;
-const GNP_LOAD = pose(T, { spine: [0.15, 0, 0], neck: [0.1, 0, 0], shR: [-2.6, 0, -0.3], elR: [-1.6, 0, 0], shL: [-1.4, 0, 0.4], elL: [-0.3, 0, 0] });
-const GNP_HIT = pose(T, { spine: [0.7, 0, 0], chest: [0.4, 0.25, 0], shR: [-1.05, 0, -0.1], elR: [-0.1, 0, 0], shL: [-1.3, 0, 0.45], elL: [-0.4, 0, 0] });
-const ELBOW_LOAD = pose(T, { spine: [0.2, 0, 0], shR: [-2.8, 0, -0.5], elR: [-2.6, 0, 0] });
-const ELBOW_HIT = pose(T, { spine: [0.8, 0, 0], chest: [0.45, 0.35, 0], shR: [-1.3, 0, -0.3], elR: [-2.6, 0, 0] });
-const TOP_SUB = pose(T, { spine: [0.85, 0, 0], chest: [0.4, 0, 0], neck: [-0.1, 0.3, 0], shL: [-1.55, 0, -0.25], elL: [-1.9, 0, 0], shR: [-1.55, 0, 0.25], elR: [-1.9, 0, 0] });
-const TOP_SUB_SQUEEZE = pose(TOP_SUB, { chest: [0.25, 0, 0], shL: [-1.4, 0, -0.35], elL: [-2.2, 0, 0], shR: [-1.4, 0, 0.35], elR: [-2.2, 0, 0] });
-const BOTTOM_SUB = pose(B, { hipL: [-1.35, 0, 0.25], knL: [1.65, 0, 0], hipR: [-1.35, 0, -0.25], knR: [1.65, 0, 0], shL: [-1.7, 0, -0.1], elL: [-1.4, 0, 0], shR: [-1.7, 0, 0.1], elR: [-1.4, 0, 0] });
-const BOTTOM_SUB_SQUEEZE = pose(BOTTOM_SUB, { hips: [-1.25, 0, 0], hipL: [-1.55, 0, 0.15], hipR: [-1.55, 0, -0.15], elL: [-1.8, 0, 0], elR: [-1.8, 0, 0] });
-const TRAPPED_TOP = pose(T, { spine: [0.95, 0, 0], neck: [0.3, 0, 0], shL: [-1.0, 0, 0.6], elL: [-0.2, 0, 0], shR: [-1.9, 0, -0.2], elR: [-0.4, 0, 0] });
-const TRAPPED_BOTTOM = pose(B, { shL: [-2.0, 0, -0.2], elL: [-1.3, 0, 0], shR: [-2.0, 0, 0.2], elR: [-1.3, 0, 0], neck: [0.2, 0.5, 0] });
 const TAP_A = (base) => pose(base, { shL: [-0.6, 0, 1.0], elL: [-0.3, 0, 0] });
 const TAP_B = (base) => pose(base, { shL: [-0.2, 0, 1.25], elL: [-0.1, 0, 0] });
 const BLOCK_TOP = pose(B, { shL: [-1.2, 0, -0.2], elL: [-2.1, 0, 0], shR: [-1.2, 0, 0.2], elR: [-2.1, 0, 0], neck: [0.3, 0, 0] });
@@ -199,30 +188,163 @@ function hand(p, flip) {
   return flip ? mirror(p) : p;
 }
 
+/** A copy of a pose with some joints nudged by the given amounts (instead of replaced). */
+function nudge(base, d) {
+  const p = pose(base);
+  for (const k in d) for (let i = 0; i < 3; i++) p[k][i] += d[k][i];
+  return p;
+}
+
+// ---------------------------------------------------------------- highlight-reel strikes
+// Spins turn the hips all the way round (y goes down by 2π); the animator unwinds the
+// angle afterwards so the fighter never spins back the other way.
+const FULL = -0.45 - Math.PI * 2;
+const GUARD_UP = { shL: [-0.85, 0, 0.18], elL: [-1.75, 0, 0], shR: [-0.45, 0, -0.2], elR: [-2.3, 0, 0] };
+const turn = (y, o = {}) => pose(S, { spine: [0.1, 0, 0], chest: [0.05, 0, 0], ...GUARD_UP, hips: [0, y, 0], ...o });
+const LAND = pose(S, { hips: [0, FULL, 0] });
+
+const SPIN_BACK_KICK = (head) => [
+  [turn(-1.7, { neck: [0.1, 1.2, 0], hipsPos: [0, -0.06, 0] }), 0.08, 24],
+  [turn(-2.7, { spine: [0.35, 0, 0], neck: [0, 1.1, 0], hipR: [-1.3, 0, 0], knR: [2.0, 0, 0], hipL: [-0.1, 0, 0], knL: [0.3, 0, 0] }), 0.08, 26],
+  [turn(-Math.PI, {
+    spine: [head ? 0.85 : 0.55, 0, 0], chest: [0.2, 0, 0], neck: [head ? -0.9 : -0.5, 0, 0],
+    hipR: [head ? 1.85 : 1.4, 0, 0], knR: [0.04, 0, 0], hipL: [-0.15, 0, 0], knL: [0.25, 0, 0],
+  }), 0.22, 30, head ? "head" : "body"],
+  [turn(-4.4, { hipR: [-0.9, 0, 0], knR: [1.8, 0, 0] }), 0.1, 18],
+  [turn(-5.6), 0.07, 18],
+  [LAND, 0.08, 16],
+];
+const SPIN_HEEL_KICK = [
+  [turn(-1.7, { neck: [0.1, 1.2, 0] }), 0.08, 24],
+  [turn(-3.1, { hips: [0, -3.1, 0.25], hipR: [0.1, 0, -1.0], knR: [0.7, 0, 0], neck: [0, 1.0, 0] }), 0.08, 24],
+  [turn(-4.5, { hips: [0, -4.5, 0.5], spine: [0, 0, 0.2], hipR: [-0.1, 0, -1.85], knR: [0.04, 0, 0], hipL: [0, 0, 0.1], knL: [0.25, 0, 0] }), 0.14, 28, "hook"],
+  [turn(-5.5, { hipR: [0.1, 0, -0.6], knR: [0.6, 0, 0] }), 0.09, 18],
+  [LAND, 0.1, 16],
+];
+const SPIN_FIST_FRAMES = (jump) => {
+  const up = jump ? { hipsPos: [0, 0.3, 0.1], hipL: [-1.0, 0, 0], knL: [1.6, 0, 0], hipR: [-0.6, 0, 0], knR: [1.4, 0, 0] } : {};
+  return [
+    [turn(-1.8, { neck: [0.1, 1.2, 0], hipsPos: [0, jump ? -0.18 : -0.05, 0] }), 0.08, 24],
+    [turn(-3.2, { ...up, neck: [0, 1.0, 0], shR: [-0.6, 0, -0.9], elR: [-1.2, 0, 0] }), 0.07, 26],
+    [turn(-4.6, { ...up, shR: [-0.1, 0, -1.55], elR: [-0.1, 0, 0], chest: [0, -0.2, 0] }), 0.16, 30, "hook"],
+    [turn(-5.7), 0.08, 18],
+    [LAND, 0.08, 16],
+  ];
+};
+const SPIN_ELBOW = [
+  [turn(-1.8, { neck: [0.1, 1.2, 0] }), 0.08, 24],
+  [turn(-3.3, { neck: [0, 1.0, 0], shR: [-0.2, 0, -1.2], elR: [-2.4, 0, 0] }), 0.07, 26],
+  [turn(-4.3, { shR: [-0.15, 0.4, -1.5], elR: [-2.55, 0, 0], chest: [0.1, -0.25, 0] }), 0.16, 30, "hook"],
+  [turn(-5.6), 0.08, 18],
+  [LAND, 0.08, 16],
+];
+const TORNADO = [
+  [turn(-1.6, { hipsPos: [0, -0.15, 0], knL: [0.7, 0, 0], knR: [0.7, 0, 0] }), 0.08, 22],
+  [turn(-3.0, { hipsPos: [0, 0.3, 0.1], hipL: [-1.3, 0, 0.1], knL: [1.9, 0, 0], hipR: [-0.3, 0, 0], knR: [1.0, 0, 0] }), 0.08, 24],
+  [turn(-4.5, { hipsPos: [0, 0.42, 0.15], hipL: [-1.0, 0, 0.1], knL: [1.9, 0, 0], hipR: [-1.2, 0, -0.9], knR: [0.5, 0, 0] }), 0.08, 24],
+  [turn(-5.9, { hipsPos: [0, 0.38, 0.2], spine: [-0.15, 0, 0.2], hipL: [-0.6, 0, 0.1], knL: [1.8, 0, 0], hipR: [-2.1, 0, -0.55], knR: [0.04, 0, 0] }), 0.14, 28, "hook"],
+  [turn(-6.5, { hipsPos: [0, 0.05, 0], hipR: [-0.6, 0, 0], knR: [0.8, 0, 0] }), 0.1, 18],
+  [LAND, 0.08, 16],
+];
+// cartwheel: turn side-on, roll over the hands toward the opponent and chop the leg down
+const wheel = (r, o = {}) => pose(null, { hips: [0, -1.57, r], ...o });
+const CARTWHEEL = [
+  [pose(S, { hips: [0, -1.4, 0], hipsPos: [0, -0.12, 0], shL: [-2.9, 0, 0.2], shR: [-2.9, 0, -0.2], elL: [-0.1, 0, 0], elR: [-0.1, 0, 0] }), 0.1, 18],
+  [wheel(-1.5, { hipsPos: [0, -0.05, 0], shL: [0, 0, 2.9], shR: [0, 0, -2.9], hipL: [0, 0, 0.6], hipR: [0, 0, -0.9] }), 0.1, 22],
+  [wheel(-3.1, { hipsPos: [0, 0.05, 0], shL: [0, 0, 2.95], shR: [0, 0, -2.95], hipL: [0, 0, 1.0], hipR: [0, 0, -1.0] }), 0.1, 22],
+  [wheel(-4.3, { hipsPos: [0, 0.05, 0], shL: [0, 0, 2.2], shR: [0, 0, -2.6], hipL: [0, 0, 1.25], knL: [0.04, 0, 0], hipR: [0, 0, -0.5] }), 0.16, 28, "head"],
+  [wheel(-5.6, { hipsPos: [0, -0.15, 0], hipL: [0, 0, 0.5], knL: [0.6, 0, 0], shL: [-1, 0, 0.6], shR: [-1, 0, -0.6] }), 0.1, 18],
+  [pose(S, { hips: [0, -0.45, -Math.PI * 2] }), 0.1, 16],
+];
+// rolling thunder: a forward flip that brings the heel down on the head
+const flip = (x, o = {}) => pose(null, { hips: [x, -0.2, 0], ...o });
+const ROLLING_THUNDER = [
+  [pose(S, { hipsPos: [0, -0.2, 0], spine: [0.4, 0, 0], knL: [0.8, 0, 0], knR: [0.8, 0, 0] }), 0.1, 18],
+  [flip(1.5, { hipsPos: [0, -0.3, 0.1], shL: [-2.8, 0, 0.3], shR: [-2.8, 0, -0.3], hipL: [0.3, 0, 0], hipR: [0.3, 0, 0] }), 0.1, 22],
+  [flip(3.0, { hipsPos: [0, -0.2, 0.2], shL: [-2.9, 0, 0.3], shR: [-2.9, 0, -0.3], hipL: [-0.3, 0, 0.2], hipR: [0.1, 0, -0.2] }), 0.1, 22],
+  [flip(4.3, { hipsPos: [0, -0.05, 0.3], hipR: [-0.5, 0, -0.1], knR: [0.04, 0, 0], hipL: [-1.4, 0, 0.1], knL: [1.6, 0, 0], shL: [-1.2, 0, 0.8], shR: [-1.2, 0, -0.8] }), 0.16, 28, "head"],
+  [flip(5.6, { hipsPos: [0, -0.2, 0.2], hipL: [-0.4, 0, 0], knL: [0.8, 0, 0], hipR: [-0.6, 0, 0], knR: [0.9, 0, 0] }), 0.1, 18],
+  [pose(S, { hips: [Math.PI * 2, -0.45, 0] }), 0.1, 16],
+];
+const SUPERMAN = [
+  [pose(S, { hipsPos: [0, -0.1, 0], hipR: [-1.2, 0.2, 0], knR: [1.5, 0, 0], shR: [0.2, 0, -0.3], elR: [-1.4, 0, 0] }), 0.12, 20],
+  [pose(CROSS_EXT, {
+    hipsPos: [0, 0.22, 0.2], spine: [0.35, 0.35, 0], chest: [0.15, 0.5, 0],
+    hipR: [0.8, 0.3, -0.1], knR: [0.7, 0, 0], hipL: [-0.4, 0, 0.1], knL: [0.9, 0, 0],
+  }), 0.2, 26, "head"],
+];
+const FRONT_KICK = (face) => [
+  [pose(S, { hips: [0, -0.1, 0], spine: [-0.05, 0, 0], chest: [0, 0, 0], hipR: [-1.7, 0, 0], knR: [2.0, 0, 0] }), 0.1, 22],
+  [pose(S, {
+    hips: [face ? -0.3 : -0.12, -0.05, 0], spine: [face ? -0.15 : 0, 0, 0], chest: [0, 0, 0],
+    hipR: [face ? -2.25 : -1.55, 0, 0], knR: [0.03, 0, 0], hipL: [0.15, 0, 0.05], knL: [0.15, 0, 0],
+  }), 0.2, 28, face ? "head" : "body"],
+];
+const TEEP = [
+  [pose(S, { hipL: [-1.6, 0, 0], knL: [1.9, 0, 0], hipsPos: [0, -0.05, 0] }), 0.1, 22],
+  [pose(S, { hips: [-0.12, -0.35, 0], hipL: [-1.55, 0, 0], knL: [0.03, 0, 0], hipR: [0.2, 0.35, -0.1], knR: [0.1, 0, 0] }), 0.2, 28, "body"],
+];
+const OBLIQUE = [
+  [pose(S, { hipL: [-0.9, 0, 0.1], knL: [1.3, 0, 0] }), 0.09, 22],
+  [pose(S, { hips: [-0.1, -0.2, 0], hipL: [-0.75, -0.6, 0.1], knL: [0.04, 0, 0], spine: [0, 0, 0] }), 0.18, 28, "leg"],
+];
+const AXE = [
+  [pose(S, { hips: [-0.3, -0.2, 0], spine: [-0.15, 0, 0], hipR: [-2.85, 0, -0.35], knR: [0.1, 0, 0], hipL: [0.15, 0, 0], knL: [0.1, 0, 0] }), 0.2, 14],
+  [pose(S, { hips: [0.15, -0.2, 0], spine: [0.35, 0, 0], hipR: [-1.1, 0, 0], knR: [0.04, 0, 0] }), 0.18, 26, "head"],
+];
+const HOOK_KICK = [
+  [pose(S, { hips: [0, -0.9, -0.35], hipL: [-1.3, 0, 0.5], knL: [1.7, 0, 0], spine: [0, 0, -0.2] }), 0.1, 22],
+  [pose(S, { hips: [0, -1.1, -0.45], hipL: [-1.0, 0, 1.75], knL: [0.04, 0, 0], spine: [0, 0, -0.25] }), 0.08, 26],
+  [pose(S, { hips: [0, -0.8, -0.45], hipL: [-1.5, 0, 1.55], knL: [1.3, 0, 0], spine: [0, 0, -0.25] }), 0.16, 26, "hook"],
+];
+const QUESTION_MARK = [
+  [pose(S, { hips: [0, 0.35, 0], hipR: [-0.5, 0.6, -0.45], knR: [1.3, 0, 0] }), 0.12, 20],
+  [pose(BODY_KICK, { hips: [0, 0.95, -0.55], hipR: [-0.55, 0.85, -2.1], knR: [1.1, 0, 0] }), 0.08, 22],
+  [pose(HEAD_KICK, { hips: [0, 0.9, -0.55], hipR: [-0.45, 0.85, -2.25], knR: [0.04, 0, 0] }), 0.22, 30, "hook"],
+];
+const SWITCH = pose(mirror(S), { hipsPos: [0, -0.04, 0] });
+const SWITCH_KICK = (jump) => [
+  [jump ? pose(SWITCH, { hipsPos: [0, -0.2, 0], knL: [0.9, 0, 0], knR: [0.9, 0, 0] }) : SWITCH, 0.1, 22],
+  [jump ? pose(mirror(HEAD_KICK), { hipsPos: [0, 0.35, 0.1], hipR: [-1.2, 0, 0], knR: [1.8, 0, 0] }) : mirror(BODY_KICK), 0.24, 24, jump ? "hook" : "body"],
+];
+const SHOWTIME = [
+  [pose(S, { hipsPos: [0, 0.2, 0.1], hipL: [-1.4, 0, 0], knL: [1.6, 0, 0], shL: [-0.6, 0, 0.5], elL: [-1, 0, 0] }), 0.14, 18],
+  [pose(HEAD_KICK, { hipsPos: [0, 0.5, 0.2], hipL: [0.5, 0, 0.1], knL: [1.2, 0, 0] }), 0.24, 26, "hook"],
+];
+
 /**
- * Builds the keyframes for a named technique: { frames, fwd }. Each frame is
+ * Builds the keyframes for a named technique: { frames, fwd, lungeFor }. Each frame is
  * [pose, seconds, blend speed, hit] where hit names the target ("head", "hook", "body", "leg", "ground")
- * on the frames that land.
+ * on the frames that land. For ground strikes, base is the pose of the position they are thrown from.
  */
-export function attack(move, n = 1, ground = false) {
+export function attack(move, n = 1, ground = false, base = null) {
   const m = String(move || "").toLowerCase();
-  if (ground) {
-    if (m.includes("elbow")) return { frames: [[ELBOW_LOAD, 0.22, 14], [ELBOW_HIT, 0.16, 26, "ground"]] };
-    const frames = [];
-    for (let i = 0; i < Math.min(Math.max(n, 1), 4); i++) {
-      const f = i % 2 === 1;
-      frames.push([hand(GNP_LOAD, f), 0.13, 18], [hand(GNP_HIT, f), 0.12, 28, "ground"]);
-    }
-    return { frames };
-  }
+  if (ground) return groundStrikes(m, n, base || POSES.top);
   const jab = [JAB_EXT, 0.14, 26, "head"], cross = [CROSS_EXT, 0.18, 26, "head"], hook = [HOOK_L, 0.18, 24, "hook"];
   const reset = [S, 0.06, 26];
+  if (m.includes("spinning back kick")) return { frames: SPIN_BACK_KICK(!m.includes("body")), fwd: 0.25 };
+  if (m.includes("spinning heel kick")) return { frames: SPIN_HEEL_KICK, fwd: 0.15 };
+  if (m.includes("spinning back elbow")) return { frames: SPIN_ELBOW, fwd: 0.3 };
+  if (m.includes("spinning back fist") || m.includes("spinning")) return { frames: SPIN_FIST_FRAMES(m.includes("jumping")), fwd: m.includes("jumping") ? 0.45 : 0.2 };
+  if (m.includes("tornado")) return { frames: TORNADO, fwd: 0.3, lungeFor: 0.5 };
+  if (m.includes("cartwheel")) return { frames: CARTWHEEL, fwd: 0.55, lungeFor: 0.7 };
+  if (m.includes("rolling thunder")) return { frames: ROLLING_THUNDER, fwd: 0.6, lungeFor: 0.7 };
+  if (m.includes("superman")) return { frames: SUPERMAN, fwd: 0.6, lungeFor: 0.4 };
+  if (m.includes("front kick to the face")) return { frames: FRONT_KICK(true), fwd: 0.1 };
+  if (m.includes("front kick")) return { frames: FRONT_KICK(false), fwd: 0.1 };
+  if (m.includes("teep")) return { frames: TEEP, fwd: 0.05 };
+  if (m.includes("oblique")) return { frames: OBLIQUE, fwd: 0.05 };
+  if (m.includes("axe kick")) return { frames: AXE, fwd: 0.1 };
+  if (m.includes("hook kick")) return { frames: HOOK_KICK, fwd: 0.1 };
+  if (m.includes("question mark")) return { frames: QUESTION_MARK, fwd: 0.1 };
+  if (m.includes("showtime")) return { frames: SHOWTIME, fwd: 0.5, lungeFor: 0.45 };
+  if (m.includes("jumping switch kick")) return { frames: SWITCH_KICK(true), fwd: 0.35, lungeFor: 0.4 };
+  if (m.includes("switch kick")) return { frames: SWITCH_KICK(false), fwd: 0.1 };
   if (m.includes("head kick")) return { frames: [[KICK_LOAD, 0.12, 16], [HEAD_KICK, 0.3, 20, "hook"]], fwd: 0.1 };
   if (m.includes("body kick")) return { frames: [[KICK_LOAD, 0.12, 16], [BODY_KICK, 0.3, 20, "body"]], fwd: 0.1 };
   if (m.includes("leg kick") || m.includes("calf kick")) return { frames: [[KICK_LOAD, 0.1, 16], [LEG_KICK, 0.26, 20, "leg"]] };
   if (m.includes("flying knee")) return { frames: [[pose(S, { hipsPos: [0, -0.2, 0] }), 0.15, 16], [FLYING_KNEE, 0.35, 16, "head"]], fwd: 0.55 };
   if (m.includes("knee")) return { frames: [[CLINCH, 0.2, 14], [KNEE, 0.24, 20, "body"]], fwd: 0.35 };
-  if (m.includes("spinning")) return { frames: [[pose(S, { chest: [0, 0.5, 0] }), 0.14, 18], [SPIN_FIST, 0.28, 18, "hook"]], spin: true };
   if (m.includes("uppercut")) return { frames: [[UPPER_R_LOAD, 0.14, 18], [UPPER_R, 0.22, 24, "head"]], fwd: 0.15 };
   if (m.includes("overhand") || m.includes("right hand")) return { frames: [[OVERHAND_LOAD, 0.16, 16], [OVERHAND, 0.24, 24, "head"]], fwd: 0.3 };
   if (m.includes("1-2")) return { frames: [jab, reset, cross, reset, [HOOK_L_LOAD, 0.08, 20], hook], fwd: 0.2 };
@@ -232,6 +354,31 @@ export function attack(move, n = 1, ground = false) {
   const frames = [jab, reset, cross];
   for (let i = 2; i < Math.min(n, 5); i++) frames.push(reset, i % 2 ? hook : cross);
   return { frames, fwd: 0.25 };
+}
+
+/** Punches and elbows from whatever position the striker is in. */
+function groundStrikes(m, n, base) {
+  const isSide = base === POSES.sideTop, isBack = base === POSES.backTop;
+  let load, hit;
+  if (isBack) {
+    load = nudge(base, { chest: [0, -0.3, 0] });
+    Object.assign(load, pose(load, { shR: [-1.0, 0, -1.3], elR: [-1.5, 0, 0] }));
+    hit = nudge(base, { chest: [0.1, 0.35, 0] });
+    Object.assign(hit, pose(hit, { shR: [-1.6, 0, -0.15], elR: [-0.3, 0, 0] }));
+  } else if (isSide || m.includes("elbow")) {
+    load = pose(nudge(base, { spine: [-0.25, 0, 0] }), { shR: [-2.9, 0, -0.5], elR: [-2.6, 0, 0] });
+    hit = pose(nudge(base, { spine: [0.25, 0, 0], chest: [0.15, 0.3, 0] }), { shR: [-1.3, 0, -0.3], elR: [-2.6, 0, 0] });
+    return { frames: [[load, 0.2, 14], [hit, 0.16, 26, "ground"]] };
+  } else {
+    load = pose(nudge(base, { spine: [-0.35, 0, 0] }), { shR: [-2.6, 0, -0.3], elR: [-1.6, 0, 0] });
+    hit = pose(nudge(base, { spine: [0.3, 0, 0], chest: [0.15, 0.25, 0] }), { shR: [-1.05, 0, -0.1], elR: [-0.1, 0, 0] });
+  }
+  const frames = [];
+  for (let i = 0; i < Math.min(Math.max(n, 1), 4); i++) {
+    const f = i % 2 === 1;
+    frames.push([hand(load, f), 0.13, 18], [hand(hit, f), 0.12, 28, "ground"]);
+  }
+  return { frames };
 }
 
 /** What a hit looks like on the receiving end, as a pose offset that fades out. */
@@ -246,18 +393,277 @@ export function hitOffset(kind, strength = 1) {
   }
 }
 
+// ---------------------------------------------------------------- ground positions
+// Each position has a pose for the fighter on top and the one underneath; the arena
+// places the two bodies (see GROUND in arena3d.js).
+Object.assign(POSES, {
+  halfTop: pose(T, {
+    hipsPos: [0, -0.5, 0.05], spine: [0.85, 0.2, 0], chest: [0.25, 0, 0], neck: [-0.4, 0, 0],
+    shL: [-1.4, 0, 0.5], elL: [-0.9, 0, 0], shR: [-1.0, 0, -0.6], elR: [-1.3, 0, 0],
+    hipL: [-0.3, 0, 0.35], knL: [1.8, 0, 0], hipR: [0.1, 0, -0.25], knR: [1.5, 0, 0],
+  }),
+  halfBottom: pose(B, {
+    hips: [-1.42, 0.35, 0.15], shL: [-1.7, 0, 0.4], elL: [-1.6, 0, 0], shR: [-1.2, 0, -0.2], elR: [-2.0, 0, 0],
+    hipL: [-0.9, 0, 0.35], knL: [1.7, 0, 0], hipR: [-0.5, 0, -0.2], knR: [1.5, 0, 0],
+  }),
+  mountTop: pose(null, {
+    hipsPos: [0, -0.52, 0], spine: [0.15, 0, 0], chest: [0.05, 0, 0], neck: [0.15, 0, 0],
+    shL: [-0.9, 0, 0.35], elL: [-1.2, 0, 0], shR: [-0.9, 0, -0.35], elR: [-1.2, 0, 0],
+    hipL: [-0.4, 0, 0.62], knL: [1.7, 0, 0], hipR: [-0.4, 0, -0.62], knR: [1.7, 0, 0],
+  }),
+  mountBottom: pose(null, {
+    hipsPos: [0, -0.83, 0], hips: [-1.52, 0, 0], neck: [0.45, 0, 0],
+    shL: [-1.8, 0, 0.25], elL: [-1.9, 0, 0], shR: [-1.8, 0, -0.25], elR: [-1.9, 0, 0],
+    hipL: [-0.7, 0, 0.25], knL: [1.4, 0, 0], hipR: [-0.7, 0, -0.25], knR: [1.4, 0, 0],
+  }),
+  sideTop: pose(null, {
+    hipsPos: [0, -0.5, 0], spine: [1.15, 0, 0], chest: [0.3, 0, 0], neck: [-0.6, 0, 0],
+    shL: [-1.0, 0, -0.5], elL: [-1.0, 0, 0], shR: [-1.2, 0, 0.4], elR: [-1.4, 0, 0],
+    hipL: [-0.1, 0, 0.35], knL: [1.75, 0, 0], hipR: [0.25, 0, -0.25], knR: [1.5, 0, 0],
+  }),
+  sideBottom: pose(null, {
+    hipsPos: [0, -0.83, 0], hips: [-1.5, 0.2, 0], neck: [0.4, 0.4, 0],
+    shL: [-1.9, 0, -0.2], elL: [-2.2, 0, 0], shR: [-1.6, 0, -0.3], elR: [-1.8, 0, 0],
+    hipL: [-0.9, 0, 0.2], knL: [1.6, 0, 0], hipR: [-0.5, 0, -0.2], knR: [1.2, 0, 0],
+  }),
+  backTop: pose(null, {
+    hipsPos: [0, -0.75, 0], hips: [-0.55, 0, 0], spine: [0.4, 0, 0], chest: [0.2, 0, 0], neck: [0.1, 0, 0],
+    shL: [-1.5, 0, -0.35], elL: [-1.7, 0, 0], shR: [-1.5, 0, 0.35], elR: [-1.7, 0, 0],
+    hipL: [-1.0, 0, 0.6], knL: [1.2, 0, 0], hipR: [-1.0, 0, -0.6], knR: [1.2, 0, 0],
+  }),
+  backBottom: pose(null, {
+    hipsPos: [0, -0.78, 0], hips: [-0.3, 0, 0], spine: [0.15, 0, 0], neck: [0.1, 0, 0],
+    shL: [-1.9, 0, -0.3], elL: [-1.9, 0, 0], shR: [-1.9, 0, 0.3], elR: [-1.9, 0, 0],
+    hipL: [-1.2, 0, 0.15], knL: [1.0, 0, 0], hipR: [-1.2, 0, -0.15], knR: [1.0, 0, 0],
+  }),
+  headlockTop: pose(null, {
+    hipsPos: [0, -0.32, 0], hips: [0.3, 0, 0], spine: [0.55, 0, 0], chest: [0.2, 0, 0], neck: [-0.5, 0, 0],
+    shL: [-1.0, 0, -0.45], elL: [-1.7, 0, 0], shR: [-1.0, 0, 0.45], elR: [-1.7, 0, 0],
+    hipL: [-1.3, 0, 0.25], knL: [1.75, 0, 0], hipR: [0.4, 0, -0.2], knR: [1.65, 0, 0],
+  }),
+  headlockBottom: pose(null, {
+    hipsPos: [0, -0.5, 0], hips: [0.2, 0, 0], spine: [1.05, 0, 0], chest: [0.25, 0, 0], neck: [-0.2, 0, 0],
+    shL: [-1.1, 0, 0.2], elL: [-1.2, 0, 0], shR: [-1.1, 0, -0.2], elR: [-1.2, 0, 0],
+    hipL: [-0.25, 0, 0.15], knL: [1.75, 0, 0], hipR: [-0.25, 0, -0.15], knR: [1.75, 0, 0],
+  }),
+  legsTop: pose(null, {
+    hipsPos: [0, -0.78, 0], hips: [-0.45, 0, 0], spine: [0.2, 0, 0], neck: [0.2, 0, 0],
+    shL: [0.5, 0, 0.4], elL: [-0.3, 0, 0], shR: [0.5, 0, -0.4], elR: [-0.3, 0, 0],
+    hipL: [-0.9, 0, 0.4], knL: [1.7, 0, 0], hipR: [-1.15, 0, -0.05], knR: [0.05, 0, 0],
+  }),
+  legsBottom: pose(null, {
+    hipsPos: [0, -0.8, 0], hips: [-1.35, 0.3, 0], neck: [0.5, 0, 0],
+    shL: [-1.2, 0, -0.4], elL: [-2.0, 0, 0], shR: [-1.2, 0, 0.4], elR: [-2.0, 0, 0],
+    hipL: [-1.3, 0, 0.6], knL: [1.2, 0, 0], hipR: [-0.9, 0, -0.2], knR: [1.5, 0, 0],
+  }),
+  // top fighter fallen back for an armbar, legs across the chest
+  armbarTop: pose(null, {
+    hipsPos: [0, -0.82, 0], hips: [-1.45, 0, 0], neck: [0.5, 0, 0],
+    shL: [-1.3, 0, -0.3], elL: [-1.3, 0, 0], shR: [-1.3, 0, 0.3], elR: [-1.3, 0, 0],
+    hipL: [-1.25, 0, 0.25], knL: [0.5, 0, 0], hipR: [-1.25, 0, -0.25], knR: [0.5, 0, 0],
+  }),
+});
+POSES.armbarBottom = pose(POSES.mountBottom, { shL: [-1.6, 0, 0.5], elL: [-0.05, 0, 0], shR: [-1.6, 0, -0.4], elR: [-1.2, 0, 0], hipL: [-0.2, 0, 0.2], knL: [0.4, 0, 0] });
+
+/** Base poses for each ground position: [top, bottom]. */
+export const GROUND_POSES = {
+  guard: ["top", "bottom"], half: ["halfTop", "halfBottom"], side: ["sideTop", "sideBottom"], mount: ["mountTop", "mountBottom"],
+  back: ["backTop", "backBottom"], headlock: ["headlockTop", "headlockBottom"], legs: ["legsTop", "legsBottom"], armbar: ["armbarTop", "armbarBottom"],
+};
+
+// ---------------------------------------------------------------- submissions
+// Each hold has the attacker's grip and squeeze and the defender's reaction; the two
+// "hold" poses stay as the bases until the next event, so a tap happens inside the hold.
+function holdPair(name, att, attSq, def, defSq) {
+  POSES[name + "Att"] = att;
+  POSES[name + "Def"] = def;
+  return {
+    att: [[att, 0.3, 8], [attSq, 0.35, 6], [att, 0.25, 8], [attSq, 0.45, 6]],
+    def: [[def, 0.3, 9], [defSq, 0.3, 9], [def, 0.3, 9], [defSq, 0.35, 9]],
+    attHold: name + "Att", defHold: name + "Def",
+  };
+}
+const P_ = (name, o) => pose(POSES[name], o);
+const SUBS = {
+  rnc: (() => {
+    const att = P_("backTop", { shR: [-1.5, 0, 0.75], elR: [-2.2, 0, 0], shL: [-1.7, 0, -0.45], elL: [-2.4, 0, 0], neck: [0.3, -0.4, 0] });
+    const def = P_("backBottom", { shL: [-2.4, 0, -0.6], elL: [-1.6, 0, 0], shR: [-2.4, 0, 0.6], elR: [-1.6, 0, 0], neck: [-0.4, 0, 0] });
+    return { layout: "back", ...holdPair("rnc", att, nudge(att, { hips: [-0.2, 0, 0], spine: [-0.2, 0, 0] }), def, nudge(def, { neck: [-0.2, 0, 0], hipL: [0.5, 0, 0], knL: [-0.6, 0, 0] })) };
+  })(),
+  armTriangle: (() => {
+    const att = P_("sideTop", { spine: [1.35, 0, 0], neck: [0.4, 0, 0], shL: [-1.3, 0, -0.7], elL: [-2.1, 0, 0], shR: [-1.3, 0, 0.7], elR: [-2.1, 0, 0] });
+    const def = P_("sideBottom", { shL: [-2.9, 0, -0.6], elL: [-0.4, 0, 0], shR: [-1.5, 0, -0.3], elR: [-1.2, 0, 0], neck: [0.3, 0.6, 0] });
+    return { layout: "side", ...holdPair("armTri", att, nudge(att, { hipsPos: [0, -0.05, 0], hipL: [-0.4, 0, 0], hipR: [-0.3, 0, 0] }), def, nudge(def, { hipL: [0.4, 0, 0], neck: [-0.2, 0, 0] })) };
+  })(),
+  kimuraTop: (() => {
+    const att = P_("sideTop", { spine: [0.8, 0, 0], shL: [-1.0, 0, -0.2], elL: [-1.6, 0, 0], shR: [-1.0, 0, 0.4], elR: [-1.6, 0, 0] });
+    const def = P_("sideBottom", { shL: [-0.6, 0, 1.3], elL: [-1.8, 0, 0] });
+    return { layout: "side", ...holdPair("kimT", att, nudge(att, { chest: [0, 0.4, 0], spine: [-0.2, 0, 0] }), def, pose(def, { shL: [0.3, 0, 1.4], hips: [-1.5, -0.3, 0] })) };
+  })(),
+  americana: (() => {
+    const att = P_("sideTop", { spine: [1.1, 0, 0], shL: [-1.4, 0, -0.2], elL: [-0.6, 0, 0], shR: [-1.4, 0, 0.3], elR: [-0.8, 0, 0] });
+    const def = P_("sideBottom", { shL: [-0.2, 0, 1.5], elL: [-1.6, 0, 0] });
+    return { layout: "side", ...holdPair("amer", att, nudge(att, { spine: [0.15, 0, 0], chest: [0, 0.25, 0] }), def, pose(def, { shL: [0, 0, 1.75] })) };
+  })(),
+  darce: (() => {
+    const att = P_("headlockTop", { hips: [0.3, 0.5, 0], spine: [1.0, 0, 0], shL: [-1.2, 0, -0.6], elL: [-2.0, 0, 0], shR: [-1.2, 0, 0.6], elR: [-2.0, 0, 0] });
+    const def = P_("headlockBottom", { shL: [-2.6, 0, -0.4], elL: [-0.8, 0, 0], neck: [0.2, 0.4, 0] });
+    return { layout: "headlock", ...holdPair("darce", att, nudge(att, { chest: [-0.2, 0.4, 0], hipsPos: [0, -0.1, 0] }), def, nudge(def, { spine: [0.2, 0, 0] })) };
+  })(),
+  guillotineTop: (() => {
+    const att = P_("headlockTop", { hipsPos: [0, -0.15, 0], spine: [0.5, 0, 0], shL: [-1.0, 0, -0.6], elL: [-2.1, 0, 0], shR: [-1.0, 0, 0.6], elR: [-2.1, 0, 0] });
+    const def = P_("headlockBottom", { spine: [0.8, 0, 0], neck: [-0.2, 0, 0], shL: [-1.6, 0, -0.4], elL: [-1.6, 0, 0], shR: [-1.6, 0, 0.4], elR: [-1.6, 0, 0] });
+    return { layout: "headlock", ...holdPair("guilT", att, nudge(att, { hips: [-0.35, 0, 0], spine: [-0.3, 0, 0], hipsPos: [0, 0.08, 0] }), def, nudge(def, { spine: [-0.2, 0, 0], hipsPos: [0, 0.08, 0] })) };
+  })(),
+  armbarTop: (() => {
+    const att = POSES.armbarTop;
+    const def = POSES.armbarBottom;
+    return { layout: "armbar", ...holdPair("abT", att, nudge(att, { hips: [-0.15, 0, 0], hipsPos: [0, 0.05, 0], neck: [0.2, 0, 0] }), def, nudge(def, { hips: [0, 0.2, 0], knR: [0.5, 0, 0] })) };
+  })(),
+  triangle: (() => {
+    const att = P_("bottom", { hips: [-1.35, 0, 0], hipL: [-1.85, 0, 0.35], knL: [1.75, 0, 0], hipR: [-1.6, 0, -0.3], knR: [1.3, 0, 0], shL: [-1.9, 0, -0.1], elL: [-1.2, 0, 0], shR: [-1.9, 0, 0.1], elR: [-1.2, 0, 0] });
+    const def = P_("top", { hipsPos: [0, -0.42, 0], spine: [0.95, 0, 0], chest: [0.3, 0, 0], neck: [0.5, 0, 0], shL: [-0.6, 0, 0.3], elL: [-1.2, 0, 0], shR: [-1.3, 0, -0.4], elR: [-0.2, 0, 0] });
+    return { layout: "guard", ...holdPair("tri", att, nudge(att, { hipL: [-0.2, 0, 0], knL: [0.15, 0, 0], hips: [0.15, 0, 0] }), def, nudge(def, { spine: [-0.25, 0, 0], neck: [-0.2, 0, 0] })) };
+  })(),
+  armbarBottom: (() => {
+    const att = P_("bottom", { hips: [-1.4, 0.6, 0], hipL: [-2.2, 0, 0.35], knL: [0.6, 0, 0], hipR: [-1.3, 0, -0.5], knR: [1.6, 0, 0], shL: [-1.6, 0, 0.2], elL: [-0.8, 0, 0], shR: [-1.6, 0, -0.2], elR: [-0.8, 0, 0] });
+    const def = P_("top", { spine: [0.5, 0, 0], neck: [0.3, 0, 0], shR: [-1.4, 0, 0], elR: [0, 0, 0] });
+    return { layout: "guard", ...holdPair("abB", att, nudge(att, { hips: [-0.15, 0, 0], hipsPos: [0, 0.08, 0] }), def, nudge(def, { spine: [0.4, 0, 0] })) };
+  })(),
+  guillotineBottom: (() => {
+    const att = P_("bottom", { hips: [-1.2, 0, 0], spine: [0.3, 0, 0], neck: [0.4, 0, 0], shL: [-1.4, 0, -0.6], elL: [-2.1, 0, 0], shR: [-1.4, 0, 0.6], elR: [-2.1, 0, 0], hipL: [-1.2, 0, 0.5], knL: [1.5, 0, 0], hipR: [-1.2, 0, -0.5], knR: [1.5, 0, 0] });
+    const def = P_("top", { hipsPos: [0, -0.48, 0], spine: [1.1, 0, 0], chest: [0.35, 0, 0], neck: [0.5, 0, 0], shL: [-1.2, 0, 0.1], elL: [-1.6, 0, 0], shR: [-1.2, 0, -0.1], elR: [-1.6, 0, 0] });
+    return { layout: "guard", ...holdPair("guilB", att, nudge(att, { hips: [-0.25, 0, 0], spine: [-0.4, 0, 0] }), def, nudge(def, { spine: [0.15, 0, 0] })) };
+  })(),
+  kimuraBottom: (() => {
+    const att = P_("bottom", { hips: [-0.8, 0.5, 0], spine: [0.3, 0, 0], shL: [-1.1, 0, -0.3], elL: [-1.7, 0, 0], shR: [-1.3, 0, 0.4], elR: [-1.6, 0, 0] });
+    const def = P_("top", { spine: [0.8, 0, 0], hips: [0, 0, 0.2], shR: [0.6, 0, -0.9], elR: [-1.6, 0, 0] });
+    return { layout: "guard", ...holdPair("kimB", att, nudge(att, { hips: [-0.4, 0.3, 0] }), def, pose(def, { shR: [0.9, 0, -1.1] })) };
+  })(),
+  omoplata: (() => {
+    const att = P_("bottom", { hips: [-0.6, 1.0, 0], hipL: [-1.5, 0, 0.8], knL: [1.7, 0, 0], hipR: [-1.0, 0, -0.2], knR: [1.6, 0, 0], shL: [-1.0, 0, -0.4], elL: [-0.6, 0, 0], shR: [-1.0, 0, 0.3], elR: [-0.6, 0, 0] });
+    const def = P_("top", { hipsPos: [0, -0.55, 0], spine: [1.45, 0, 0], chest: [0.2, 0, 0], neck: [0.1, 0, 0], shR: [0.9, 0, -0.5], elR: [-1.2, 0, 0], shL: [-1.4, 0, 0.4], elL: [-0.2, 0, 0] });
+    return { layout: "guard", ...holdPair("omo", att, nudge(att, { spine: [0.5, 0, 0] }), def, pose(def, { shR: [1.3, 0, -0.6] })) };
+  })(),
+  heelHook: (() => {
+    const att = POSES.legsBottom;
+    const def = P_("legsTop", { hips: [-0.7, 0, 0], shL: [-0.3, 0, 0.9], elL: [-0.4, 0, 0] });
+    return { layout: "legs", ...holdPair("hh", att, nudge(att, { hips: [0, -0.6, 0] }), def, nudge(def, { hips: [-0.3, 0, 0], shR: [-1.8, 0, 0] })) };
+  })(),
+};
+
+/** The animation for a submission attempt: { layout, att, def, attHold, defHold }. */
+export function submission(name, fromBottom) {
+  const m = String(name || "").toLowerCase();
+  if (m.includes("rear-naked")) return SUBS.rnc;
+  if (m.includes("arm-triangle")) return SUBS.armTriangle;
+  if (m.includes("d'arce") || m.includes("darce")) return SUBS.darce;
+  if (m.includes("americana")) return SUBS.americana;
+  if (m.includes("heel hook")) return SUBS.heelHook;
+  if (m.includes("omoplata")) return SUBS.omoplata;
+  if (m.includes("triangle")) return SUBS.triangle;
+  if (m.includes("armbar")) return fromBottom ? SUBS.armbarBottom : SUBS.armbarTop;
+  if (m.includes("guillotine")) return fromBottom ? SUBS.guillotineBottom : SUBS.guillotineTop;
+  if (m.includes("kimura")) return fromBottom ? SUBS.kimuraBottom : SUBS.kimuraTop;
+  return fromBottom ? SUBS.triangle : SUBS.rnc;
+}
+
+// ---------------------------------------------------------------- takedowns
+// { att, def, mat (seconds until they hit the canvas), fwd, dFwd, big }
+const FALL_BACK = pose(null, { hipsPos: [0, -0.45, -0.1], hips: [-0.9, 0, 0], neck: [0.5, 0, 0], shL: [-1.6, 0, 0.7], elL: [-0.4, 0, 0], shR: [-1.6, 0, -0.7], elR: [-0.4, 0, 0], hipL: [-0.9, 0, 0.1], knL: [0.6, 0, 0], hipR: [-0.7, 0, -0.1], knR: [0.5, 0, 0] });
+const LEGS_GRABBED = pose(S, {
+  hips: [0, 0, 0], hipsPos: [0, 0.03, 0], spine: [-0.3, 0, 0], chest: [-0.2, 0, 0], neck: [0.35, 0, 0],
+  shL: [-1.4, 0, 0.7], elL: [-0.5, 0, 0], shR: [-1.4, 0, -0.7], elR: [-0.5, 0, 0],
+  hipL: [0, 0, 0.04], knL: [0.05, 0, 0], hipR: [0, 0, -0.04], knR: [0.05, 0, 0],
+});
+const DRIVE = pose(SHOOT, {
+  hipsPos: [0, -0.3, 0.2], spine: [0.85, 0, 0], neck: [-0.6, 0, 0],
+  shL: [-0.9, 0, -0.35], elL: [-1.2, 0, 0], shR: [-0.9, 0, 0.35], elR: [-1.2, 0, 0],
+  hipL: [-1.0, 0, 0.1], knL: [1.3, 0, 0], hipR: [0.7, 0, -0.1], knR: [0.4, 0, 0],
+});
+const BODY_LOCK = pose(CLINCH, { hips: [0, 0, 0], shL: [-1.25, 0, -0.65], elL: [-1.5, 0, 0], shR: [-1.25, 0, 0.65], elR: [-1.5, 0, 0], spine: [0.25, 0, 0], neck: [0.1, 0.6, 0] });
+const LEAN_BACK = pose(CLINCH, { hips: [0, 0, 0], spine: [-0.15, 0, 0], neck: [0.3, -0.5, 0], shL: [-1.5, 0, 0.5], elL: [-1.3, 0, 0], shR: [-1.5, 0, -0.5], elR: [-1.3, 0, 0] });
+const LIFTED = (y, z, x, o = {}) => pose(null, {
+  hipsPos: [0, y, z], hips: [x, 0, 0], neck: [0.3, 0, 0], shL: [-1.2, 0, 0.6], elL: [-0.6, 0, 0], shR: [-1.2, 0, -0.6], elR: [-0.6, 0, 0],
+  hipL: [-0.5, 0, 0.15], knL: [0.9, 0, 0], hipR: [-0.2, 0, -0.15], knR: [0.5, 0, 0], ...o,
+});
+const TD = {
+  "double-leg": {
+    att: [[pose(S, { hipsPos: [0, -0.22, 0] }), 0.1, 18], [SHOOT, 0.3, 14], [DRIVE, 0.4, 10]],
+    def: [[S, 0.32, 9], [LEGS_GRABBED, 0.3, 12], [FALL_BACK, 0.3, 9]], mat: 0.85, fwd: 0.6, dFwd: 0.1,
+  },
+  "reactive takedown": {
+    att: [[SHOOT, 0.25, 18], [DRIVE, 0.35, 12]],
+    def: [[pose(S, { hips: [0, 0.4, 0], hipR: [-0.6, 0.6, -0.6], knR: [1.0, 0, 0] }), 0.22, 14], [LEGS_GRABBED, 0.25, 12], [FALL_BACK, 0.3, 9]], mat: 0.7, fwd: 0.65, dFwd: 0.05,
+  },
+  "single-leg": {
+    att: [[SHOOT, 0.3, 14], [pose(S, { hips: [0, 0.3, 0], hipsPos: [0, -0.2, 0], spine: [0.55, 0, 0], neck: [-0.3, 0, 0], shL: [-0.9, 0, -0.5], elL: [-1.4, 0, 0], shR: [-0.9, 0, 0.2], elR: [-1.4, 0, 0] }), 0.7, 9]],
+    def: [[S, 0.28, 9],
+      [pose(S, { hips: [0, 0, 0], hipL: [-1.1, 0, 0.1], knL: [0.35, 0, 0], hipR: [0.05, 0, -0.05], knR: [0.2, 0, 0], hipsPos: [0, 0.06, 0], spine: [-0.15, 0, 0], shL: [-0.4, 0, 1.2], shR: [-0.4, 0, -1.2] }), 0.18, 14],
+      [pose(S, { hips: [0, 0, 0], hipL: [-1.1, 0, 0.1], knL: [0.35, 0, 0], hipR: [0.05, 0, -0.05], knR: [0.55, 0, 0], hipsPos: [0, -0.04, 0], spine: [-0.1, 0, 0], shL: [-0.6, 0, 1.0], shR: [-0.6, 0, -1.0] }), 0.16, 14],
+      [pose(S, { hips: [0, 0, 0], hipL: [-1.1, 0, 0.1], knL: [0.35, 0, 0], hipR: [0.05, 0, -0.05], knR: [0.2, 0, 0], hipsPos: [0, 0.08, 0], spine: [-0.2, 0, 0], shL: [-0.4, 0, 1.3], shR: [-0.4, 0, -1.3] }), 0.16, 14],
+      [FALL_BACK, 0.3, 9]], mat: 1.1, fwd: 0.55, dFwd: 0.1,
+  },
+  "body lock": {
+    att: [[CLINCH, 0.25, 12], [BODY_LOCK, 0.4, 10], [pose(BODY_LOCK, { hipR: [-0.5, 0.3, 0.45], knR: [0.1, 0, 0], spine: [0.5, 0, 0] }), 0.3, 12]],
+    def: [[CLINCH, 0.3, 12], [LEAN_BACK, 0.35, 10], [FALL_BACK, 0.3, 9]], mat: 0.95, fwd: 0.35, dFwd: 0.3,
+  },
+  trip: {
+    att: [[CLINCH, 0.3, 12], [pose(BODY_LOCK, { hipR: [-0.6, 0.4, 0.5], knR: [0.1, 0, 0], spine: [0.4, 0.3, 0] }), 0.35, 12]],
+    def: [[CLINCH, 0.3, 12], [pose(LEAN_BACK, { hipL: [-0.6, 0, 0.3], knL: [0.1, 0, 0] }), 0.25, 12], [FALL_BACK, 0.3, 9]], mat: 0.8, fwd: 0.35, dFwd: 0.3,
+  },
+  "ankle pick": {
+    att: [[pose(S, { hipsPos: [0, -0.3, 0], spine: [0.7, 0, 0], neck: [-0.5, 0, 0], shL: [-0.7, 0, 0.1], elL: [-0.2, 0, 0], shR: [-1.5, 0, -0.2], elR: [-0.6, 0, 0], knL: [1.0, 0, 0], knR: [0.9, 0, 0] }), 0.35, 14],
+      [pose(S, { hipsPos: [0, -0.25, 0], spine: [0.35, 0, 0], shL: [0.3, 0, 0.2], elL: [-0.3, 0, 0], shR: [-1.6, 0, -0.1], elR: [-0.1, 0, 0] }), 0.3, 12]],
+    def: [[S, 0.3, 9], [pose(S, { hips: [0, 0, 0], hipL: [-0.9, 0, 0], knL: [0.1, 0, 0], spine: [-0.4, 0, 0], neck: [0.3, 0, 0], shL: [-1.2, 0, 0.8], shR: [-1.2, 0, -0.8] }), 0.22, 14], [FALL_BACK, 0.3, 9]], mat: 0.8, fwd: 0.45, dFwd: 0.15,
+  },
+  suplex: {
+    att: [[CLINCH, 0.25, 12], [pose(BODY_LOCK, { hipsPos: [0, -0.18, 0], knL: [0.8, 0, 0], knR: [0.8, 0, 0] }), 0.25, 12],
+      [pose(BODY_LOCK, { hipsPos: [0, -0.05, 0], hips: [-0.5, 0, 0], spine: [-0.35, 0, 0], neck: [-0.4, 0, 0], shL: [-2.3, 0, -0.4], shR: [-2.3, 0, 0.4] }), 0.25, 12],
+      [pose(BODY_LOCK, { hipsPos: [0, -0.4, -0.1], hips: [-1.2, 0, 0], spine: [-0.4, 0, 0], neck: [-0.5, 0, 0], shL: [-2.8, 0, -0.3], shR: [-2.8, 0, 0.3] }), 0.25, 12]],
+    def: [[CLINCH, 0.28, 12], [LIFTED(0.12, 0.1, 0.1), 0.22, 12], [LIFTED(0.55, 0.45, 0.9), 0.22, 12], [LIFTED(0.2, 0.95, 2.2, { neck: [0.6, 0, 0] }), 0.22, 12]],
+    mat: 0.95, fwd: 0.35, dFwd: 0.35, big: true,
+  },
+  slam: {
+    att: [[pose(SHOOT, { hipsPos: [0, -0.3, 0.1] }), 0.25, 14],
+      [pose(S, { hips: [0, 0, 0], hipsPos: [0, 0, 0], spine: [-0.1, 0, 0], neck: [-0.2, 0, 0], shL: [-2.4, 0, 0.3], elL: [-1.0, 0, 0], shR: [-2.4, 0, -0.3], elR: [-1.0, 0, 0], hipL: [0, 0, 0.1], knL: [0.1, 0, 0], hipR: [0, 0, -0.1], knR: [0.1, 0, 0] }), 0.4, 8],
+      [pose(S, { hips: [0, 0, 0], hipsPos: [0, -0.35, 0.1], spine: [0.95, 0, 0], shL: [-1.4, 0, 0.2], elL: [-0.4, 0, 0], shR: [-1.4, 0, -0.2], elR: [-0.4, 0, 0], knL: [1.1, 0, 0], knR: [1.1, 0, 0] }), 0.25, 18]],
+    def: [[LEGS_GRABBED, 0.25, 12], [LIFTED(0.6, 0.35, -1.35, { hipL: [-0.7, 0, 0.2], knL: [1.2, 0, 0], hipR: [-0.3, 0, -0.2], knR: [0.6, 0, 0], shL: [-2.0, 0, 0.8], shR: [-2.0, 0, -0.8] }), 0.4, 7],
+      [LIFTED(-0.6, 0.35, -1.5), 0.25, 22]],
+    mat: 0.85, fwd: 0.55, dFwd: 0.15, big: true,
+  },
+  "judo throw": {
+    att: [[pose(CLINCH, { hips: [0, -1.6, 0], neck: [0, 1.0, 0] }), 0.2, 14],
+      [pose(S, { hips: [0, -2.9, 0], hipsPos: [0, -0.18, 0], spine: [0.35, 0, 0], neck: [0, 0.9, 0], shL: [-1.4, 0, 0.3], elL: [-0.8, 0, 0], shR: [-1.0, 0, -0.5], elR: [-1.4, 0, 0], knL: [0.6, 0, 0], knR: [0.6, 0, 0] }), 0.25, 14],
+      [pose(S, { hips: [0, -3.0, 0], hipsPos: [0, -0.25, 0], spine: [1.1, 0, 0], chest: [0.3, 0, 0], shL: [-0.6, 0, 0.6], shR: [-0.8, 0, -0.6], knL: [0.7, 0, 0], knR: [0.4, 0, 0] }), 0.3, 12]],
+    def: [[CLINCH, 0.3, 12], [LIFTED(0.35, 0.35, 0.4, { hips: [0.4, 0, 1.2] }), 0.25, 12], [LIFTED(0.1, 0.7, 0.2, { hips: [0.2, 0, 2.6] }), 0.22, 12]],
+    mat: 0.85, fwd: 0.3, dFwd: 0.35, big: true,
+  },
+};
+TD["shoot"] = TD["double-leg"];
+
+/** The animation for a takedown, by technique (older fights only have the log text). */
+export function takedown(tech, text = "") {
+  const t = String(tech || "").toLowerCase();
+  if (TD[t]) return TD[t];
+  const s = String(text).toLowerCase();
+  for (const k of Object.keys(TD)) if (s.includes(k.split(" ")[0])) return TD[k];
+  if (s.includes("slams")) return TD.slam;
+  return TD["double-leg"];
+}
+
+/** Small adjustments while the fighters jockey for position on the mat. */
+export function groundShift(baseName) {
+  const b = POSES[baseName] || POSES.top;
+  return [[nudge(b, { spine: [0.15, 0.2, 0], shL: [-0.25, 0, 0.2], shR: [0.2, 0, -0.1], hipL: [0.1, 0, 0.1] }), 0.45, 6]];
+}
+
 export const SEQUENCES = {
   slip: [[SLIP, 0.25, 22]],
   shoot: [[pose(S, { hipsPos: [0, -0.22, 0] }), 0.1, 18], [SHOOT, 0.45, 12]],
   sprawl: [[SPRAWL, 0.55, 14]],
   touch: [[TOUCH, 0.5, 8]],
-  topSub: [[TOP_SUB, 0.3, 8], [TOP_SUB_SQUEEZE, 0.35, 6], [TOP_SUB, 0.25, 8], [TOP_SUB_SQUEEZE, 0.4, 6]],
-  bottomSub: [[BOTTOM_SUB, 0.3, 8], [BOTTOM_SUB_SQUEEZE, 0.35, 6], [BOTTOM_SUB, 0.25, 8], [BOTTOM_SUB_SQUEEZE, 0.4, 6]],
-  trappedTop: [[TRAPPED_TOP, 1.4, 6]],
-  trappedBottom: [[TRAPPED_BOTTOM, 0.35, 10], [pose(TRAPPED_BOTTOM, { hipL: [-0.4, 0, 0.4], hipR: [-1.0, 0, -0.5] }), 0.35, 10], [TRAPPED_BOTTOM, 0.35, 10], [pose(TRAPPED_BOTTOM, { hipL: [-1.0, 0, 0.5], hipR: [-0.4, 0, -0.4] }), 0.35, 10]],
   block: [[BLOCK_TOP, 0.4, 14]],
-  topShift: [[pose(T, { spine: [0.75, 0.2, 0], shL: [-1.4, 0, 0.6], shR: [-1.0, 0, -0.2] }), 0.45, 6]],
-  bottomShift: [[pose(B, { hips: [-1.4, 0.25, 0.1], hipL: [-0.4, 0, 0.55], hipR: [-1.0, 0, -0.3] }), 0.45, 6]],
   getUp: [[POSES.sitting, 0.5, 6], [pose(S, { hipsPos: [0, -0.35, 0], spine: [0.6, 0, 0], knL: [1.2, 0, 0], knR: [1.2, 0, 0] }), 0.4, 6]],
   rocked: [[pose(S, { hipsPos: [0, -0.16, -0.05], knL: [0.85, 0, 0], knR: [0.75, 0, 0], spine: [0.1, 0, 0.25], neck: [0.25, 0.3, 0.3], shL: [-0.3, 0, 0.5], shR: [-0.3, 0, -0.5] }), 0.55, 7],
     [pose(S, { hipsPos: [0, -0.12, 0], spine: [0.1, 0, -0.2], neck: [0.3, -0.2, -0.2] }), 0.45, 6]],
@@ -602,6 +1008,13 @@ export class Fighter3D {
     }
     if (!target) target = this.idlePose();
 
+    // a finished spin or flip leaves the hips a whole turn away from where they are headed:
+    // drop the extra turn instead of unwinding it
+    for (let i = 0; i < 3; i++) {
+      const d = target.hips[i] - this.cur.hips[i];
+      if (Math.abs(d) > Math.PI) this.cur.hips[i] += Math.PI * 2 * Math.round(d / (Math.PI * 2));
+    }
+
     // fading hit reactions add on top
     this.offsets = this.offsets.filter((h) => (h.t += dt) < h.dur);
     for (const h of this.offsets) {
@@ -642,7 +1055,7 @@ export class Fighter3D {
       p.shR[0] += Math.sin(t * 2.6 + 1.3) * 0.05;
       p.chest[1] += Math.sin(t * 1.3) * 0.06;
       p.neck[1] += Math.sin(t * 0.9) * 0.05;
-    } else if (this.base === "top" || this.base === "bottom") {
+    } else if (/top$|bottom$|Att$|Def$/i.test(this.base)) {
       const b = Math.sin(t * 2.2);
       p.spine[0] += b * 0.04;
       p.shL[0] += Math.sin(t * 1.7) * 0.08;
