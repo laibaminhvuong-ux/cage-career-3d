@@ -1,0 +1,887 @@
+import { createStage } from "./arena3d.js";
+import * as audio from "./audio.js";
+import { LOOK_OPTIONS, SHORTS_NAMES, lookString, randomLook } from "./fighter3d.js";
+import { Game, GameError } from "./engine.js";
+import { openStore, onSaveError } from "./store.js";
+
+const STAT_LABELS = {
+  striking: "Striking", power: "Power", speed: "Speed", wrestling: "Wrestling",
+  grappling: "Grappling", cardio: "Cardio", chin: "Chin",
+};
+const PLANS = [
+  { id: "BALANCED", name: "Balanced", desc: "Mix strikes and takedowns" },
+  { id: "STRIKE", name: "Strike", desc: "Keep it standing, throw volume" },
+  { id: "WRESTLE", name: "Wrestle", desc: "Takedowns and top control" },
+  { id: "SUBMIT", name: "Hunt Subs", desc: "Drag it down, chase the tap" },
+  { id: "COUNTER", name: "Counter", desc: "Patient, saves energy" },
+  { id: "ALLOUT", name: "All Out", desc: "Swing big, burns the tank" },
+];
+
+const $ = (id) => document.getElementById(id);
+let state = null;
+let busy = false;
+
+// fight playback
+let fightShown = 0;      // events already on screen
+let playing = false;
+let skipPlayback = false;
+let headSnapshot = null; // fight json shown in the header while a round plays out
+let modal = null;        // { kind: "saves" | "market" | "talk" | "talkResult" | "division" | "hof", target?, code? }
+const PLAN_NAMES = Object.fromEntries(PLANS.map((p) => [p.id, p.name]));
+
+// 3D stage (null when the device has no WebGL: the game still works from the text log)
+let stage = null;
+try {
+  stage = createStage();
+} catch (e) {
+  console.warn("3D disabled:", e);
+}
+let createLook = randomLook();
+let speed = 1;
+try { speed = Number(localStorage.getItem("cc3d_speed")) || 1; } catch { /* ignore */ }
+if (stage) stage.arena.setSpeed(speed);
+
+// ------------------------------------------------------------------ helpers
+
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+function money(n) {
+  const v = Math.round(n);
+  return (v < 0 ? "-$" : "$") + Math.abs(v).toLocaleString();
+}
+function rankLabel(r) {
+  return r === 0 ? "Champion" : r > 0 ? "#" + r : "Unranked";
+}
+function bar(value, color, cls = "") {
+  const v = Math.max(0, Math.min(100, value));
+  return `<div class="bar ${cls}"><i style="width:${v}%;${color ? "background:" + color : ""}"></i></div>`;
+}
+function statColor(v) {
+  if (v >= 80) return "var(--gold)";
+  if (v >= 65) return "var(--green)";
+  if (v >= 45) return "var(--blue)";
+  return "#6b7385";
+}
+function healthColor(v) {
+  return v > 60 ? "var(--green)" : v > 30 ? "var(--orange)" : "var(--red)";
+}
+
+let toastTimer;
+function toast(msg, err = false) {
+  const t = $("toast");
+  t.textContent = msg;
+  t.className = "toast show" + (err ? " err" : "");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => (t.className = "toast"), 2600);
+}
+
+let game = null; // the in-browser game engine, ready once saves have loaded
+
+async function api(path, params = {}) {
+  if (busy || !game) return null;
+  busy = true;
+  try {
+    const data = game.call(path, params);
+    state = data;
+    if (data.message) toast(data.message);
+    return data;
+  } catch (e) {
+    if (e instanceof GameError) toast(e.message, true);
+    else {
+      console.error(e);
+      toast("Something went wrong. Your last save is safe.", true);
+    }
+    return null;
+  } finally {
+    busy = false;
+  }
+}
+
+/** In-page yes/no question (browser confirm() dialogs are blocked inside claude.ai). */
+function ask(text, yes) {
+  return new Promise((resolve) => {
+    const box = $("askBox");
+    $("askText").textContent = text;
+    $("askYes").textContent = yes;
+    box.classList.remove("hidden");
+    const done = (v) => {
+      box.classList.add("hidden");
+      $("askYes").onclick = $("askNo").onclick = null;
+      resolve(v);
+    };
+    $("askYes").onclick = () => done(true);
+    $("askNo").onclick = () => done(false);
+  });
+}
+
+async function act(path, params) {
+  if (await api(path, params)) render();
+}
+
+// ------------------------------------------------------------------ rendering
+
+function render() {
+  if (!state) return;
+  if (!state.exists) {
+    $("create").classList.remove("hidden");
+    $("dash").classList.add("hidden");
+    $("topstats").innerHTML = "";
+    $("fightScreen").classList.add("hidden");
+    $("createSaves").innerHTML = state.saves.length
+      ? `<p><button class="btn small" data-saves>← Back to your ${state.saves.length} saved fighter${state.saves.length === 1 ? "" : "s"}</button></p>` : "";
+    fillCreateForm();
+    renderLookPickers();
+    renderModal();
+    render3d();
+    return;
+  }
+  $("create").classList.add("hidden");
+  $("dash").classList.remove("hidden");
+  renderTop();
+  $("goal").textContent = state.goal;
+  renderFighter();
+  renderFightCard();
+  renderActions();
+  renderRival();
+  renderTeam();
+  renderStatus();
+  renderRankings();
+  renderHistory();
+  renderNews();
+  renderFightScreen();
+  renderModal();
+  render3d();
+}
+
+/** Puts the shared 3D canvas where it is needed and picks the music. */
+function render3d() {
+  syncSoundButtons();
+  const fightOpen = !$("fightScreen").classList.contains("hidden");
+  if (stage) {
+    if (fightOpen) stage.show($("arenaStage"), "arena");
+    else if (!state.exists) {
+      stage.show($("createStage"), "preview");
+      updateCreatePreview();
+    } else {
+      stage.show($("dashStage"), "preview");
+      stage.preview.setFighters(showcaseFighters());
+    }
+  }
+  if (state.exists) renderShowcaseCaption();
+  updateMusic();
+}
+
+function updateMusic() {
+  const f = state && state.fight;
+  const fightOpen = f && !$("fightScreen").classList.contains("hidden");
+  if (!fightOpen) {
+    audio.crowdOn(false);
+    audio.music("camp");
+    return;
+  }
+  audio.crowdOn(true);
+  if (f.finished && !playing) return audio.music(null);
+  if (f.finished) return; // the arena stops the music on the finishing event
+  const finalRound = f.round + (playing ? 0 : 1) === f.rounds && f.rounds > 1;
+  audio.music("fight", playing ? (finalRound ? 1.2 : 1) : f.round === 0 ? 0.6 : 0.35);
+}
+
+function syncSoundButtons() {
+  document.querySelectorAll("[data-sound]").forEach((b) => {
+    b.textContent = audio.isOn() ? "🔊" : "🔇";
+    b.title = audio.isOn() ? "Sound on" : "Sound off";
+  });
+  $("speedBtn").textContent = speed + "×";
+}
+
+function showcaseFighters() {
+  const s = state;
+  const me = { look: s.fighter.look, name: s.fighter.name, weightClass: s.weightClassIndex, style: s.fighter.style };
+  const opp = s.scheduled && !s.retired ? s.scheduled.opponent : null;
+  return opp ? [me, { look: opp.look, name: opp.name, weightClass: s.weightClassIndex, style: opp.style }] : [me];
+}
+
+function renderShowcaseCaption() {
+  const s = state;
+  const opp = s.scheduled && !s.retired ? s.scheduled.opponent : null;
+  $("showcaseCap").innerHTML = opp
+    ? `<span class="red">${esc(s.fighter.displayName)}</span><span class="vs">VS</span><span class="blue">${esc(opp.displayName)}</span>`
+    : `<span class="red">${esc(s.fighter.displayName)}</span><span class="muted">${esc(s.fighter.style)} · ${esc(s.weightClass)} · drag to spin</span>`;
+}
+
+// ------------------------------------------------------------------ fighter look (create screen)
+
+function renderLookPickers() {
+  const el = $("lookPickers");
+  const row = (key, label, kind) => `
+    <div class="look-row"><span>${label}</span><div class="chips">
+      ${LOOK_OPTIONS[key].map((v, i) => kind === "swatch"
+        ? `<button type="button" class="swatch ${createLook[key] === i ? "on" : ""}" style="background:${v}" data-look="${key}:${i}" title="${key === "shorts" ? SHORTS_NAMES[i] : ""}" aria-label="${label} ${i + 1}"></button>`
+        : `<button type="button" class="btn chip ${createLook[key] === i ? "on" : ""}" data-look="${key}:${i}">${esc(v)}</button>`).join("")}
+    </div></div>`;
+  el.innerHTML = row("skin", "Skin tone", "swatch") + row("hair", "Hair", "chip") + row("hairColor", "Hair color", "swatch")
+    + row("beard", "Facial hair", "chip") + row("shorts", "Fight shorts", "swatch");
+  $("lookInput").value = lookString(createLook);
+}
+
+function updateCreatePreview() {
+  if (!stage) return;
+  const form = $("createForm");
+  const style = (form.querySelector("input[name=style]:checked") || {}).value || "Striker";
+  stage.preview.setFighters([{ look: lookString(createLook), weightClass: Number($("wcSelect").value || 3), style }]);
+}
+
+function fillCreateForm() {
+  const wc = $("wcSelect");
+  if (wc.options.length) return;
+  wc.innerHTML = state.weightClasses.map((w, i) => `<option value="${i}" ${i === 3 ? "selected" : ""}>${esc(w)}</option>`).join("");
+  $("countrySelect").innerHTML = state.countries.map((c) => `<option>${esc(c)}</option>`).join("");
+}
+
+function renderTop() {
+  const s = state;
+  $("topstats").innerHTML = `
+    <span>Year <b>${s.year}</b> · Week <b>${s.week}</b></span>
+    <span>Age <b>${s.fighter.age}</b></span>
+    <span class="${s.money < 0 ? "neg" : ""}">Cash <b>${money(s.money)}</b></span>
+    <span>Fame <b>${s.fame}</b></span>`;
+}
+
+function renderFighter() {
+  const f = state.fighter;
+  const s = state;
+  const badges = [];
+  if (s.rank === 0) badges.push(`<span class="badge gold">GFC CHAMPION</span>`);
+  else if (s.rank > 0) badges.push(`<span class="badge red">GFC #${s.rank}</span>`);
+  badges.push(`<span class="badge">${esc(s.org)}</span>`);
+  if (f.streak >= 2) badges.push(`<span class="badge green">${f.streak}-fight win streak</span>`);
+  if (f.streak <= -2) badges.push(`<span class="badge red">${-f.streak}-fight skid</span>`);
+  if (s.injuryWeeks > 0) badges.push(`<span class="badge red">Injured ${s.injuryWeeks}w</span>`);
+  if (s.titlesWon) badges.push(`<span class="badge gold">${s.titlesWon}× champ</span>`);
+
+  $("fighterCard").innerHTML = `
+    <div class="fighter-top">
+      <div>
+        <div class="fighter-name">${esc(f.displayName)}</div>
+        <div class="fighter-meta">${esc(f.style)} · ${esc(s.weightClass)} · ${esc(f.country)} · Age ${f.age}</div>
+      </div>
+      <div class="ovr"><b>${f.overall}</b><span>OVR</span></div>
+    </div>
+    <div class="record">${f.record} <small>${f.koWins} KO · ${f.subWins} SUB · ${f.decWins} DEC</small></div>
+    <div class="badges">${badges.join("")}</div>
+    ${Object.entries(f.stats).map(([k, v]) => `
+      <div class="stat"><span>${STAT_LABELS[k]}</span>${bar(v, statColor(v))}<b>${Math.floor(v)}</b></div>`).join("")}`;
+}
+
+function difficulty(opp) {
+  const d = opp.overall - state.fighter.overall;
+  if (d <= -4) return `<span class="diff easy">Favorite</span>`;
+  if (d >= 4) return `<span class="diff hard">Underdog</span>`;
+  return `<span class="diff even">Even</span>`;
+}
+
+function offerHtml(o, withButton) {
+  const opp = o.opponent;
+  const tag = (o.grudge ? "⚔ GRUDGE MATCH · " : "") + (o.title ? "🏆 TITLE FIGHT · 5 rounds" : o.contender ? "⭐ CONTENDER SERIES" : `${o.rounds} rounds`);
+  const rank = o.oppRank === 0 ? "Champion" : o.oppRank > 0 ? `#${o.oppRank}` : "";
+  return `
+    <div class="offer ${o.title ? "title" : ""} ${o.contender || o.grudge ? "contender" : ""}">
+      <div class="offer-top">
+        <div>
+          <div class="offer-meta">${tag}${rank ? " · " + rank : ""}</div>
+          <div class="offer-name">${esc(opp.displayName)}</div>
+          <div class="offer-meta">${opp.record} · ${esc(opp.style)} · ${esc(opp.country)} · Age ${opp.age} · OVR <b>${opp.overall}</b></div>
+        </div>
+        ${difficulty(opp)}
+      </div>
+      <div class="offer-money">Purse <b>${money(o.purse)}</b> + <b>${money(o.winBonus)}</b> to win · in ${o.weeks} week${o.weeks === 1 ? "" : "s"}</div>
+      ${withButton ? `<button class="btn ${o.title ? "gold" : "primary"} small" data-accept="${o.index}">Accept fight</button>` : ""}
+    </div>`;
+}
+
+function taleOfTape(opp) {
+  const me = state.fighter;
+  return Object.keys(STAT_LABELS).map((k) => {
+    const a = Math.floor(me.stats[k]), b = Math.floor(opp.stats[k]);
+    return `<div class="stat" style="grid-template-columns:34px 1fr 34px">
+      <b style="text-align:left;color:${a >= b ? "var(--text)" : "var(--muted)"}">${a}</b>
+      <span style="text-align:center;font-size:12px;color:var(--muted)">${STAT_LABELS[k]}</span>
+      <b style="color:${b >= a ? "var(--text)" : "var(--muted)"}">${b}</b></div>`;
+  }).join("");
+}
+
+function renderFightCard() {
+  const s = state;
+  const el = $("fightCard");
+  if (s.retired) {
+    el.innerHTML = `
+      <h2>Career over</h2>
+      <div class="fight-night">
+        <h3>${esc(s.legacy)}</h3>
+        <p>${esc(s.fighter.displayName)} retired at ${s.fighter.age} with a record of <b>${s.fighter.record}</b>.</p>
+        <p class="muted">${s.titlesWon} title${s.titlesWon === 1 ? "" : "s"} won · ${s.titleDefenses} defenses · ${money(s.earnings)} career earnings · legacy score ${s.legacyScore}</p>
+      </div>
+      <div class="btn-row"><button class="btn primary big" data-newsave>Start a new career</button><button class="btn big" data-saves>💾 Saves</button></div>`;
+    return;
+  }
+  if (s.fightNight) {
+    const o = s.scheduled;
+    el.innerHTML = `
+      <h2>Next fight</h2>
+      <div class="fight-night">
+        <h3>FIGHT NIGHT</h3>
+        <p>${o.title ? "🏆 For the GFC title — " : ""}vs <b>${esc(o.opponent.displayName)}</b></p>
+      </div>
+      <button class="btn primary big" data-startfight>Walk out to the cage</button>`;
+    return;
+  }
+  if (s.scheduled) {
+    const o = s.scheduled;
+    el.innerHTML = `
+      <h2>Fight camp</h2>
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom:10px">
+        <div class="countdown">${o.weeks}</div>
+        <div class="muted">week${o.weeks === 1 ? "" : "s"} until fight night.<br>Train hard — every session counts.</div>
+      </div>
+      ${offerHtml(o, false)}
+      ${o.oppBonus > 0 ? `<p class="badge red" style="display:inline-block">Opponent fired up: +${o.oppBonus} to all stats</p>` : ""}
+      <button class="btn small" data-talk="opponent" ${s.canTalk ? "" : "disabled"}>🎤 Talk to the press${s.canTalk ? "" : " (done this week)"}</button>
+      <div class="label">Tale of the tape <span style="float:right">You · Them</span></div>
+      ${taleOfTape(o.opponent)}`;
+    return;
+  }
+  el.innerHTML = `
+    <h2>Fight offers</h2>
+    ${s.offers.length ? s.offers.map((o) => offerHtml(o, true)).join("") : `<p class="muted">No offers right now. Keep training — your manager is working the phones.</p>`}
+    <p class="muted" style="font-size:12px;margin:6px 0 0">Offers refresh every few weeks.</p>`;
+}
+
+function renderActions() {
+  const s = state;
+  const locked = s.retired || s.fightNight || !!s.fight;
+  const hurt = s.injuryWeeks > 0;
+  $("actionsCard").innerHTML = `
+    <h2>This week</h2>
+    <div class="energy-row">
+      <div class="lbl"><span>Energy</span><b>${s.energy}/100</b></div>
+      ${bar(s.energy, s.energy > 50 ? "var(--green)" : s.energy > 25 ? "var(--orange)" : "var(--red)", "lg")}
+    </div>
+    ${hurt ? `<p class="badge red" style="display:inline-block">Injured: ${s.injuryWeeks} week(s) — no training or sparring</p>` : ""}
+    <div class="label" style="margin-top:4px">Train <span class="muted">(−${s.trainCost} energy, ${s.gym.name} ×${s.gym.mult})</span></div>
+    <div class="train-grid">
+      ${Object.keys(STAT_LABELS).map((k) => `
+        <button class="btn small" data-train="${k}" ${locked || hurt || s.energy < s.trainCost ? "disabled" : ""}>${STAT_LABELS[k]}</button>`).join("")}
+    </div>
+    <div class="act-grid">
+      <button class="btn" data-action="spar" ${locked || hurt || s.energy < 30 ? "disabled" : ""}>Spar<span class="sub">Gains across the board · −30</span></button>
+      <button class="btn" data-action="rest" ${locked ? "disabled" : ""}>Rest<span class="sub">Recover energy · +50</span></button>
+      <button class="btn" data-action="media" ${locked || s.energy < 10 ? "disabled" : ""}>Media<span class="sub">Build fame · −10</span></button>
+      <button class="btn" data-action="work" ${locked || s.energy < 15 ? "disabled" : ""}>${s.gfc ? "Seminar" : "Teach classes"}<span class="sub">Earn cash · −15</span></button>
+    </div>
+    <p class="muted" style="font-size:12px;margin:10px 0 0">Each action takes one week. Weekly costs: ${money(s.gym.fee + s.teamSalary)} (gym ${money(s.gym.fee)} + team ${money(s.teamSalary)}).</p>`;
+}
+
+function renderStatus() {
+  const s = state;
+  const g = s.gym;
+  $("statusCard").innerHTML = `
+    <h2>Career</h2>
+    <div class="kv">
+      <span>Promotion</span><b>${esc(s.org)}</b>
+      <span>Ranking</span><b>${s.gfc ? rankLabel(s.rank) : "—"}</b>
+      ${s.gfc ? "" : `<span>Regional wins (since tryout)</span><b>${s.regionalWins}</b>`}
+      <span>Cash</span><b style="color:${s.money < 0 ? "var(--red)" : "var(--green)"}">${money(s.money)}</b>
+      <span>Career earnings</span><b>${money(s.earnings)}</b>
+      <span>Division</span><b>${esc(s.weightClass)}</b>
+      <span>Title defenses</span><b>${s.titleDefenses}</b>
+      ${s.divisionsWon.length ? `<span>Belts won</span><b>${s.divisionsWon.map(esc).join(", ")}</b>` : ""}
+      <span>Peak overall</span><b>${s.peakOverall}</b>
+      <span>Fame</span><b>${s.fame}/100</b>
+    </div>
+    ${bar(s.fame, "var(--gold)")}
+    <div class="gym-box">
+      <div style="display:flex;justify-content:space-between;gap:8px;align-items:center">
+        <div><b>${esc(g.name)}</b><div class="muted" style="font-size:12px">Training ×${g.mult} · ${money(g.fee)}/wk</div></div>
+        ${g.nextName ? `<button class="btn small" data-upgrade ${s.money < g.nextCost || s.retired ? "disabled" : ""}>Move up<span class="sub">${esc(g.nextName)} · ${money(g.nextCost)}</span></button>` : `<span class="badge gold">Best gym</span>`}
+      </div>
+    </div>
+    <div class="footer-btns">
+      ${s.retired ? "" : `<button class="btn ghost small" data-division ${s.scheduled || s.fight ? "disabled" : ""}>Change division${s.divisionCooldown ? ` (${s.divisionCooldown}w)` : ""}</button>`}
+      ${s.retired ? "" : `<button class="btn ghost small" data-retire>Retire</button>`}
+      <button class="btn ghost small" data-saves>💾 Saves / new career</button>
+    </div>`;
+}
+
+function renderRankings() {
+  const s = state;
+  $("rankCard").innerHTML = `
+    <h2>GFC ${esc(s.weightClass)} rankings</h2>
+    ${s.gfc ? "" : `<p class="muted" style="font-size:13px">You're not in the GFC yet. These are the fighters you're chasing.</p>`}
+    <ul class="ranks scroll">
+      ${s.rankings.map((r) => `
+        <li class="${r.player ? "me" : ""} ${r.rank === 0 ? "champ" : ""} ${r.rival ? "rivalrow" : ""}">
+          <span class="rk">${r.rank === 0 ? "C" : r.rank}</span>
+          <span>${esc(r.name)} <span class="muted">${r.record}</span></span>
+          <span class="muted">${r.overall}</span>
+        </li>`).join("")}
+    </ul>`;
+}
+
+function renderHistory() {
+  const h = state.history;
+  $("historyCard").innerHTML = `
+    <h2>Fight record</h2>
+    ${h.length ? `<div class="scroll"><table class="hist">${h.map((x) => `
+      <tr>
+        <td><span class="res ${x.result}">${x.result}</span></td>
+        <td>${esc(x.opponent)}<div class="muted" style="font-size:12px">${esc(x.event)} · ${esc(x.date)}</div></td>
+        <td style="text-align:right">${esc(x.method)}<div class="muted" style="font-size:12px">R${x.round} ${esc(x.time)}</div></td>
+      </tr>`).join("")}</table></div>` : `<p class="muted">No pro fights yet.</p>`}`;
+}
+
+function renderNews() {
+  $("newsCard").innerHTML = `
+    <h2>News</h2>
+    <ul class="news scroll">${state.news.map((n) => `<li>${esc(n)}</li>`).join("")}</ul>`;
+}
+
+function starsHtml(n) {
+  return `<span class="stars">${"★".repeat(n)}<span class="off">${"★".repeat(5 - n)}</span></span>`;
+}
+
+function renderRival() {
+  const s = state;
+  const r = s.rival;
+  const el = $("rivalCard");
+  if (!r) {
+    el.innerHTML = `
+      <h2>Rival</h2>
+      <p class="muted">No active rivalry. Someone will step up soon — or beat you and make it personal.</p>
+      ${s.rivalries.length ? `<div class="label">Past rivalries</div><ul class="news">${s.rivalries.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}`;
+    return;
+  }
+  const heatLabel = r.heat >= 75 ? "Boiling" : r.heat >= 40 ? "Heated" : r.heat >= 20 ? "Simmering" : "Cold";
+  el.innerHTML = `
+    <h2>⚔ Rival</h2>
+    <div class="fighter-top">
+      <div>
+        <div class="fighter-name" style="font-size:17px">${esc(r.displayName)}</div>
+        <div class="fighter-meta">${r.record} · ${esc(r.style)} · ${esc(r.country)} · Age ${r.age}${r.rank === 0 ? " · Champion" : r.rank > 0 ? " · #" + r.rank : ""}</div>
+      </div>
+      <div class="ovr"><b>${r.overall}</b><span>OVR</span></div>
+    </div>
+    <div class="h2h"><b>${r.h2hWins}-${r.h2hLosses}</b><span class="muted">head to head (first to lead by 2 settles it)</span></div>
+    <div class="lbl" style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px"><span>Heat</span><b>${heatLabel} · ${r.heat}</b></div>
+    <div class="heat"><i style="width:${r.heat}%"></i></div>
+    <p class="muted" style="font-size:12px">At 60+ heat a grudge match (1.5× purse) shows up in your offers.</p>
+    <div class="btn-row">
+      <button class="btn small" data-talk="rival" ${s.canTalk && !s.retired ? "" : "disabled"}>🎤 Call them out${s.canTalk ? "" : " (done this week)"}</button>
+    </div>`;
+}
+
+function renderTeam() {
+  const s = state;
+  const slots = Object.values(s.team);
+  const filled = slots.filter((t) => t.name).length;
+  $("teamCard").innerHTML = `
+    <h2>Team · ${filled}/${slots.length}</h2>
+    ${slots.map((t) => `
+      <div class="staff-row">
+        <div>
+          <div class="role">${esc(t.title)}</div>
+          ${t.name ? `<b>${esc(t.name)}</b> ${starsHtml(t.stars)}<div class="perk">${esc(t.perk)} · ${money(t.salary)}/wk</div>` : `<span class="muted">Vacant</span>`}
+        </div>
+        ${t.name && !s.retired ? `<button class="btn small ghost" data-fire="${t.role}">Release</button>` : ""}
+      </div>`).join("")}
+    <div class="btn-row"><button class="btn primary small" data-market ${s.retired ? "disabled" : ""}>Hire staff (${s.market.length} available)</button></div>`;
+}
+
+// ------------------------------------------------------------------ modals
+
+function openModal(kind, extra = {}) {
+  modal = { kind, ...extra };
+  renderModal();
+}
+
+function closeModal() {
+  modal = null;
+  renderModal();
+}
+
+function renderModal() {
+  const el = $("modal");
+  if (!modal) {
+    el.classList.add("hidden");
+    return;
+  }
+  el.classList.remove("hidden");
+  const body = $("modalBody");
+  const s = state;
+  if (modal.kind === "saves") {
+    const full = s.saves.length >= s.maxSaves;
+    body.innerHTML = `
+      <h1>💾 Saved fighters</h1>
+      <p class="muted">Up to ${s.maxSaves} fighters. Every action saves automatically, so you can switch any time.
+        ${s.storage === "account" ? "Saves are kept with your claude.ai account, so they're on every device you sign in on." : "Saves are kept in this browser on this device."}</p>
+      ${s.saves.length ? s.saves.map((v) => `
+        <div class="hof-entry ${v.active ? "active" : ""}">
+          <div class="top">
+            <div><b>${v.missing ? "Missing save" : esc(v.name)}</b>
+              ${v.missing ? "" : `<div class="muted" style="font-size:12px">${esc(v.weightClass)} · ${esc(v.style)} · ${esc(v.record)} · ${v.overall} OVR · age ${v.age}</div>`}</div>
+            <span>${v.active ? `<span class="badge red">PLAYING</span>` : ""}${v.retired ? ` <span class="badge gold">RETIRED</span>` : ""}</span>
+          </div>
+          <div class="btn-row">
+            ${v.active || v.missing ? "" : `<button class="btn small primary" data-slot="${v.slot}">Play</button>`}
+            <button class="btn small ghost" data-delslot="${v.slot}" data-name="${esc(v.name || "this save")}">Delete</button>
+          </div>
+        </div>`).join("") : `<p class="muted">No saved fighters yet.</p>`}
+      <div class="btn-row"><button class="btn primary" data-newsave ${full ? "disabled" : ""}>+ New fighter${full ? " (slots full)" : ""}</button></div>`;
+  } else if (modal.kind === "market") {
+    body.innerHTML = `
+      <h1>Staff market</h1>
+      <p class="muted">Cash ${money(s.money)} · Fame ${s.fame} · New candidates in ${s.marketRefresh} week(s). Signing fee is 4 weeks' salary.</p>
+      ${s.market.length ? s.market.map((c) => {
+        const famous = s.fame >= c.fameRequired, rich = s.money >= c.fee;
+        return `
+        <div class="candidate">
+          <div class="top">
+            <div><div class="role muted" style="font-size:11px;letter-spacing:.06em;text-transform:uppercase">${esc(c.title)}</div><b>${esc(c.name)}</b> ${starsHtml(c.stars)}</div>
+            <button class="btn small ${famous && rich ? "primary" : ""}" data-hire="${c.index}" ${famous && rich ? "" : "disabled"}>Sign · ${money(c.fee)}</button>
+          </div>
+          <div class="muted" style="font-size:13px;margin-top:4px">${esc(c.perk)}</div>
+          <div class="muted" style="font-size:12px;margin-top:4px">${money(c.salary)}/week
+            ${c.fameRequired ? ` · <span style="color:${famous ? "var(--green)" : "var(--red)"}">needs ${c.fameRequired} fame</span>` : ""}
+            ${c.current ? ` · replaces ${esc(c.current)}` : ""}</div>
+        </div>`;
+      }).join("") : `<p class="muted">Nobody's available right now. Check back in a few weeks.</p>`}`;
+  } else if (modal.kind === "talk") {
+    const target = modal.target === "rival" ? s.rival : s.scheduled && s.scheduled.opponent;
+    if (!target) return closeModal();
+    body.innerHTML = `
+      <h1>🎤 Press conference</h1>
+      <p class="muted">The cameras are on. What do you say about <b style="color:var(--text)">${esc(target.displayName)}</b>?</p>
+      <div class="tones">
+        <button class="btn" data-tone="respect">Respectful<span class="sub">+1 fame, cools the rivalry</span></button>
+        <button class="btn" data-tone="trash">Trash talk<span class="sub">Fame & hype, opponent gets motivated</span></button>
+        <button class="btn primary" data-tone="personal">Get personal<span class="sub">Big hype, big risk</span></button>
+      </div>
+      <p class="muted" style="font-size:12px;margin-top:12px">Hyping a booked fight raises the purse, but a fired-up opponent fights harder. Win and you backed it up; lose and you'll eat your words.</p>`;
+  } else if (modal.kind === "talkResult") {
+    const t = s.lastTalk;
+    body.innerHTML = `
+      <h1>🎤 Headlines</h1>
+      <div class="quote"><span class="who">${esc(s.fighter.displayName)}</span>"${esc(t.you)}"</div>
+      <div class="quote them"><span class="who">${esc(t.target)}</span>"${esc(t.them)}"</div>
+      <ul class="news">${t.effects.map((e) => `<li>${esc(e)}</li>`).join("")}</ul>
+      <button class="btn primary big" data-closemodal style="margin-top:12px">Done</button>`;
+  } else if (modal.kind === "division") {
+    const i = s.weightClassIndex;
+    const opts = [i - 1, i + 1].filter((x) => x >= 0 && x < s.weightClasses.length);
+    body.innerHTML = `
+      <h1>Change division</h1>
+      <p class="muted">You fight at <b style="color:var(--text)">${esc(s.weightClass)}</b>. Moving up adds power and chin but costs speed; cutting down adds speed, costs power, and the weight cut drains cardio. You start over in the new division's rankings${s.rank === 0 ? " — but as a champion, you get an immediate superfight for the other belt" : s.rank > 0 && s.rank <= 5 ? " — your reputation lands you at #10" : ""}.</p>
+      ${s.divisionCooldown ? `<p class="badge red" style="display:inline-block">Your body needs ${s.divisionCooldown} more weeks before another move.</p>` : ""}
+      <div class="btn-row">${opts.map((x) => `<button class="btn ${x > i ? "" : ""}" data-movediv="${x}" ${s.divisionCooldown ? "disabled" : ""}>${x > i ? "▲ Move up to" : "▼ Cut down to"} ${esc(s.weightClasses[x])}</button>`).join("")}</div>`;
+  } else if (modal.kind === "hof") {
+    const hof = s.hallOfFame || [];
+    body.innerHTML = `
+      <h1>🏛 Hall of Fame</h1>
+      <p class="muted">Every career finished by every player. A legacy score of 200+ (Hall of Famer or All-Time Great) earns induction.</p>
+      ${hof.length ? hof.map((h, n) => `
+        <div class="hof-entry ${h.inducted ? "inducted" : ""}">
+          <div class="top">
+            <div><b>${n + 1}. ${esc(h.name)}</b>${h.mine ? ` <span class="badge red">YOU</span>` : ""}<div class="muted" style="font-size:12px">${esc(h.style)} · ${esc(h.country)} · ${h.divisions.map(esc).join(" / ")}</div></div>
+            <span class="badge ${h.inducted ? "gold" : ""}">${h.inducted ? "INDUCTED · " : ""}${esc(h.legacy)}</span>
+          </div>
+          <div class="kv" style="margin-top:8px;font-size:13px">
+            <span>Record</span><b>${h.record} (${h.koWins} KO, ${h.subWins} SUB)</b>
+            <span>Titles · defenses</span><b>${h.titlesWon} · ${h.titleDefenses}</b>
+            ${h.divisionsWon.length ? `<span>Belts</span><b>${h.divisionsWon.map(esc).join(", ")}${h.divisionsWon.length >= 2 ? " 👑" : ""}</b>` : ""}
+            <span>Peak overall</span><b>${h.peakOverall}</b>
+            <span>Career</span><b>${h.years} yrs · retired at ${h.retiredAge}</b>
+            <span>Earnings</span><b>${money(h.earnings)}</b>
+            <span>Legacy score</span><b>${h.legacyScore}</b>
+          </div>
+          ${h.rivalries.length ? `<div class="muted" style="font-size:12px;margin-top:6px">Rivalries: ${h.rivalries.map(esc).join(" · ")}</div>` : ""}
+        </div>`).join("") : `<p class="muted">No retired careers yet. Be the first legend.</p>`}`;
+  }
+}
+
+// ------------------------------------------------------------------ fight screen
+
+function allEvents(f) {
+  return f.logs.flat();
+}
+
+function renderFightScreen() {
+  const f = state.fight;
+  const screen = $("fightScreen");
+  if (!f) {
+    screen.classList.add("hidden");
+    fightShown = 0;
+    headSnapshot = null;
+    return;
+  }
+  const opening = screen.classList.contains("hidden");
+  screen.classList.remove("hidden");
+  const events = allEvents(f);
+
+  if (opening) {
+    // fresh walkout or page reload mid-fight: show everything so far instantly
+    loadArena(f);
+    if (f.round === 0) {
+      audio.announce(`In the red corner... ${f.player.name}! And in the blue corner... ${f.opponent.name}!`);
+    }
+    caption(null);
+    $("fightLog").innerHTML = f.round === 0 ? introHtml(f) : "";
+    events.forEach((e) => $("fightLog").appendChild(eventEl(e, false)));
+    fightShown = events.length;
+    headSnapshot = f;
+    renderFightHead(f);
+    renderFightControls(f);
+    scrollLog();
+    return;
+  }
+  playEvents(events.slice(fightShown), f);
+}
+
+function introHtml(f) {
+  return `<div class="ev info n">Tale of the tape</div>
+    <div style="max-width:420px;margin:0 auto 8px">
+      <div class="stat" style="grid-template-columns:1fr auto 1fr;text-align:center">
+        <b style="text-align:center;color:#ff6b6e">${f.player.overall} OVR</b><span class="muted">vs</span><b style="text-align:center;color:#75a8ff">${f.opponent.overall} OVR</b>
+      </div>
+      <div class="stat" style="grid-template-columns:1fr auto 1fr;text-align:center">
+        <span>${esc(f.player.style)}</span><span class="muted">style</span><span>${esc(f.opponent.style)}</span>
+      </div>
+    </div>
+    <div class="ev round">${f.title ? "This one is for the GFC championship. Five rounds." : `${f.rounds} rounds.`} Pick your game plan.</div>`;
+}
+
+function eventEl(e, animate) {
+  const div = document.createElement("div");
+  div.className = `ev ${e.type} ${e.side}`;
+  if (!animate) div.style.animation = "none";
+  div.innerHTML = (e.type === "round" || (e.type === "info" && e.side === "n") ? "" : `<span class="t">${e.t}</span>`) + esc(e.text);
+  return div;
+}
+
+function scrollLog() {
+  const log = $("fightLog");
+  log.scrollTop = log.scrollHeight;
+}
+
+function loadArena(f) {
+  if (!stage) return;
+  stage.show($("arenaStage"), "arena");
+  stage.arena.load(f, { playerLook: state.fighter.look, weightClass: state.weightClassIndex });
+}
+
+let captionTimer;
+function caption(e) {
+  const el = $("fightCaption");
+  clearTimeout(captionTimer);
+  if (!e) {
+    el.className = "caption";
+    return;
+  }
+  el.textContent = e.text;
+  el.className = `caption show ${e.side} ${e.type}`;
+  captionTimer = setTimeout(() => el.classList.remove("show"), e.type === "finish" ? 8000 : 3200);
+}
+
+async function playEvents(events, f) {
+  playing = true;
+  skipPlayback = false;
+  renderFightControls(f);
+  updateMusic();
+  let finishShown = false;
+  for (const e of events) {
+    $("fightLog").appendChild(eventEl(e, !skipPlayback));
+    fightShown++;
+    scrollLog();
+    if (!skipPlayback) {
+      caption(e);
+      if (e.type === "finish") finishShown = true;
+      let pause = e.type === "kd" || e.type === "finish" ? 1100 : e.type === "big" || e.type === "subatt" ? 750 : 420;
+      if (stage) pause = stage.arena.play(e, f);
+      await new Promise((r) => setTimeout(r, pause / speed));
+    }
+  }
+  if (skipPlayback && stage) {
+    // skipped: jump the arena straight to the end of the round
+    stage.arena.restore(f);
+    const last = events[events.length - 1];
+    if (last) caption(last);
+    if (f.finished && !finishShown) {
+      const r = (state.lastResult || {}).result;
+      audio.music(null);
+      audio.sting(r);
+    }
+  }
+  playing = false;
+  updateMusic();
+  headSnapshot = f;
+  renderFightHead(f);
+  renderFightControls(f);
+  scrollLog();
+}
+
+function renderFightHead(f) {
+  const corner = (c, side) => `
+    <div class="corner ${side}">
+      <div class="cn">${esc(c.name)}</div>
+      <div class="cm">${c.record} · Sig ${c.sig} · TD ${c.td}${c.kd ? " · KD " + c.kd : ""}</div>
+      <div class="bl">HEALTH</div>${bar(c.health, healthColor(c.health), "lg")}
+      <div class="bl">STAMINA</div>${bar(c.stamina, "var(--gold)")}
+    </div>`;
+  $("fightHead").innerHTML = `
+    ${corner(f.player, "p")}
+    <div class="round-box">
+      <div class="rl">ROUND</div>
+      <div class="rn">${Math.max(1, f.round)}/${f.rounds}</div>
+      ${f.title ? `<div class="belt">TITLE</div>` : ""}
+    </div>
+    ${corner(f.opponent, "o")}`;
+}
+
+function renderFightControls(f) {
+  const el = $("fightControls");
+  if (playing) {
+    el.innerHTML = `<button class="btn big" data-skip>Skip ▶▶</button>`;
+    return;
+  }
+  if (!f.finished) {
+    el.innerHTML = `
+      <div class="prompt">${f.round === 0 ? "Choose your game plan for round 1" : `Corner advice between rounds — game plan for round ${f.round + 1}?`}
+        ${f.scout ? `<br><span class="scout">🧠 Coach: "They're going to ${esc(PLAN_NAMES[f.scout])} this round."</span>` : ""}
+        ${f.oppFiredUp && f.round === 0 ? `<br><span style="color:#ff6b6e">Your opponent is fired up after the trash talk.</span>` : ""}</div>
+      <div class="plans">
+        ${PLANS.map((p) => `<button class="btn" data-plan="${p.id}">${p.name}<span class="sub">${p.desc}</span></button>`).join("")}
+      </div>`;
+    return;
+  }
+  const r = state.lastResult || {};
+  const word = { W: "VICTORY", L: "DEFEAT", D: "DRAW" }[r.result] || "";
+  el.innerHTML = `
+    <div class="result-banner">
+      <div class="rw ${r.result}">${word}</div>
+      <div class="rd"><b>${esc(f.method)}</b> · R${f.endRound} ${esc(f.endTime)}${f.cards ? " · " + f.cards.join(", ") : ""}</div>
+      <div class="rd">Paid <b>${money(r.pay || 0)}</b>${r.perfBonus ? " (incl. $50,000 bonus)" : ""} · Fame ${r.fameDelta >= 0 ? "+" : ""}${r.fameDelta} · Record <b>${esc(r.record)}</b></div>
+      ${r.careerNote ? `<div class="rd" style="margin-top:4px;color:var(--gold)"><b style="color:inherit">${esc(r.careerNote)}</b></div>` : ""}
+      ${r.injuryNote ? `<div class="rd" style="color:var(--red)">${esc(r.injuryNote)}</div>` : ""}
+    </div>
+    <button class="btn primary big" data-closefight>Continue</button>`;
+}
+
+// ------------------------------------------------------------------ events
+
+document.addEventListener("click", async (ev) => {
+  const b = ev.target.closest("button");
+  if (!b || b.disabled) return;
+  const d = b.dataset;
+  if (d.train) return act("action", { type: "train", stat: d.train });
+  if (d.action) return act("action", { type: d.action });
+  if (d.accept !== undefined) return act("accept", { index: d.accept });
+  if (d.upgrade !== undefined) return act("upgrade");
+  if (d.startfight !== undefined) return act("fight/start");
+  if (d.plan) {
+    if (playing) return;
+    if (await api("fight/round", { plan: d.plan })) render();
+    return;
+  }
+  if (d.skip !== undefined) { skipPlayback = true; return; }
+  if (d.sound !== undefined) { audio.toggle(); syncSoundButtons(); updateMusic(); return; }
+  if (d.speed !== undefined) {
+    speed = speed === 1 ? 2 : speed === 2 ? 0.5 : 1;
+    try { localStorage.setItem("cc3d_speed", String(speed)); } catch { /* ignore */ }
+    if (stage) stage.arena.setSpeed(speed);
+    syncSoundButtons();
+    return;
+  }
+  if (d.togglelog !== undefined) { $("fightPanel").classList.toggle("log-open"); scrollLog(); return; }
+  if (d.look) {
+    const [key, i] = d.look.split(":");
+    createLook[key] = Number(i);
+    renderLookPickers();
+    updateCreatePreview();
+    return;
+  }
+  if (d.randomlook !== undefined) {
+    createLook = randomLook();
+    renderLookPickers();
+    updateCreatePreview();
+    return;
+  }
+  if (d.closefight !== undefined) return act("fight/close");
+  if (d.hof !== undefined) return openModal("hof");
+  if (d.saves !== undefined) return openModal("saves");
+  if (d.newsave !== undefined) {
+    if (await api("save/blank")) { modal = null; render(); }
+    return;
+  }
+  if (d.slot !== undefined) {
+    if (await api("save/switch", { slot: d.slot })) { modal = null; resetFightScreen(); render(); }
+    return;
+  }
+  if (d.delslot !== undefined) {
+    if (await ask(`Delete ${d.name}? This can't be undone.`, "Delete")) {
+      if (await api("save/delete", { slot: d.delslot })) { resetFightScreen(); render(); }
+    }
+    return;
+  }
+  if (d.closemodal !== undefined) return closeModal();
+  if (d.market !== undefined) return openModal("market");
+  if (d.hire !== undefined) return act("staff/hire", { index: d.hire });
+  if (d.fire !== undefined) {
+    if (await ask("Release this team member?", "Release")) act("staff/fire", { role: d.fire });
+    return;
+  }
+  if (d.talk) return openModal("talk", { target: d.talk });
+  if (d.tone) {
+    if (await api("talk", { target: modal.target, tone: d.tone })) { modal = { kind: "talkResult" }; render(); }
+    return;
+  }
+  if (d.division !== undefined) return openModal("division");
+  if (d.movediv !== undefined) {
+    if (await api("division", { weightClass: d.movediv })) { modal = null; render(); }
+    return;
+  }
+  if (d.retire !== undefined) {
+    if (await ask("Retire now? Your career will end and your legacy will be locked in.", "Retire")) act("retire");
+    return;
+  }
+});
+
+/** Switching careers mid-fight must not replay the old fight's log. */
+function resetFightScreen() {
+  $("fightScreen").classList.add("hidden");
+}
+
+$("modal").addEventListener("click", (ev) => {
+  if (ev.target.id === "modal") closeModal();
+});
+
+$("createForm").addEventListener("change", updateCreatePreview);
+
+$("createForm").addEventListener("submit", (ev) => {
+  ev.preventDefault();
+  act("new", Object.fromEntries(new FormData(ev.target)));
+});
+
+// Load the saves (from the claude.ai account when available), then show the game.
+(async () => {
+  onSaveError(() => toast("Couldn't save your latest progress. Check your connection.", true));
+  const store = await openStore();
+  game = new Game(store);
+  if ("onDowngrade" in store) store.onDowngrade = () => game.saveAll();
+  try {
+    await game.load();
+  } catch (e) {
+    console.error(e);
+    toast("Couldn't load your saves. Try reloading the page.", true);
+  }
+  $("boot").classList.add("hidden");
+  act("state");
+})();

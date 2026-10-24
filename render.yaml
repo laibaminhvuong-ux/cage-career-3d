@@ -1,0 +1,7 @@
+# Render Blueprint: New -> Blueprint -> pick this repo, and Render builds the Dockerfile.
+services:
+  - type: web
+    name: cage-career-3d
+    runtime: docker
+    plan: free
+    healthCheckPath: /

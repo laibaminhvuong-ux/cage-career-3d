@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0e1014">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>Cage Career 3D</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">CAGE<span>CAREER</span><sup>3D</sup></div>
+    <div class="topright">
+      <div id="topstats" class="topstats"></div>
+      <button class="btn small ghost" data-saves>💾 Saves</button>
+      <button class="btn small ghost" data-hof>🏛 Hall of Fame</button>
+      <button class="btn small ghost sound-btn" data-sound aria-label="Toggle sound">🔊</button>
+    </div>
+  </header>
+
+  <div id="boot" class="boot">
+    <div class="boot-mark">CAGE<span>CAREER</span><sup>3D</sup></div>
+    <div class="muted">Loading your fighters…</div>
+  </div>
+
+  <main id="app">
+    <!-- Fighter creation -->
+    <section id="create" class="hidden">
+      <div class="card create-card">
+        <h1>Create your fighter</h1>
+        <div id="createSaves"></div>
+        <p class="muted">Start at 21 on the regional circuit with nothing but a garage gym and a dream. Win, earn a Contender Series shot, sign with the GFC and chase the belt.</p>
+        <form id="createForm">
+          <label>Full name<input name="name" maxlength="30" placeholder="e.g. Alex Rivera" required></label>
+          <label>Nickname <span class="muted">(optional)</span><input name="nickname" maxlength="24" placeholder="e.g. The Storm"></label>
+          <div class="row2">
+            <label>Weight class<select name="weightClass" id="wcSelect"></select></label>
+            <label>Country<select name="country" id="countrySelect"></select></label>
+          </div>
+          <div class="label">Fighting style</div>
+          <div class="styles" id="styleChoices">
+            <label class="style-opt"><input type="radio" name="style" value="Striker" checked><b>Striker</b><span>Heavy hands, fast feet. Weak off the back.</span></label>
+            <label class="style-opt"><input type="radio" name="style" value="Wrestler"><b>Wrestler</b><span>Takedowns and gas tank. Hands need work.</span></label>
+            <label class="style-opt"><input type="radio" name="style" value="Jiu-Jitsu"><b>Jiu-Jitsu</b><span>Submission threat everywhere on the mat.</span></label>
+            <label class="style-opt"><input type="radio" name="style" value="Balanced"><b>Balanced</b><span>No holes, no superpowers.</span></label>
+          </div>
+          <div class="label">Look <button type="button" class="btn small ghost" data-randomlook style="float:right;margin-top:-6px">🎲 Randomize</button></div>
+          <div class="look-wrap">
+            <div id="createStage" class="stage-host create-stage"><div class="stage-fallback">3D preview unavailable on this device</div></div>
+            <div id="lookPickers" class="look-pickers"></div>
+          </div>
+          <input type="hidden" name="look" id="lookInput">
+          <button class="btn primary big" type="submit">Turn pro</button>
+        </form>
+      </div>
+    </section>
+
+    <!-- Career dashboard -->
+    <section id="dash" class="hidden">
+      <div id="goal" class="goal"></div>
+      <div class="grid">
+        <div class="card" id="fighterCard"></div>
+        <div class="card showcase">
+          <div id="dashStage" class="stage-host dash-stage"><div class="stage-fallback">3D preview unavailable on this device</div></div>
+          <div id="showcaseCap" class="showcase-cap"></div>
+        </div>
+        <div class="card" id="fightCard"></div>
+        <div class="card" id="actionsCard"></div>
+        <div class="card" id="rivalCard"></div>
+        <div class="card" id="teamCard"></div>
+        <div class="card" id="statusCard"></div>
+        <div class="card" id="rankCard"></div>
+        <div class="card" id="historyCard"></div>
+        <div class="card" id="newsCard"></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Fight night -->
+  <div id="fightScreen" class="overlay hidden">
+    <div class="fight-panel" id="fightPanel">
+      <div class="arena-wrap">
+        <div id="arenaStage" class="stage-host arena-stage"></div>
+        <div class="fight-head" id="fightHead"></div>
+        <div class="caption" id="fightCaption"></div>
+        <div class="arena-tools">
+          <button class="btn small ghost" data-speed id="speedBtn" title="Playback speed">1×</button>
+          <button class="btn small ghost sound-btn" data-sound aria-label="Toggle sound">🔊</button>
+          <button class="btn small ghost" data-togglelog title="Show the full play-by-play">📜 Log</button>
+        </div>
+      </div>
+      <div class="fight-log" id="fightLog"></div>
+      <div class="fight-controls" id="fightControls"></div>
+    </div>
+  </div>
+
+  <!-- Shared modal: save slots, staff market, trash talk, division change, Hall of Fame -->
+  <div id="modal" class="overlay hidden">
+    <div class="modal-panel">
+      <button class="btn small ghost modal-close" data-closemodal aria-label="Close">✕</button>
+      <div id="modalBody"></div>
+    </div>
+  </div>
+
+  <!-- Yes/no confirmation -->
+  <div id="askBox" class="overlay ask hidden" role="dialog" aria-modal="true">
+    <div class="ask-panel">
+      <p id="askText"></p>
+      <div class="btn-row">
+        <button class="btn primary" id="askYes">Yes</button>
+        <button class="btn ghost" id="askNo">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
