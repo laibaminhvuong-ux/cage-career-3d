@@ -16,6 +16,8 @@ subprocess.run([esbuild, os.path.join(web, "app.js"), "--bundle", "--format=esm"
 for f in ["icon-180.png", "icon-192.png", "icon-512.png"]:
     shutil.copy(os.path.join(web, "icons", f), os.path.join(out, "icons", f))
 shutil.copy(os.path.join(web, "icon.svg"), os.path.join(out, "icon.svg"))
+# ready-made careers players can download and load
+shutil.copytree(os.path.join(web, "saves"), os.path.join(out, "saves"))
 open(os.path.join(out, ".nojekyll"), "w").close()
 
 css = open(os.path.join(web, "style.css"), encoding="utf-8").read()
