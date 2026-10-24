@@ -145,6 +145,18 @@ export class Fighter {
 }
 Fighter.tag = "Fighter";
 
+function pinFighter(f, target) {
+  const vals = STATS.map((s) => Math.round(target + Fighter.bias(f.style, s) * 0.5));
+  // nudge the stats until they average exactly the target
+  let diff = target * STATS.length - vals.reduce((a, b) => a + b, 0);
+  for (let i = 0; diff !== 0; i = (i + 1) % vals.length) {
+    const d = Math.sign(diff);
+    vals[i] += d;
+    diff -= d;
+  }
+  STATS.forEach((s, i) => f.set(s, vals[i]));
+}
+
 // ------------------------------------------------------------------ staff
 
 const ROLES = ["head", "striking", "wrestling", "bjj", "snc", "physio", "manager"];
@@ -967,6 +979,26 @@ export class Career {
     return "Even with " + n + " " + sc;
   }
 
+  /**
+   * A career can fix every other fighter at one overall rating (npcOverall). Their stats keep
+   * their style's strengths and weaknesses but always add up to exactly that overall.
+   */
+  pinOthers() {
+    const target = this.npcOverall;
+    if (!target) return;
+    const seen = new Set();
+    const visit = (v) => {
+      if (!v || typeof v !== "object" || seen.has(v)) return;
+      seen.add(v);
+      if (v instanceof Fighter) {
+        if (v !== this.me) pinFighter(v, target);
+        return;
+      }
+      for (const k of Object.keys(v)) visit(v[k]);
+    };
+    visit(this);
+  }
+
   /** The rival keeps pace with the player's development, and keeps fighting. */
   rivalWeek() {
     const me = this.me;
@@ -1139,7 +1171,8 @@ export class Career {
     if (this.fight) return null;
     if (!this.fightNight()) throw new GameError("There's no fight tonight.");
     const s = this.scheduled;
-    this.fight = new Fight(this.me, s.opp, s.rounds, s.title, s.oppBonus, this.stars("head"));
+    this.pinOthers();
+    this.fight = new Fight(this.me, s.opp, s.rounds, s.title, this.npcOverall ? 0 : s.oppBonus, this.stars("head"));
     return null;
   }
 
@@ -1815,6 +1848,7 @@ export class Game {
         throw new GameError("Unknown action: " + path);
     }
     career = this.active();
+    if (career) career.pinOthers();
     this.induct(career);
     if (path !== "state") {
       if (career) this.store.setCareer(prof.active, packCareer(career));
