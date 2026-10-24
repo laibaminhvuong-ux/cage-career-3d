@@ -982,8 +982,10 @@ export class Career {
   /**
    * A career can fix every other fighter at one overall rating (npcOverall). Their stats keep
    * their style's strengths and weaknesses but always add up to exactly that overall.
+   * meOverall does the same for the player: training, age and injuries never move it.
    */
   pinOthers() {
+    if (this.meOverall) for (const s of STATS) this.me.set(s, this.meOverall);
     const target = this.npcOverall;
     if (!target) return;
     const seen = new Set();
