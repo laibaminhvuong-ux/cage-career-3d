@@ -4,7 +4,7 @@ import * as THREE from "./vendor/three.module.min.js";
 
 export const LOOK_OPTIONS = {
   skin: ["#f2d2b6", "#e3b48e", "#c98e64", "#a96c45", "#7c4b2c", "#4f301d"],
-  hair: ["Bald", "Buzz", "Short", "Mohawk", "Man bun", "Long"],
+  hair: ["Bald", "Buzz", "Short", "Mohawk", "Man bun", "Long", "Afro", "Braids", "Dreadlocks"],
   hairColor: ["#15120f", "#3b2416", "#6e4524", "#c9a25a", "#9c3a1a", "#9b9b9b"],
   beard: ["None", "Stubble", "Goatee", "Full"],
   shorts: ["#c8102e", "#1d4ed8", "#151515", "#f2f2f2", "#15803d", "#e8a91c", "#7c3aed", "#f97316"],
@@ -473,6 +473,62 @@ export class Fighter3D {
     if (h === "Long") {
       const back = mesh(new THREE.CylinderGeometry(0.085, 0.06, 0.2, 12, 1, false, Math.PI * 0.5, Math.PI), hairM, head, 0, -0.04, -0.03);
       back.rotation.x = 0.1;
+    }
+    if (h === "Afro") {
+      // a full rounded afro sitting on top and back, hairline just above the brows
+      const fro = mesh(new THREE.SphereGeometry(0.13, 20, 16), hairM, head, 0, 0.09, -0.035);
+      fro.scale.set(1.12, 0.95, 1.0);
+    }
+    if (h === "Braids") {
+      // cornrows: tight rows running from the hairline to the nape
+      // scalp shows between the rows
+      const cap = mesh(capGeo(0.5), mat(LOOK_OPTIONS.hairColor[look.hairColor], { transparent: true, opacity: 0.35, roughness: 1 }), head, 0, 0.03, -0.006);
+      cap.scale.set(0.94, 1.13, 1.04);
+      cap.rotation.x = -0.3;
+      const rowGeo = (r) => new THREE.TorusGeometry(r, 0.0125, 6, 28, Math.PI * 1.05);
+      for (const x of [-0.066, -0.044, -0.022, 0, 0.022, 0.044, 0.066]) {
+        const g = new THREE.Group();
+        g.position.set(x, 0.02, 0);
+        g.scale.set(1, 1.12, 1.02);
+        g.rotation.x = -0.45;
+        head.add(g);
+        const row = mesh(rowGeo(0.1 * Math.sqrt(Math.max(0.2, 1 - (x / 0.095) ** 2)) + 0.004), hairM, g);
+        row.rotation.y = -Math.PI / 2;
+      }
+    }
+    if (h === "Dreadlocks") {
+      // shoulder-length locs all around the sides and back, a few shorter ones falling over the forehead
+      const cap = mesh(capGeo(0.5), hairM, head, 0, 0.03, -0.006);
+      cap.scale.set(0.99, 1.2, 1.1);
+      cap.rotation.x = -0.25;
+      const locGeo = (len) => geo("loc" + len, () => {
+        const g = new THREE.CylinderGeometry(0.0125, 0.011, len, 6, 1);
+        g.translate(0, -len / 2, 0);
+        return g;
+      });
+      const tipGeo = geo("loctip", () => new THREE.SphereGeometry(0.0115, 6, 5));
+      const loc = (angle, y, ring, len, tilt) => {
+        const g = new THREE.Group();
+        g.position.set(Math.sin(angle) * ring * 0.95, y, Math.cos(angle) * ring * 1.05 - 0.006);
+        g.rotation.y = angle;
+        head.add(g);
+        const strand = mesh(locGeo(len), hairM, g);
+        strand.rotation.x = -tilt;
+        mesh(tipGeo, hairM, strand, 0, -len, 0);
+      };
+      // lower ring: sides and back only, longest at the back
+      for (let i = 0; i < 20; i++) {
+        const a = 0.95 + (i / 19) * (Math.PI * 2 - 1.9);
+        const back = Math.abs(Math.cos(a)) * (Math.cos(a) < 0 ? 1 : 0);
+        loc(a, 0.06, 0.098, back > 0.5 ? 0.24 : 0.2, 0.22);
+      }
+      // upper ring adds volume on top
+      for (let i = 0; i < 14; i++) {
+        const a = 0.7 + (i / 13) * (Math.PI * 2 - 1.4);
+        loc(a, 0.105, 0.08, 0.2, 0.42);
+      }
+      // a few shorter locs swept over the forehead
+      for (const a of [-0.45, -0.15, 0.2, 0.5]) loc(a, 0.115, 0.075, 0.085, 0.75);
     }
     const b = LOOK_OPTIONS.beard[look.beard];
     if (b !== "None") {
