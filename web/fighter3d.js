@@ -460,7 +460,7 @@ Object.assign(POSES, {
   armbarTop: pose(null, {
     hipsPos: [0, -0.82, 0], hips: [-1.45, 0, 0], neck: [0.5, 0, 0],
     shL: [-1.3, 0, -0.3], elL: [-1.3, 0, 0], shR: [-1.3, 0, 0.3], elR: [-1.3, 0, 0],
-    hipL: [-1.25, 0, 0.25], knL: [0.5, 0, 0], hipR: [-1.25, 0, -0.25], knR: [0.5, 0, 0],
+    hipL: [-0.75, 0, 0.25], knL: [0.35, 0, 0], hipR: [-0.75, 0, -0.25], knR: [0.35, 0, 0],
   }),
 });
 POSES.armbarBottom = pose(POSES.mountBottom, { shL: [-1.6, 0, 0.5], elL: [-0.05, 0, 0], shR: [-1.6, 0, -0.4], elR: [-1.2, 0, 0], hipL: [-0.2, 0, 0.2], knL: [0.4, 0, 0] });
