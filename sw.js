@@ -1,5 +1,5 @@
 // Offline cache for Cage Career 3D. A new build gets a new version, so players pick up updates.
-const CACHE = "cage-career-86a6536733";
+const CACHE = "cage-career-ae282be00a";
 const FILES = ["./", "index.html", "game.js", "manifest.webmanifest", "icon.svg", "icons/icon-180.png", "icons/icon-192.png", "icons/icon-512.png"];
 self.addEventListener("install", (e) => e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES)).then(() => self.skipWaiting())));
 self.addEventListener("activate", (e) => e.waitUntil(
