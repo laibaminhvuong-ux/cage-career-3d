@@ -265,6 +265,50 @@ const TT = {
     "I'll fight {o} anywhere, any time. Their team keeps saying no.",
   ],
 };
+// ------------------------------------------------------------------ meeting other fighters ({o} = them, {m} = you)
+const MEET = {
+  RESPECT: [
+    "Big respect, {o}. That last fight was a clinic.",
+    "Saw your camp footage, {o}. You're working. Respect.",
+    "{o}, you're one of the realest in this sport. Keep going.",
+    "Congrats on the win, {o}. You earned every second of it.",
+  ],
+  WARM: [
+    "Appreciate that, {o}. Means a lot coming from you.",
+    "Respect back, {o}. Let's both keep winning.",
+    "Thanks, brother. We should train sometime.",
+    "Love that. The sport needs more of this.",
+  ],
+  COLD: [
+    "Nice words. Doesn't change anything, {o}.",
+    "Save it. I haven't forgotten what you said.",
+    "Hm. We'll see if you mean that.",
+  ],
+  HANGOUT: [
+    "Dinner's on me tonight, {o}. No cameras, no trash talk.",
+    "Let's grab food and talk about anything but fighting.",
+    "Want to catch the fights at my place this weekend, {o}?",
+  ],
+  HANGOUT_REPLY: [
+    "Man, I needed a night off. Thanks, {o}.",
+    "This was fun. Same time next month?",
+    "Best steak I've had all camp. Don't tell my nutritionist.",
+    "Real talk, {o}: you're good people.",
+  ],
+  TRAIN_REPLY: [
+    "Watch my hips when I set up the {s}. That's the whole secret.",
+    "You're picking this up fast. My {s} took me years.",
+    "Again. Again. Now you've got it.",
+    "Don't tell anyone I showed you that.",
+  ],
+  ACCEPT: [
+    "You want it? You got it. Sign the contract, {o}.",
+    "Finally someone with guts. I accept.",
+    "Be careful what you ask for, {o}. Let's do it.",
+    "Book it. I'll see you in the cage.",
+  ],
+};
+
 const fill = (line, target, me) => line.replaceAll("{o}", target).replaceAll("{m}", me);
 
 // ------------------------------------------------------------------ fight engine
@@ -915,14 +959,16 @@ export class Career {
     this.generateOffers();
   }
 
-  buildDivision() {
-    this.rankings = [];
+  /** Sets up your division: a stored list (when you move back to a division) or a fresh one. */
+  buildDivision(list = null) {
+    this.rankings = list || [];
     const lv = this.org ? this.orgLevel() : 0;
-    for (let i = 0; i < RANKED; i++) this.rankings.push(this.gen(88 - i * 1.2 + lv));
+    for (let i = this.rankings.length; i < RANKED; i++) this.rankings.push(this.gen(88 - i * 1.2 + lv));
     this.interim = null;
     this.champOut = this.champOutStart = 0;
     this.nextInLine = false;
-    this.recordChamp(this.rankings[0], "Reigning champion");
+    if (!list || !(this.lineage[this.division()] || []).length) this.recordChamp(this.rankings[0], "Reigning champion");
+    this.ensureDivs();
   }
 
   // ---------------------------------------------------------------- the belt
@@ -1465,6 +1511,8 @@ export class Career {
     const wasRival = this.rival;
     this.org = id;
     this.gfc = true;
+    this.otherDivs = {};
+    this.lineage = {};
     this.buildDivision();
     // your name gets you a ranking right away
     const spot = Math.max(6, Math.min(RANKED - 1, 15 - Math.floor(this.fame / 10) - (cur ? Math.round((cur.level - p.level) / -3) : 0)));
@@ -1506,6 +1554,8 @@ export class Career {
     if (this.champOut === undefined) this.champOut = this.champOutStart = 0;
     if (this.nextInLine === undefined) this.nextInLine = false;
     if (!this.lastTitleWeek) this.lastTitleWeek = this.week || 1;
+    if (!this.rel) this.rel = {};
+    if (!this.otherDivs && this.me) this.ensureDivs();
   }
 
   /** The divisions this fighter competes in: men's or women's. */
@@ -1569,6 +1619,8 @@ export class Career {
       if (idle >= STRIP_WEEKS) {
         delete this.heldBelts[d];
         this.log("STRIPPED! The " + this.orgShort() + " takes your " + d + " belt after a year and a half without a defense.");
+        const L = (this.otherDivs || {})[d];
+        if (L && L.length) (this.lineage[d] ||= []).push({ name: L[0].displayName(), player: false, date: this.dateLabel(), how: "Awarded the vacant title", interim: false, defenses: 0 });
       }
     }
     if (this.interim && this.interim !== me && !R.includes(this.interim)) this.interim = null;
@@ -1993,6 +2045,268 @@ export class Career {
     effects.push("Opponent is fired up (+" + s.oppBonus + " to all stats on fight night)");
   }
 
+  // ---------------------------------------------------------------- every division of the promotion
+  // Your division lives in this.rankings; the promotion's other divisions keep their own rankings
+  // here, with their own champions, fought out in the background.
+
+  ensureDivs() {
+    if (!this.otherDivs) this.otherDivs = {};
+    if (!this.lineage) this.lineage = {};
+    const lv = this.org ? this.orgLevel() : 0;
+    this.classes().forEach((name, wc) => {
+      if (wc === this.weightClass || this.otherDivs[name]) return;
+      const L = [];
+      for (let i = 0; i < RANKED; i++) L.push(Fighter.generate(88 - i * 1.2 + lv, this.wcAdj(wc), this.gender || "M"));
+      if (this.npcOverall) for (const f of L) pinFighter(f, this.npcOverall);
+      this.otherDivs[name] = L;
+      if (!(this.lineage[name] || []).length) this.lineage[name] = [{ name: L[0].displayName(), player: false, date: this.dateLabel(), how: "Reigning champion", interim: false, defenses: 0 }];
+    });
+  }
+
+  /** The other divisions' fighters fight each other too; title changes make the news. */
+  otherDivsWeek() {
+    const lv = this.org ? this.orgLevel() : 0;
+    for (const [name, L] of Object.entries(this.otherDivs || {})) {
+      const wc = this.classes().indexOf(name);
+      while (L.length < RANKED) {
+        const f = Fighter.generate(70 + nextInt(6) + lv, this.wcAdj(wc), this.gender || "M");
+        f.age = 23 + nextInt(4);
+        if (this.npcOverall) pinFighter(f, this.npcOverall);
+        L.push(f);
+      }
+      if (rnd() > 0.3) continue;
+      const i = nextInt(L.length - 1), j = Math.min(L.length - 1, i + 1 + nextInt(3));
+      const a = L[i], b = L[j];
+      if (a === this.rival || b === this.rival) continue;
+      const { w, l, how } = this.npcBout(a, b);
+      if (w === b) {
+        removeItem(L, b);
+        L.splice(L.indexOf(a), 0, b);
+      }
+      const held = !!this.heldBelts[name];
+      const lin = (this.lineage[name] ||= []);
+      if (i === 0 && !held) {
+        if (w === a) {
+          if (lin.length) lin[lin.length - 1].defenses++;
+          if (this.gfc && rnd() < 0.5) this.log(this.orgShort() + " " + name + ": champion " + a.displayName() + " defends vs " + b.lastName() + " by " + how + ".");
+        } else {
+          lin.push({ name: b.displayName(), player: false, date: this.dateLabel(), how: "Beat " + a.lastName() + " by " + how, interim: false, defenses: 0 });
+          if (this.gfc) this.log(this.orgShort() + " " + name + ": NEW CHAMPION! " + b.displayName() + " dethrones " + a.lastName() + " by " + how + ".");
+        }
+      }
+      while (lin.length > 40) lin.shift();
+    }
+  }
+
+  /** Finds a fighter anywhere in the promotion (or your rival, opponents and offers) by id. */
+  findFighter(id) {
+    const all = [...this.rankings, ...Object.values(this.otherDivs || {}).flat(), this.rival,
+      this.scheduled && this.scheduled.opp, ...this.offers.map((o) => o.opp)];
+    return all.find((f) => f && f.id === id && f !== this.me) || null;
+  }
+
+  /** Which division a fighter is ranked in, and where (-1 if unranked). */
+  whereIs(f) {
+    const r = this.rankings.indexOf(f);
+    if (r >= 0) return { division: this.division(), rank: r, same: true };
+    for (const [name, L] of Object.entries(this.otherDivs || {})) {
+      const i = L.indexOf(f);
+      if (i >= 0) return { division: name, rank: this.heldBelts[name] ? i + 1 : i, same: false };
+    }
+    return { division: this.division(), rank: -1, same: true };
+  }
+
+  relOf(f) { return ((this.rel || {})[f.id] || { v: 0 }).v; }
+
+  static relLabel(v) {
+    return v >= 70 ? "Best friends" : v >= 40 ? "Friends" : v >= 15 ? "Friendly" : v > -15 ? "Neutral"
+      : v > -40 ? "Tense" : v > -70 ? "Bad blood" : "Enemies";
+  }
+
+  /** Interact with another fighter: be nice, trash talk, hang out, train together, call them out or start a rivalry. */
+  meetFighter(id, type) {
+    this.requireActive();
+    const f = this.findFighter(id);
+    if (!f) throw new GameError("That fighter isn't around anymore.");
+    this.rel ||= {};
+    const R = (this.rel[f.id] ||= { v: 0, met: -1 });
+    const mine = this.me.lastName(), them = f.lastName();
+    const booked = !!this.scheduled && this.scheduled.opp === f;
+    const where = this.whereIs(f);
+    const effects = [];
+    let you, reply;
+    const once = () => {
+      if (R.met === this.week) throw new GameError("You've already talked to " + them + " this week.");
+      R.met = this.week;
+    };
+    const rel = (d) => {
+      R.v = clamp(R.v + d, -100, 100);
+      effects.push("Relationship " + (d >= 0 ? "+" : "") + d + " (" + Career.relLabel(R.v) + ")");
+    };
+    const fame = (d) => {
+      this.fame = clamp(this.fame + d, 0, 100);
+      effects.push("Fame " + (d >= 0 ? "+" : "") + d);
+    };
+    switch (type) {
+      case "respect":
+        once();
+        you = pickOf(MEET.RESPECT);
+        reply = pickOf(R.v <= -40 ? MEET.COLD : MEET.WARM);
+        rel(R.v <= -40 ? 4 : 10);
+        fame(1);
+        if (f === this.rival) {
+          this.rivalHeat = Math.max(0, this.rivalHeat - 5);
+          effects.push("Rivalry heat -5");
+        }
+        break;
+      case "trash": {
+        once();
+        you = pickOf(TT.TRASH);
+        reply = pickOf(nextBool() ? TT.REPLY_ANGRY : TT.REPLY_CALM);
+        rel(R.v >= 40 ? -25 : -15);
+        if (R.v >= 15) effects.push("Your friendship takes a hit");
+        fame(2 + nextInt(3) + Math.floor(this.stars("manager") / 2));
+        if (f === this.rival) {
+          this.rivalHeat = Math.min(100, this.rivalHeat + 10);
+          effects.push("Rivalry heat +10");
+        }
+        if (booked) this.hype(1, 0.08, effects);
+        if (R.v <= -60 && f !== this.rival && !this.rival) {
+          this.setRival(f, 55, "swears to shut you up after your online feud");
+          effects.push(them + " is now your RIVAL");
+        }
+        break;
+      }
+      case "hangout": {
+        once();
+        if (R.v <= -40) throw new GameError(them + " won't even pick up the phone.");
+        if (booked) throw new GameError("Your camp won't let you hang out with your next opponent.");
+        const cost = 300 + 200 * ((this.lifeState && this.lifeState.lifestyle) || 1);
+        this.spend(cost, "dinner with " + them);
+        you = pickOf(MEET.HANGOUT);
+        reply = pickOf(MEET.HANGOUT_REPLY);
+        rel(15);
+        this.lifeJoy(3);
+        effects.push("-" + fmtMoney(cost) + " · Happiness +3");
+        if (R.v >= 40 && rnd() < 0.3) {
+          fame(2);
+          effects.push("Photos of you two go viral");
+        }
+        break;
+      }
+      case "train": {
+        if (R.v < 30) throw new GameError(them + " doesn't trust you enough to share a camp yet (needs Friendly 30+).");
+        if (booked) throw new GameError("You can't train with your next opponent!");
+        if (this.injuryWeeks > 0) throw new GameError("You're injured — rest up first.");
+        if (this.energy < 25) throw new GameError("Too exhausted to train. Take a rest week.");
+        const best = [...STATS].sort((a, b) => f.get(b) - f.get(a)).slice(0, 2);
+        const gains = best.map((s) => {
+          const before = this.me.get(s);
+          this.me.add(s, this.trainGain(s) * 1.3 * (s === "chin" ? 0.5 : 1));
+          return s + " +" + (this.me.get(s) - before).toFixed(1);
+        });
+        this.energy -= 25;
+        you = "Let's get some rounds in. Show me how you do it.";
+        reply = pickOf(MEET.TRAIN_REPLY).replaceAll("{s}", best[0]);
+        R.v = clamp(R.v + 5, -100, 100);
+        effects.push("Trained with " + them + ": " + gains.join(", "));
+        effects.push("Relationship +5 (" + Career.relLabel(R.v) + ")");
+        this.lastMeet = { id: f.id, target: f.displayName(), you, them: reply, effects };
+        this.log("Trains with " + f.displayName() + ". " + gains.join(", ") + ".");
+        this.advanceWeek();
+        return "A week in camp with " + them + ": " + gains.join(", ");
+      }
+      case "callout": {
+        if (this.scheduled || this.fight) throw new GameError("You already have a fight booked.");
+        if (this.lastCalloutWeek === this.week) throw new GameError("You've already called someone out this week.");
+        if (!where.same) throw new GameError(them + " fights at " + where.division + ". Move divisions to fight them.");
+        if (!this.gfc && where.rank >= 0) throw new GameError(them + " fights in the GFC. Earn a contract first.");
+        this.lastCalloutWeek = this.week;
+        const me = this.rankings.indexOf(this.me);
+        you = pickOf(TT.CALLOUTS);
+        let ok, why = "";
+        if (where.rank === 0) {
+          ok = this.titleShotEligible() || (f === this.rival && me > 0 && me <= 5);
+          why = "Get in line. Win some fights and the belt will be waiting.";
+        } else {
+          const gap = me < 0 ? (where.rank >= 0 ? 16 - where.rank : 0) : me - where.rank;
+          let p = gap <= 0 ? 0.85 : gap <= 3 ? 0.65 : gap <= 6 ? 0.35 : 0.1;
+          if (R.v <= -40 || f === this.rival) p += 0.35;
+          if (R.v >= 40) p -= 0.4;
+          ok = rnd() < p;
+          why = R.v >= 40 ? "We're friends, man. I'm not fighting you." : gap > 3 ? "You're not on my level. Come back when you're ranked higher." : "Not right now. Maybe later.";
+        }
+        if (!ok) {
+          reply = why;
+          rel(-3);
+          fame(1);
+          effects.push(them + " turned you down");
+          break;
+        }
+        reply = pickOf(MEET.ACCEPT);
+        removeItem(this.offers, this.offers.find((o) => o.opp === f));
+        let o;
+        if (!this.gfc) {
+          const p = this.managed(700 + this.fame * 30);
+          o = new Offer(f, 4 + nextInt(3), p, p, 3, false, false);
+        } else o = where.rank === 0 ? this.titleOffer(f) : this.gfcOffer(f);
+        o.callout = true;
+        this.offers.unshift(o);
+        rel(-5);
+        fame(2);
+        effects.push("Fight offer added: vs " + them + (o.title ? " for the belt!" : ""));
+        break;
+      }
+      case "rival": {
+        if (f === this.rival) throw new GameError(them + " is already your rival.");
+        once();
+        if (this.rival) {
+          if (this.rivalWins + this.rivalLosses > 0) this.rivalries.push(this.rivalSummary());
+          this.log("Moves on from the rivalry with " + this.rival.displayName() + ".");
+        }
+        R.v = Math.min(R.v, -50);
+        you = pickOf(TT.PERSONAL);
+        reply = pickOf(TT.REPLY_ANGRY);
+        this.setRival(f, 50, "is your new rival after you declared war in a viral video");
+        fame(3 + nextInt(3));
+        effects.push(them + " is now your RIVAL · heat 50");
+        break;
+      }
+      default:
+        throw new GameError("Pick something to do.");
+    }
+    you = fill(you, them, mine);
+    reply = fill(reply, mine, them);
+    this.lastMeet = { id: f.id, target: f.displayName(), you, them: reply, effects };
+    this.log("With " + them + ': "' + you + '"');
+    return null;
+  }
+
+  profileJson(id) {
+    const f = id && this.findFighter(id);
+    if (!f) return null;
+    const w = this.whereIs(f), v = this.relOf(f);
+    const booked = !!this.scheduled && this.scheduled.opp === f;
+    const met = ((this.rel || {})[f.id] || {}).met === this.week;
+    return { ...f.toJson(), id: f.id, division: w.division, rank: w.rank, sameDivision: w.same,
+      champion: w.rank === 0, rel: v, relLabel: Career.relLabel(v), rival: f === this.rival, booked, met,
+      canCallout: !this.scheduled && !this.fight && this.lastCalloutWeek !== this.week && w.same && (this.gfc || w.rank < 0),
+      inPromo: this.gfc || w.rank < 0,
+      h2h: this.history.filter((h) => h.opponent === f.displayName()).map((h) => h.result).join(" ") };
+  }
+
+  divisionsJson() {
+    return this.classes().map((name, wc) => {
+      const cur = wc === this.weightClass;
+      let L = cur ? this.rankings : (this.otherDivs || {})[name] || [];
+      const held = !cur && !!this.heldBelts[name];
+      if (held) L = [this.me, ...L.slice(0, RANKED - 1)];
+      return { name, current: cur, held, list: L.map((f, i) => ({ id: f.id, rank: i, name: f.displayName(), record: f.record(), overall: f.overall(),
+        style: f.style, country: f.country, player: f === this.me, rival: f === this.rival, interim: cur && f === this.interim,
+        rel: f === this.me ? 0 : this.relOf(f) })) };
+    });
+  }
+
   // ---------------------------------------------------------------- weight classes
 
   changeDivision(wc) {
@@ -2007,10 +2321,16 @@ export class Career {
     if (this.gfc && oldRank === 0) this.heldBelts[this.classes()[old]] = { since: this.lastTitleWeek };
     for (const s of STATS) me.add(s, Fighter.weightAdj(this.wcAdj(wc), s) - Fighter.weightAdj(this.wcAdj(old), s));
     if (wc < old) me.add("cardio", -2);
+    // the old division keeps its fighters; the new one picks up where you last saw it
+    this.ensureDivs();
+    const stash = this.rankings.filter((f) => f !== me && f !== this.rival);
+    const stored = this.otherDivs[this.classes()[wc]] || null;
+    delete this.otherDivs[this.classes()[wc]];
+    this.otherDivs[this.classes()[old]] = stash;
     this.weightClass = wc;
     this.lastDivisionChange = this.week;
     addOnce(this.divisionsFought, this.classes()[wc]);
-    this.buildDivision();
+    this.buildDivision(stored);
     let note;
     this.offers = [];
     this.offersAge = 0;
@@ -2354,6 +2674,7 @@ export class Career {
     if ((this.week - 1) % 52 === 0) this.newYear();
     if (this.retired) return;
     this.npcWeek();
+    this.otherDivsWeek();
     this.beltWeek();
     this.lifeWeek();
     this.sponsorWeek();
@@ -2397,6 +2718,17 @@ export class Career {
       if (f.age >= 37 && rnd() < 0.5 && (!this.scheduled || this.scheduled.opp !== f)) {
         removeItem(this.rankings, f);
         if (this.gfc) this.log(f.displayName() + " (" + f.record() + ") retires from the " + this.orgShort() + ".");
+      }
+    }
+    for (const L of Object.values(this.otherDivs || {})) {
+      for (const f of [...L]) {
+        if (f === this.rival) continue;
+        f.age++;
+        for (const s of STATS) {
+          if (f.age <= 27) f.add(s, rnd() * 2.5);
+          else if (f.age >= 32) f.add(s, -rnd() * 1.5);
+        }
+        if (f.age >= 37 && rnd() < 0.5) removeItem(L, f);
       }
     }
     if (this.rival) {
@@ -2621,7 +2953,7 @@ export class Career {
     return {
       index, opponent: o.opp.toJson(), oppRank: this.gfc ? this.rankings.indexOf(o.opp) : -1, weeks: o.weeks,
       purse: o.purse, winBonus: o.winBonus, rounds: o.rounds, title: o.title, contender: o.contender, kind: o.kind || null,
-      grudge: o.opp === this.rival, oppBonus: o.oppBonus,
+      grudge: o.opp === this.rival, oppBonus: o.oppBonus, oppId: o.opp.id, callout: !!o.callout,
     };
   }
 
@@ -2634,7 +2966,7 @@ export class Career {
     }
     let rival = null;
     if (this.rival) {
-      rival = { ...this.rival.toJson(), heat: this.rivalHeat, h2hWins: this.rivalWins, h2hLosses: this.rivalLosses,
+      rival = { ...this.rival.toJson(), id: this.rival.id, heat: this.rivalHeat, h2hWins: this.rivalWins, h2hLosses: this.rivalLosses,
         rank: this.gfc ? this.rankings.indexOf(this.rival) : -1 };
     }
     return {
@@ -2679,7 +3011,10 @@ export class Career {
       offers: this.offers.map((o, i) => this.offerJson(o, i)),
       scheduled: this.scheduled ? this.offerJson(this.scheduled, -1) : null,
       fightNight: this.fightNight(),
-      rankings: this.rankings.map((f, i) => ({ rank: i, name: f.displayName(), record: f.record(), overall: f.overall(),
+      divisions: this.divisionsJson(),
+      profile: this.profileJson(this.viewing),
+      lastMeet: this.lastMeet || null,
+      rankings: this.rankings.map((f, i) => ({ id: f.id, rank: i, name: f.displayName(), record: f.record(), overall: f.overall(),
         style: f.style, player: f === this.me, rival: f === this.rival, interim: f === this.interim })),
       belt: this.gfc ? {
         division: this.division(),
@@ -2858,6 +3193,8 @@ export class Game {
       case "life": msg = this.need(career).lifeAction(p.type, p); break;
       case "edit": msg = this.need(career).editFighter(p); break;
       case "promo": msg = this.need(career).signPromotion(p.org); break;
+      case "fighter/view": this.need(career).viewing = p.id || null; break;
+      case "fighter/meet": msg = this.need(career).meetFighter(p.id, p.type); break;
       case "save/blank":
         if (prof.slots.length >= MAX_SLOTS) throw new GameError(`All ${MAX_SLOTS} save slots are full. Delete a save first.`);
         prof.active = null;

@@ -437,7 +437,7 @@ function offerHtml(o, withButton) {
       <div class="offer-top">
         <div>
           <div class="offer-meta">${tag}${rank ? " · " + rank : ""}</div>
-          <div class="offer-name">${esc(opp.displayName)}</div>
+          <div class="offer-name"><span class="flink" data-fighter="${o.oppId}">${esc(opp.displayName)}</span>${o.callout ? ` <span class="badge gold">📣 your callout</span>` : ""}</div>
           <div class="offer-meta">${opp.record} · ${esc(opp.style)} · ${esc(opp.country)} · Age ${opp.age} · OVR <b>${opp.overall}</b></div>
         </div>
         ${difficulty(opp)}
@@ -580,16 +580,24 @@ function renderRankings() {
     </div>` : "";
   $("rankCard").innerHTML = `
     <h2>${esc(s.orgShort)} ${esc(s.weightClass)} rankings</h2>
+    <div class="btn-row" style="margin:-4px 0 8px"><button class="btn small" data-alldivs>📊 All ${esc(s.orgShort)} divisions</button>
+      <span class="muted" style="font-size:12px;align-self:center">Tap any fighter to meet them</span></div>
     ${s.gfc ? "" : `<p class="muted" style="font-size:13px">You're not in a major promotion yet. These are the GFC fighters you're chasing.</p>`}
     ${beltBox}
     <ul class="ranks scroll">
       ${s.rankings.map((r) => `
-        <li class="${r.player ? "me" : ""} ${r.rank === 0 || r.interim ? "champ" : ""} ${r.rival ? "rivalrow" : ""}">
+        <li class="${r.player ? "me" : "tap"} ${r.rank === 0 || r.interim ? "champ" : ""} ${r.rival ? "rivalrow" : ""}" ${r.player ? "" : `data-fighter="${r.id}"`}>
           <span class="rk">${r.rank === 0 ? "C" : r.interim ? "IC" : r.rank}</span>
           <span>${esc(r.name)} <span class="muted">${r.record}</span></span>
           <span class="muted">${r.overall}</span>
         </li>`).join("")}
     </ul>`;
+}
+
+function relBadge(v) {
+  if (v >= 40) return ` <span class="badge" style="color:var(--green)">friend</span>`;
+  if (v <= -40) return ` <span class="badge red">bad blood</span>`;
+  return "";
 }
 
 function renderHistory() {
@@ -641,6 +649,7 @@ function renderRival() {
     <p class="muted" style="font-size:12px">At 60+ heat a grudge match (1.5× purse) shows up in your offers.</p>
     <div class="btn-row">
       <button class="btn small" data-talk="rival" ${s.canTalk && !s.retired ? "" : "disabled"}>🎤 Call them out${s.canTalk ? "" : " (done this week)"}</button>
+      <button class="btn small ghost" data-fighter="${r.id}">👤 Profile</button>
     </div>`;
 }
 
@@ -853,6 +862,53 @@ function renderModal() {
     renderPlace(body);
   } else if (modal.kind === "phone") {
     renderPhone(body);
+  } else if (modal.kind === "divisions") {
+    const tab = modal.dtab || s.weightClass;
+    const D = s.divisions.find((x) => x.name === tab) || s.divisions[0];
+    body.innerHTML = `
+      <h1>📊 ${esc(s.orgShort)} rankings</h1>
+      <p class="muted" style="font-size:13px">${s.gfc ? `Every ${esc(s.orgName)} division` : "The GFC divisions you're chasing"}. Tap a fighter to see their profile, talk to them, train together or call them out.</p>
+      <div class="tabs">${s.divisions.map((x) => `<button class="btn small ${x.name === D.name ? "gold" : "ghost"}" data-dtab="${esc(x.name)}">${esc(x.name)}${x.current ? " ●" : ""}${x.held ? " 🏆" : ""}</button>`).join("")}</div>
+      <h2 style="margin-top:10px">${esc(D.name)}${D.current ? ` <span class="badge red">YOUR DIVISION</span>` : ""}</h2>
+      <ul class="ranks">${D.list.map((r) => `
+        <li class="${r.player ? "me" : "tap"} ${r.rank === 0 || r.interim ? "champ" : ""} ${r.rival ? "rivalrow" : ""}" ${r.player ? "" : `data-fighter="${r.id}"`}>
+          <span class="rk">${r.rank === 0 ? "C" : r.interim ? "IC" : r.rank}</span>
+          <span>${esc(r.name)} <span class="muted">${r.record} · ${esc(r.country)}</span>${relBadge(r.rel)}</span>
+          <span class="muted">${r.overall}</span>
+        </li>`).join("")}</ul>`;
+  } else if (modal.kind === "fighter") {
+    const f = s.profile;
+    if (!f) return closeModal();
+    const m = modal.result && s.lastMeet && s.lastMeet.id === f.id ? s.lastMeet : null;
+    const relPct = (f.rel + 100) / 2;
+    const busy = s.retired || !!s.fight;
+    body.innerHTML = `
+      ${modal.back ? `<button class="btn small ghost" data-backdivs>← ${esc(modal.back)} rankings</button>` : ""}
+      <div class="fighter-top" style="margin-top:8px">
+        <div>
+          <h1 style="margin:0">${esc(f.displayName)}</h1>
+          <div class="fighter-meta">${f.record} (${f.koWins} KO · ${f.subWins} SUB · ${f.decWins} DEC) · ${esc(f.style)} · ${esc(f.country)} · Age ${f.age}</div>
+          <div class="fighter-meta">${esc(s.orgShort)} ${esc(f.division)} · ${f.rank === 0 ? "🏆 Champion" : f.rank > 0 ? "#" + f.rank : "Unranked"}${f.rival ? " · ⚔ Your rival" : ""}${f.booked ? " · 🥊 Your next opponent" : ""}${f.streak > 1 ? ` · 🔥 ${f.streak}-fight win streak` : ""}</div>
+          ${f.h2h ? `<div class="fighter-meta">Against you: ${esc(f.h2h)}</div>` : ""}
+        </div>
+        <div class="ovr"><b>${f.overall}</b><span>OVR</span></div>
+      </div>
+      <div class="lbl" style="display:flex;justify-content:space-between;font-size:13px;margin:10px 0 4px"><span>Relationship</span><b>${esc(f.relLabel)} · ${f.rel > 0 ? "+" : ""}${f.rel}</b></div>
+      <div class="relbar"><i style="left:${relPct}%"></i></div>
+      ${m ? `<div class="quote" style="margin-top:12px"><span class="who">${esc(s.fighter.displayName)}</span>"${esc(m.you)}"</div>
+        <div class="quote them"><span class="who">${esc(m.target)}</span>"${esc(m.them)}"</div>
+        <ul class="news">${m.effects.map((e) => `<li>${esc(e)}</li>`).join("")}</ul>` : ""}
+      <div class="label">Interact${f.met ? " · you've talked this week" : ""}</div>
+      <div class="tones meet">
+        <button class="btn" data-meet="respect" ${busy || f.met ? "disabled" : ""}>🤝 Show respect<span class="sub">Relationship +10, fame +1</span></button>
+        <button class="btn" data-meet="trash" ${busy || f.met ? "disabled" : ""}>🔥 Trash talk online<span class="sub">Fame & hype, they start to hate you</span></button>
+        <button class="btn" data-meet="hangout" ${busy || f.met || f.rel <= -40 || f.booked ? "disabled" : ""}>🍽️ Hang out<span class="sub">Dinner together: relationship +15, happiness +3</span></button>
+        <button class="btn" data-meet="train" ${busy || f.rel < 30 || f.booked ? "disabled" : ""}>🏋️ Train together<span class="sub">${f.rel < 30 ? "Needs Friendly (30+)" : "Takes a week: learn their two best skills fast"}</span></button>
+        <button class="btn primary" data-meet="callout" ${busy || !f.canCallout || f.booked ? "disabled" : ""}>📣 Call them out<span class="sub">${!f.inPromo ? "Earn a GFC contract first" : !f.sameDivision ? "They fight at " + esc(f.division) : s.scheduled ? "You already have a fight booked" : "Ask for the fight. They might say no"}</span></button>
+        <button class="btn" data-meet="rival" ${busy || f.rival || f.met ? "disabled" : ""}>⚔ Declare a rivalry<span class="sub">Bad blood sells fights</span></button>
+      </div>
+      <div class="label">Stats <span style="float:right">You · Them</span></div>
+      ${taleOfTape(f)}`;
   } else if (modal.kind === "hof") {
     const hof = s.hallOfFame || [];
     body.innerHTML = `
@@ -1246,7 +1302,7 @@ function renderFightControls(f) {
 // ------------------------------------------------------------------ events
 
 document.addEventListener("click", async (ev) => {
-  const b = ev.target.closest("button");
+  const b = ev.target.closest("button, [data-fighter]");
   if (!b || b.disabled) return;
   const d = b.dataset;
   if (d.train) return act("action", { type: "train", stat: d.train });
@@ -1380,6 +1436,24 @@ document.addEventListener("click", async (ev) => {
   if (d.hire !== undefined) return act("staff/hire", { index: d.hire });
   if (d.fire !== undefined) {
     if (await ask("Release this team member?", "Release")) act("staff/fire", { role: d.fire });
+    return;
+  }
+  if (d.fighter) {
+    if (await api("fighter/view", { id: d.fighter })) openModal("fighter", { back: modal && modal.kind === "divisions" ? modal.dtab : null });
+    return;
+  }
+  if (d.alldivs !== undefined) return openModal("divisions", { dtab: state.weightClass });
+  if (d.dtab) {
+    modal.dtab = d.dtab;
+    return renderModal();
+  }
+  if (d.backdivs !== undefined) return openModal("divisions", { dtab: modal.back });
+  if (d.meet) {
+    const p = state.profile;
+    if (d.meet === "rival" && state.rival && !(await ask(`Make ${p.displayName} your new rival? Your rivalry with ${state.rival.displayName} ends.`, "Declare war"))) return;
+    if (await api("fighter/meet", { id: p.id, type: d.meet })) {
+      if (state.profile) { modal.result = true; render(); } else closeModal();
+    }
     return;
   }
   if (d.talk) return openModal("talk", { target: d.talk });
