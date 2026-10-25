@@ -65,8 +65,9 @@ export function createStage() {
   renderer.toneMappingExposure = 1.05;
   const canvas = renderer.domElement;
   // soft studio reflections for skin, sweat, gloves and blood
+  let pm = null;
   try {
-    const pm = new THREE.PMREMGenerator(renderer);
+    pm = new THREE.PMREMGenerator(renderer);
     setFighterEnv(pm.fromScene(new RoomEnvironment(), 0.04).texture);
   } catch (e) {
     console.warn("No reflection map", e);
@@ -76,6 +77,12 @@ export function createStage() {
   const preview = new PreviewView();
   const arena = new ArenaView();
   const world = new WorldView();
+  // the town reflects its own sky (car paint, windows)
+  try {
+    if (pm) world.scene.environment = pm.fromEquirectangular(world.scene.background).texture;
+  } catch (e) {
+    console.warn("No sky reflections", e);
+  }
   let view = null;
   let host = null;
   const clock = new THREE.Clock();
@@ -129,6 +136,7 @@ export function createStage() {
     const dt = Math.min(clock.getDelta(), 0.1);
     if (!view || !host || !host.isConnected || host.offsetParent === null || document.hidden) return;
     view.update(dt);
+    renderer.toneMappingExposure = view.exposure || 1.05;
     renderer.render(view.scene, view.camera);
   });
 
@@ -244,13 +252,55 @@ function buildCage(scene) {
   plat.receiveShadow = true;
   scene.add(plat);
 
-  const mat = canvasTexture(1024, 1024, (g, w) => {
-    g.fillStyle = "#bdb8ad";
+  const mat = canvasTexture(2048, 2048, (g, w) => {
+    g.fillStyle = "#c9c4b8";
     g.fillRect(0, 0, w, w);
-    // canvas wear
-    for (let i = 0; i < 1800; i++) {
+    // woven canvas: a fine cross-hatch, then scuffs and footprints from the night's fights
+    g.globalAlpha = 0.05;
+    g.strokeStyle = "#5a5446";
+    g.lineWidth = 1;
+    for (let x = 0; x < w; x += 4) {
+      g.beginPath();
+      g.moveTo(x, 0);
+      g.lineTo(x, w);
+      g.stroke();
+      g.beginPath();
+      g.moveTo(0, x);
+      g.lineTo(w, x);
+      g.stroke();
+    }
+    g.globalAlpha = 1;
+    for (let i = 0; i < 3000; i++) {
       g.fillStyle = `rgba(90,80,60,${Math.random() * 0.05})`;
-      g.fillRect(Math.random() * w, Math.random() * w, 2 + Math.random() * 20, 2 + Math.random() * 20);
+      g.beginPath();
+      g.ellipse(Math.random() * w, Math.random() * w, 3 + Math.random() * 26, 2 + Math.random() * 12, Math.random() * 3, 0, TAU);
+      g.fill();
+    }
+    // sponsor decals around the octagon
+    const c0 = w / 2;
+    const sponsors = ["IRON GYM", "LUXURY MOTORS", "PRIME REALTY", "PAWS", "INK STUDIO", "CAFÉ & DINING", "NIGHTCLUB", "GFC"];
+    g.textAlign = "center";
+    g.textBaseline = "middle";
+    sponsors.forEach((t, i) => {
+      const a = (i / 8) * TAU + Math.PI / 8;
+      g.save();
+      g.translate(c0 + Math.sin(a) * w * 0.4, c0 + Math.cos(a) * w * 0.4);
+      g.rotate(-a);
+      g.fillStyle = "rgba(12,12,16,0.82)";
+      g.fillRect(-w * 0.09, -w * 0.022, w * 0.18, w * 0.044);
+      g.fillStyle = i % 2 ? "#f4b942" : "#ffffff";
+      g.font = `800 ${w * 0.024}px system-ui, sans-serif`;
+      g.fillText(t, 0, 2);
+      g.restore();
+    });
+    // corner color marks
+    for (const [a, col] of [[Math.PI / 8 + TAU / 8, "#d62828"], [Math.PI / 8 + (5 * TAU) / 8, "#2f6fed"]]) {
+      g.fillStyle = col;
+      g.globalAlpha = 0.75;
+      g.beginPath();
+      g.arc(c0 + Math.sin(a) * w * 0.47, c0 + Math.cos(a) * w * 0.47, w * 0.025, 0, TAU);
+      g.fill();
+      g.globalAlpha = 1;
     }
     const c = w / 2;
     g.strokeStyle = "rgba(20,20,24,.18)";
@@ -277,27 +327,30 @@ function buildCage(scene) {
       g.restore();
     }
   });
-  const floor = new THREE.Mesh(new THREE.CircleGeometry(R + 0.02, 8), new THREE.MeshStandardMaterial({ map: mat, roughness: 0.85 }));
+  const floor = new THREE.Mesh(new THREE.CircleGeometry(R + 0.02, 8), new THREE.MeshStandardMaterial({ map: mat, roughness: 0.82 }));
   floor.rotation.x = -Math.PI / 2;
   floor.rotation.z = Math.PI / 8;
   floor.receiveShadow = true;
   scene.add(floor);
 
-  const link = canvasTexture(64, 64, (g, w) => {
+  const link = canvasTexture(128, 128, (g, w) => {
+    // one diamond of vinyl-coated chain link, with a highlight along each wire
     g.clearRect(0, 0, w, w);
-    g.strokeStyle = "rgba(25,25,28,.95)";
-    g.lineWidth = 4;
-    g.beginPath();
-    g.moveTo(0, 0); g.lineTo(w, w);
-    g.moveTo(w, 0); g.lineTo(0, w);
-    g.stroke();
+    g.lineCap = "round";
+    for (const [col, lw] of [["rgba(10,10,12,1)", 7], ["rgba(70,72,78,.9)", 2.5]]) {
+      g.strokeStyle = col;
+      g.lineWidth = lw;
+      g.beginPath();
+      g.moveTo(w / 2, 0); g.lineTo(w, w / 2); g.lineTo(w / 2, w); g.lineTo(0, w / 2); g.closePath();
+      g.stroke();
+    }
   });
   link.wrapS = link.wrapT = THREE.RepeatWrapping;
   const side = 2 * R * Math.sin(Math.PI / 8);
   const H = 1.75;
-  link.repeat.set(side / 0.09, H / 0.09);
-  const fenceMat = new THREE.MeshStandardMaterial({ map: link, transparent: true, alphaTest: 0.25, side: THREE.DoubleSide, roughness: 0.5, metalness: 0.4, depthWrite: false });
-  const pad = new THREE.MeshStandardMaterial({ color: "#0b0b0d", roughness: 0.55 });
+  link.repeat.set(side / 0.075, H / 0.075);
+  const fenceMat = new THREE.MeshStandardMaterial({ map: link, transparent: true, alphaTest: 0.3, side: THREE.DoubleSide, roughness: 0.35, metalness: 0.25, depthWrite: false });
+  const pad = new THREE.MeshStandardMaterial({ color: "#0b0b0d", roughness: 0.4, metalness: 0.05 });
   const corners = [];
   const panels = [];
   for (let i = 0; i < 8; i++) {
@@ -311,7 +364,7 @@ function buildCage(scene) {
     scene.add(panel);
     panels.push(panel);
     // top rail and bottom padding
-    const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, side, 10), pad);
+    const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.085, side, 14), pad);
     rail.position.set(mid.x, H + 0.14, mid.z);
     rail.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), p1.clone().sub(p0).normalize());
     scene.add(rail);
@@ -324,11 +377,61 @@ function buildCage(scene) {
   }
   corners.forEach((p, i) => {
     const color = i === 1 ? RED : i === 5 ? BLUE : "#0b0b0d";
-    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, H + 0.3, 12), new THREE.MeshStandardMaterial({ color, roughness: 0.5 }));
+    // padded posts with the logo printed down them
+    const tex = canvasTexture(256, 1024, (g, w, h) => {
+      g.fillStyle = color;
+      g.fillRect(0, 0, w, h);
+      g.fillStyle = "rgba(255,255,255,.08)";
+      for (let y = 0; y < h; y += 128) g.fillRect(0, y, w, 4);
+      g.save();
+      g.translate(w / 2, h / 2);
+      g.rotate(-Math.PI / 2);
+      g.fillStyle = i === 1 || i === 5 ? "#ffffff" : "#f4b942";
+      g.font = "italic 900 150px system-ui, sans-serif";
+      g.textAlign = "center";
+      g.textBaseline = "middle";
+      g.fillText("GFC", 0, 0);
+      g.restore();
+    });
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, H + 0.3, 20), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.42 }));
     post.position.set(p.x, (H + 0.3) / 2, p.z);
+    post.rotation.y = Math.atan2(p.x, p.z);
     post.castShadow = true;
     scene.add(post);
   });
+  // the cage door, on the panel between the blue corner and the next post
+  {
+    const a0 = (6 / 8) * TAU + Math.PI / 8, a1 = (7 / 8) * TAU + Math.PI / 8;
+    const p0 = new THREE.Vector3(Math.sin(a0) * R, 0, Math.cos(a0) * R), p1 = new THREE.Vector3(Math.sin(a1) * R, 0, Math.cos(a1) * R);
+    const mid = p0.clone().add(p1).multiplyScalar(0.5).multiplyScalar(1.004);
+    const frame = new THREE.Group();
+    frame.position.copy(mid);
+    frame.lookAt(0, 0, 0);
+    for (const x of [-0.5, 0.5]) {
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(0.06, H, 0.06), pad);
+      bar.position.set(x, H / 2 + 0.12, 0);
+      frame.add(bar);
+    }
+    const latch = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.14, 0.08), new THREE.MeshStandardMaterial({ color: "#9ca3af", metalness: 0.8, roughness: 0.3 }));
+    latch.position.set(0.44, 1.0, 0.04);
+    frame.add(latch);
+    scene.add(frame);
+  }
+  // the apron around the platform, wrapped in banners
+  const apron = canvasTexture(4096, 128, (g, w, h) => {
+    g.fillStyle = "#0d0e12";
+    g.fillRect(0, 0, w, h);
+    g.font = "italic 900 72px system-ui, sans-serif";
+    g.textBaseline = "middle";
+    for (let x = 30, i = 0; x < w; x += 520, i++) {
+      g.fillStyle = i % 2 ? "#f4b942" : "#ffffff";
+      g.fillText(i % 2 ? "CAGE CAREER" : "GFC FIGHT NIGHT", x, h / 2 + 4);
+    }
+  });
+  const skirt = new THREE.Mesh(new THREE.CylinderGeometry(R + 0.505, R + 0.625, 0.88, 8, 1, true), new THREE.MeshStandardMaterial({ map: apron, roughness: 0.6 }));
+  skirt.rotation.y = Math.PI / 8;
+  skirt.position.y = -0.465;
+  scene.add(skirt);
   return { red: corners[1], blue: corners[5], panels };
 }
 
@@ -396,6 +499,121 @@ function buildCrowd(scene) {
       fg.attributes.color.needsUpdate = true;
     },
   };
+}
+
+/** Light beams through the haze, a hanging jumbotron, and the people around the cage. */
+function buildExtras(scene, cornerSpots) {
+  // beams from the lighting rig down onto the canvas
+  const beamTex = canvasTexture(8, 256, (g, w, h) => {
+    const gr = g.createLinearGradient(0, 0, 0, h);
+    gr.addColorStop(0, "rgba(255,246,225,0.55)");
+    gr.addColorStop(0.6, "rgba(255,246,225,0.12)");
+    gr.addColorStop(1, "rgba(255,246,225,0)");
+    g.fillStyle = gr;
+    g.fillRect(0, 0, w, h);
+  });
+  const beamMat = new THREE.MeshBasicMaterial({ map: beamTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, opacity: 0.32, fog: false });
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * TAU;
+    const top = new THREE.Vector3(Math.sin(a) * 5.2, 7.2, Math.cos(a) * 5.2);
+    const bottom = new THREE.Vector3(Math.sin(a + 0.4) * 1.6, 0, Math.cos(a + 0.4) * 1.6);
+    const len = top.distanceTo(bottom);
+    const g = new THREE.CylinderGeometry(0.18, 1.4, len, 20, 1, true);
+    g.translate(0, -len / 2, 0);
+    const beam = new THREE.Mesh(g, beamMat);
+    beam.position.copy(top);
+    beam.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), bottom.clone().sub(top).normalize());
+    scene.add(beam);
+  }
+
+  // the jumbotron: four screens over the cage
+  const screenCanvas = document.createElement("canvas");
+  screenCanvas.width = 1024;
+  screenCanvas.height = 512;
+  const screenTex = new THREE.CanvasTexture(screenCanvas);
+  screenTex.colorSpace = THREE.SRGBColorSpace;
+  const tron = new THREE.Group();
+  tron.position.set(0, 6.4, 0);
+  const shell = new THREE.Mesh(new THREE.BoxGeometry(3.3, 1.75, 3.3), new THREE.MeshStandardMaterial({ color: "#0b0c10", roughness: 0.5, metalness: 0.5 }));
+  tron.add(shell);
+  const screenMat = new THREE.MeshBasicMaterial({ map: screenTex, toneMapped: false });
+  for (let i = 0; i < 4; i++) {
+    const sc = new THREE.Mesh(new THREE.PlaneGeometry(3.05, 1.5), screenMat);
+    sc.position.set(Math.sin((i / 4) * TAU) * 1.66, 0, Math.cos((i / 4) * TAU) * 1.66);
+    sc.rotation.y = (i / 4) * TAU;
+    tron.add(sc);
+  }
+  scene.add(tron);
+  const drawScreen = (red, blue, line) => {
+    const g = screenCanvas.getContext("2d");
+    const w = 1024, h = 512;
+    const bg = g.createLinearGradient(0, 0, w, 0);
+    bg.addColorStop(0, "#5a0a10");
+    bg.addColorStop(0.5, "#0b0c12");
+    bg.addColorStop(1, "#0a1f55");
+    g.fillStyle = bg;
+    g.fillRect(0, 0, w, h);
+    g.textAlign = "center";
+    g.textBaseline = "middle";
+    g.fillStyle = "#f4b942";
+    g.font = "italic 900 70px system-ui, sans-serif";
+    g.fillText("GFC", w / 2, 70);
+    g.font = "800 54px system-ui, sans-serif";
+    g.fillStyle = "#fff";
+    g.fillText(red, w * 0.27, h * 0.48, w * 0.45);
+    g.fillText(blue, w * 0.73, h * 0.48, w * 0.45);
+    g.fillStyle = "#f4b942";
+    g.font = "900 60px system-ui, sans-serif";
+    g.fillText("VS", w / 2, h * 0.48);
+    g.fillStyle = "#e5e7eb";
+    g.font = "700 40px system-ui, sans-serif";
+    g.fillText(line, w / 2, h * 0.82, w * 0.9);
+    screenTex.needsUpdate = true;
+  };
+
+  // cageside: the commentary desk, photographers and each corner's team
+  const people = [];
+  const person = (x, z, face, color, sit = true) => people.push({ x, z, face, color, sit });
+  const deskA = Math.PI * 0.5;
+  const dr = R + 2.0;
+  const desk = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.8, 0.7), new THREE.MeshStandardMaterial({ color: "#121318", roughness: 0.7 }));
+  desk.position.set(Math.sin(deskA) * dr, -0.5, Math.cos(deskA) * dr);
+  desk.rotation.y = deskA;
+  scene.add(desk);
+  const glow = new THREE.MeshBasicMaterial({ color: "#7dd3fc", toneMapped: false });
+  for (let i = -1; i <= 1; i++) {
+    const mon = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.32, 0.04), glow);
+    const off = new THREE.Vector3(Math.cos(deskA) * i * 0.95, 0.06, -Math.sin(deskA) * i * 0.95);
+    mon.position.copy(desk.position).add(off).add(new THREE.Vector3(-Math.sin(deskA) * 0.1, 0, -Math.cos(deskA) * 0.1));
+    mon.rotation.y = deskA;
+    scene.add(mon);
+    person(desk.position.x + off.x + Math.sin(deskA) * 0.6, desk.position.z + off.z + Math.cos(deskA) * 0.6, deskA + Math.PI, "#1f2937");
+  }
+  for (const a of [0.2, 1.3, 2.4, 3.6, 4.7]) person(Math.sin(a) * (R + 1.1), Math.cos(a) * (R + 1.1), a + Math.PI, "#111111");
+  for (const [spot, col] of [[cornerSpots.p, "#7f1d1d"], [cornerSpots.o, "#1e3a8a"]]) {
+    const out = spot.clone().setY(0).normalize().multiplyScalar(R + 1.2);
+    for (const k of [-0.5, 0.5]) {
+      const side = new THREE.Vector3(out.z, 0, -out.x).normalize().multiplyScalar(k);
+      person(out.x + side.x, out.z + side.z, Math.atan2(-out.x, -out.z), col, false);
+    }
+    const stool = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.2, 0.5, 12), new THREE.MeshStandardMaterial({ color: "#1f2937", roughness: 0.6 }));
+    stool.position.set(out.x * 0.9, -0.62, out.z * 0.9);
+    scene.add(stool);
+  }
+  const bodyG = new THREE.CapsuleGeometry(0.2, 0.4, 3, 10), headG = new THREE.SphereGeometry(0.12, 12, 10);
+  const skinM = new THREE.MeshStandardMaterial({ color: "#b98563", roughness: 0.7 });
+  for (const p of people) {
+    const g = new THREE.Group();
+    const b = new THREE.Mesh(bodyG, new THREE.MeshStandardMaterial({ color: p.color, roughness: 0.8 }));
+    b.position.y = p.sit ? 0.0 : 0.25;
+    const h = new THREE.Mesh(headG, skinM);
+    h.position.y = p.sit ? 0.45 : 0.72;
+    g.add(b, h);
+    g.position.set(p.x, -0.55, p.z);
+    g.rotation.y = p.face;
+    scene.add(g);
+  }
+  return { drawScreen };
 }
 
 /** One corner of the fight: a fighter plus where it is heading. */
@@ -481,6 +699,8 @@ class ArenaView {
       o: corners.blue.clone().multiplyScalar(0.8),
     };
     this.crowd = buildCrowd(scene);
+    this.extras = buildExtras(scene, this.cornerSpot);
+    this.extras.drawScreen("RED CORNER", "BLUE CORNER", "FIGHT NIGHT");
 
     // effects
     this.sparks = [];
@@ -538,6 +758,8 @@ class ArenaView {
     const ol = f.opponent.look ? parseLook(f.opponent.look) : lookFromName(f.opponent.realName || f.opponent.name);
     if (ol.shorts === pl.shorts) ol.shorts = (ol.shorts + 3) % 8;
     const key = JSON.stringify([f.player.name, f.opponent.name, pl, ol, info.weightClass]);
+    const shortName = (c) => String(c.realName || c.name).split(" ").pop().toUpperCase();
+    this.extras.drawScreen(shortName(f.player), shortName(f.opponent), f.belt ? f.belt.label.toUpperCase() : f.rounds === 5 ? "MAIN EVENT · 5 ROUNDS" : "3 ROUNDS");
     if (key !== this.key) {
       this.key = key;
       for (const s of [this.P, this.O]) if (s) { s.f.dispose(); s.ring.removeFromParent(); }
