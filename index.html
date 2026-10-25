@@ -411,6 +411,14 @@ input:focus, select:focus { outline: 2px solid var(--red); outline-offset: 1px; 
 .edit-wrap .look-pickers { max-height: 46vh; overflow: auto; margin-top: 8px; }
 @media (max-width: 700px) { .edit-wrap { grid-template-columns: 1fr; } .edit-stage { height: 260px; } }
 
+/* the guided tour */
+.tut { position: fixed; inset: 0; z-index: 200; }
+.tut-spot { position: fixed; border-radius: 12px; box-shadow: 0 0 0 9999px rgba(4, 5, 8, .72); border: 2px solid var(--gold); transition: all .3s ease; pointer-events: none; }
+.tut-bubble { position: fixed; width: 340px; background: #171a21; border: 1px solid var(--gold); border-radius: 14px; padding: 14px 16px; box-shadow: 0 12px 40px rgba(0,0,0,.6); transition: top .3s, left .3s; }
+.tut-bubble h3 { margin: 2px 0 6px; font-size: 17px; }
+.tut-bubble p { margin: 0 0 12px; font-size: 14px; line-height: 1.45; color: #d6d9e0; }
+.tut-count { font-size: 11px; color: var(--gold); letter-spacing: .08em; }
+
 </style>
 </head>
 <body>
@@ -421,6 +429,7 @@ input:focus, select:focus { outline: 2px solid var(--red); outline-offset: 1px; 
       <button class="btn small gold" data-world id="lifeBtn">🌆 Life</button>
       <button class="btn small ghost" data-saves>💾 Saves</button>
       <button class="btn small ghost" data-hof>🏛 Hall of Fame</button>
+      <button class="btn small ghost" data-help title="How to play">❓</button>
       <button class="btn small ghost sound-btn" data-sound aria-label="Toggle sound">🔊</button>
     </div>
   </header>
@@ -493,9 +502,11 @@ input:focus, select:focus { outline: 2px solid var(--red); outline-offset: 1px; 
         <div class="caption" id="fightCaption"></div>
         <div class="announcer-line" id="announcerLine"></div>
         <div class="arena-tools">
+          <button class="btn small gold hidden" data-skiptalk id="skipTalk" title="Skip the announcements">⏭ Skip talk</button>
           <button class="btn small ghost" data-speed id="speedBtn" title="Playback speed">1×</button>
           <button class="btn small ghost sound-btn" data-sound aria-label="Toggle sound">🔊</button>
           <button class="btn small ghost" data-togglelog title="Show the full play-by-play">📜 Log</button>
+          <button class="btn small ghost" data-help title="How fights work">❓</button>
         </div>
       </div>
       <div class="fight-log" id="fightLog"></div>
