@@ -741,6 +741,58 @@ export class Offer {
 }
 Offer.tag = "Offer";
 
+// ------------------------------------------------------------------ life outside the cage
+
+export const HOUSES = [
+  { id: "apartment", name: "Rented apartment", price: 0, upkeep: 150, joy: 0 },
+  { id: "starter", name: "Starter home", price: 250000, upkeep: 450, joy: 6 },
+  { id: "family", name: "Family house", price: 900000, upkeep: 1200, joy: 12 },
+  { id: "villa", name: "Luxury villa with pool", price: 4500000, upkeep: 4500, joy: 20 },
+  { id: "mansion", name: "Hillside mega-mansion", price: 15000000, upkeep: 12000, joy: 28 },
+];
+export const CARS = [
+  { id: "hatch", name: "Used hatchback", price: 8000, joy: 2, fame: 0, color: "#8d99a6" },
+  { id: "pickup", name: "Pickup truck", price: 45000, joy: 4, fame: 0, color: "#2b4c7e" },
+  { id: "sedan", name: "Sports sedan", price: 70000, joy: 5, fame: 1, color: "#1d1d1f" },
+  { id: "muscle", name: "Muscle car", price: 95000, joy: 7, fame: 2, color: "#c8102e" },
+  { id: "suv", name: "Luxury SUV", price: 160000, joy: 7, fame: 2, color: "#eeeeee" },
+  { id: "super", name: "Italian supercar", price: 380000, joy: 12, fame: 4, color: "#f4b942" },
+  { id: "hyper", name: "Hypercar", price: 2800000, joy: 16, fame: 6, color: "#7c3aed" },
+];
+export const PETS = [
+  { id: "dog", name: "Dog", price: 1500, upkeep: 40, joy: 8 },
+  { id: "cat", name: "Cat", price: 800, upkeep: 25, joy: 6 },
+  { id: "parrot", name: "Parrot", price: 2500, upkeep: 20, joy: 5 },
+  { id: "tiger", name: "Tiger", price: 250000, upkeep: 2500, joy: 10 },
+];
+export const LIFESTYLES = [
+  { name: "Frugal", cost: 100, joy: -4 },
+  { name: "Comfortable", cost: 600, joy: 2 },
+  { name: "Lavish", cost: 4000, joy: 8 },
+  { name: "Baller", cost: 25000, joy: 14 },
+];
+const PARTNER_NAMES = ["Linh", "Sofia", "Mia", "Chloe", "Ava", "Hana", "Lucia", "Maya", "Isabella", "Emma", "Yuki", "Amara", "Daniel", "Lucas",
+  "Mateo", "Noah", "Kai", "Leo", "Ethan", "Minh Anh", "Thao", "Bao", "Camila", "Zara"];
+const KID_NAMES = ["Max", "Luna", "Leo", "Mila", "Kai", "Nova", "An", "Bella", "Rocky", "Aria", "Tony", "Zoe", "Bao", "Lily"];
+const JOBS = ["nurse", "photographer", "lawyer", "chef", "model", "teacher", "architect", "personal trainer", "DJ", "doctor", "designer", "pilot"];
+const PET_NAMES = {
+  dog: ["Rocky", "Bruno", "Kimbo", "Tyson", "Luna", "Bella", "Max", "Ali"], cat: ["Mochi", "Kitty", "Simba", "Nala", "Tofu"],
+  parrot: ["Kiwi", "Rio", "Mango", "Pickles"], tiger: ["Rajah", "Shere Khan", "Stripes", "Saber"],
+};
+const DATES = ["Dinner by the river", "A night at the movies", "Rooftop cocktails", "Sunset on a yacht", "A private chef dinner", "A weekend in Paris"];
+const POSTS = { training: ["Another day, another 2-a-day 💪", "Camp is going crazy right now 🔥", "Sharpening the tools ⚔️", "5am roadwork. Who's up? 🏃", "Nobody's outworking me."] };
+const FAN_HANDLES = ["mmafan", "cagefreak", "kofactory", "subhunter", "fightnerd", "gfcdaily", "octagonking", "bjjlife", "hypeman"];
+const FAN_COMMENTS = {
+  training: ["Champ mentality 🔥", "Can't wait for the next fight!", "Built different 💪", "Bro is locked in", "Future champ!"],
+  flex: ["Sheeeesh 🤑", "Money fights!", "Teach me your ways", "That's a dream ride", "W lifestyle"],
+  family: ["So wholesome ❤️", "Family first 🙏", "Goals!!", "Beautiful family", "The real champion"],
+  callout: ["OH IT'S ON 🍿", "Bad blood!", "Sign it!! 🔥", "He's scared lol", "Make it happen GFC!"],
+};
+const fmtMoney = (n) => "$" + Math.round(n).toLocaleString("en-US");
+function randomLookString() {
+  return [nextInt(6), nextInt(9), nextInt(6), 0, nextInt(8)].join(",");
+}
+
 const addOnce = (arr, v) => { if (!arr.includes(v)) arr.push(v); };
 const removeItem = (arr, v) => { const i = arr.indexOf(v); if (i >= 0) arr.splice(i, 1); };
 
@@ -802,8 +854,355 @@ export class Career {
   // leads to an interim title and then a unification bout; a champion who won't defend within a
   // year is stripped; a champion can move up or down and hold two belts at once.
 
-  /** Older saves predate the belt system. */
+  // ---------------------------------------------------------------- life outside the cage
+  // An open-world life: a home, cars, pets, a partner and kids, a social media following and a
+  // lifestyle. It all feeds happiness, and a happy fighter trains better; followers bring fame and
+  // sponsorship money. Life actions don't use up the week (each can be done once a week).
+
+  life() {
+    return this.lifeState;
+  }
+
+  lifeReady(key) {
+    const L = this.lifeState;
+    if (this.retired) throw new GameError("Your career is over.");
+    if (this.fight) throw new GameError("Not now — you're in the middle of a fight.");
+    if (L.done[key] === this.week) throw new GameError("You already did that this week.");
+  }
+
+  spend(amount, what) {
+    if (this.money < amount) throw new GameError("You can't afford " + what + " (" + fmtMoney(amount) + ").");
+    this.money -= amount;
+  }
+
+  lifeJoy(d) {
+    const L = this.lifeState;
+    L.happiness = clamp(L.happiness + d, 0, 100);
+  }
+
+  /** Training multiplier from happiness: 0.85 (miserable) to 1.15 (on top of the world). */
+  moodMult() {
+    return 0.85 + (this.lifeState ? this.lifeState.happiness : 50) * 0.003;
+  }
+
+  /** Where happiness drifts each week, from everything in the fighter's life. */
+  happinessTarget() {
+    const L = this.lifeState;
+    let t = 42 + HOUSES[L.house].joy + LIFESTYLES[L.lifestyle].joy;
+    const cars = L.cars.map((id) => CARS.find((c) => c.id === id)).filter(Boolean).sort((a, b) => b.joy - a.joy);
+    cars.forEach((c, i) => (t += i === 0 ? c.joy : Math.min(3, c.joy / 3)));
+    for (const p of L.pets) t += (PETS.find((x) => x.id === p.kind) || { joy: 0 }).joy;
+    if (L.partner) t += L.partner.affection / 6 + (L.partner.stage === "married" ? 4 : 0);
+    t += Math.min(4, L.kids.length) * 5;
+    if (this.money < 0) t -= 25;
+    if (this.injuryWeeks > 0) t -= 6;
+    if (this.me.streak >= 2) t += 4;
+    if (this.me.streak <= -2) t -= 6;
+    return clamp(t, 0, 100);
+  }
+
+  lifeWeek() {
+    const L = this.lifeState;
+    // bills
+    const bills = HOUSES[L.house].upkeep + LIFESTYLES[L.lifestyle].cost + L.pets.reduce((s, p) => s + ((PETS.find((x) => x.id === p.kind) || {}).upkeep || 0), 0)
+      + L.kids.length * 300;
+    this.money -= bills;
+    // sponsors pay by audience
+    const sponsor = Math.round(L.followers / 1000) * 20;
+    this.money += sponsor;
+    this.earnings += sponsor;
+    L.lastBills = bills;
+    L.lastSponsor = sponsor;
+    // organic growth from fame
+    L.followers = Math.max(0, Math.round(L.followers + this.fame * this.fame * 0.6 + nextInt(40) + (this.gfc ? 150 : 10) - L.followers * 0.002));
+    if (L.followers >= 1000000 && !L.milestone1m) {
+      L.milestone1m = true;
+      this.log("1 MILLION followers! Brands are lining up.");
+    }
+    // happiness drifts toward what the fighter's life gives them
+    L.happiness = Math.round(L.happiness + (this.happinessTarget() - L.happiness) * 0.25);
+    // a partner who's ignored drifts away
+    const p = L.partner;
+    if (p) {
+      p.affection = clamp(p.affection - (L.done.family === this.week - 1 || L.done.date === this.week - 1 ? 0 : 2) + (L.house >= 2 ? 0.5 : 0), 0, 100);
+      if (p.affection <= 0) this.breakUp(p.stage === "married" ? "files for divorce" : "breaks up with you");
+      else if (p.affection <= 15 && p.warned !== this.week && rnd() < 0.3) {
+        p.warned = this.week;
+        this.log(p.name + " feels neglected. Spend some time together.");
+      }
+    }
+    // babies
+    if (p && p.stage === "married" && L.tryingForKids && rnd() < 0.06 && L.kids.length < 6) {
+      const kid = { name: pickOf(KID_NAMES), born: this.week, look: randomLookString() };
+      L.kids.push(kid);
+      this.lifeJoy(15);
+      this.log("Congratulations! " + kid.name + " is born. Welcome to the family!");
+      this.post("family", "Welcome to the world, " + kid.name + " ❤️ Best win of my life.", 3);
+    }
+  }
+
+  breakUp(how) {
+    const L = this.lifeState;
+    const p = L.partner;
+    if (!p) return;
+    if (p.stage === "married") {
+      const cost = Math.max(0, Math.round(this.money * 0.3));
+      this.money -= cost;
+      this.log(p.name + " " + how + ". The divorce costs " + fmtMoney(cost) + ".");
+    } else this.log(p.name + " " + how + ".");
+    L.exes.push(p.name);
+    L.partner = null;
+    L.tryingForKids = false;
+    this.lifeJoy(-20);
+  }
+
+  /** Adds a post to the feed; reach depends on fame, followers and what the post shows. */
+  post(kind, text, boost = 1) {
+    const L = this.lifeState;
+    const reach = (L.followers * (0.02 + rnd() * 0.05) + this.fame * 120 + 50) * boost;
+    const likes = Math.round(reach);
+    const gained = Math.round(reach * (0.1 + rnd() * 0.25));
+    L.followers += gained;
+    const comments = [];
+    for (let i = 0; i < 3; i++) comments.push({ user: pickOf(FAN_HANDLES) + nextInt(99), text: pickOf(FAN_COMMENTS[kind] || FAN_COMMENTS.training) });
+    L.feed.unshift({ week: this.week, date: this.dateLabel(), kind, text, likes, gained, comments });
+    while (L.feed.length > 30) L.feed.pop();
+    return gained;
+  }
+
+  lifeAction(type, p = {}) {
+    const L = this.lifeState;
+    const me = this.me;
+    switch (type) {
+      case "post": {
+        this.lifeReady("post");
+        const kind = String(p.kind || "training");
+        let text, boost = 1;
+        if (kind === "training") text = pickOf(POSTS.training);
+        else if (kind === "flex") {
+          const car = L.cars.map((id) => CARS.find((c) => c.id === id)).filter(Boolean).sort((a, b) => b.price - a.price)[0];
+          if (!car && L.house === 0) throw new GameError("Nothing to flex yet. Buy a car or a house first.");
+          text = car ? "New whip. " + car.name + " 🏎️ Hard work pays." : "Home sweet " + HOUSES[L.house].name.toLowerCase() + " 🏠";
+          boost = 1.5 + (car ? car.fame / 3 : 0) + L.house * 0.3;
+          this.fame = clamp(this.fame + 1, 0, 100);
+        } else if (kind === "family") {
+          if (!L.partner && !L.kids.length && !L.pets.length) throw new GameError("No family pics yet — get a partner, a kid or a pet.");
+          text = L.kids.length ? "Family day with my little champ " + pickOf(L.kids).name + " 👶" : L.partner ? "Date night with " + L.partner.name + " ❤️" : "Me and " + L.pets[0].name + " 🐾";
+          boost = 1.3;
+          this.lifeJoy(3);
+        } else if (kind === "callout") {
+          const target = this.scheduled ? this.scheduled.opp : this.rival || (this.gfc ? this.rankings[0] : null);
+          if (!target) throw new GameError("Nobody to call out.");
+          text = "@" + target.lastName().toLowerCase() + " you're next. Sign the contract. 🥊";
+          boost = 2;
+          this.fame = clamp(this.fame + 2, 0, 100);
+          if (target === this.rival) this.rivalHeat = Math.min(100, this.rivalHeat + 8);
+          if (this.scheduled && target === this.scheduled.opp) this.scheduled.oppBonus = Math.min(6, (this.scheduled.oppBonus || 0) + 1);
+        } else throw new GameError("Unknown post.");
+        L.done.post = this.week;
+        const gained = this.post(kind, text, boost);
+        return "Posted! +" + gained.toLocaleString("en-US") + " followers.";
+      }
+      case "buy": {
+        const kind = p.kind, id = p.id;
+        if (kind === "house") {
+          const i = HOUSES.findIndex((h) => h.id === id);
+          if (i < 0) throw new GameError("Unknown house.");
+          if (i === L.house) throw new GameError("You already live there.");
+          const trade = Math.round(HOUSES[L.house].price * 0.85);
+          const cost = HOUSES[i].price - trade;
+          if (cost > 0) this.spend(cost, "the " + HOUSES[i].name.toLowerCase());
+          else this.money -= cost;
+          L.house = i;
+          this.lifeJoy(i > 0 ? 10 : -5);
+          this.log("Moves into a " + HOUSES[i].name.toLowerCase() + ".");
+          return "Welcome home! You moved into the " + HOUSES[i].name.toLowerCase() + (trade ? " (old place sold for " + fmtMoney(trade) + ")" : "") + ".";
+        }
+        if (kind === "car") {
+          const c = CARS.find((x) => x.id === id);
+          if (!c) throw new GameError("Unknown car.");
+          if (L.cars.includes(id)) throw new GameError("You already own one.");
+          if (L.cars.length >= 6) throw new GameError("Your garage is full. Sell a car first.");
+          this.spend(c.price, "the " + c.name);
+          L.cars.push(id);
+          L.driving = id;
+          this.fame = clamp(this.fame + c.fame, 0, 100);
+          this.lifeJoy(c.joy);
+          this.log("Buys a " + c.name + ".");
+          return "The keys to your " + c.name + " are yours!";
+        }
+        if (kind === "pet") {
+          const pt = PETS.find((x) => x.id === id);
+          if (!pt) throw new GameError("Unknown pet.");
+          if (L.pets.length >= 4) throw new GameError("Four pets is plenty.");
+          this.spend(pt.price, "a " + pt.name.toLowerCase());
+          const name = pickOf(PET_NAMES[pt.id] || PET_NAMES.dog);
+          L.pets.push({ kind: pt.id, name, since: this.week });
+          this.lifeJoy(pt.joy);
+          this.log("Adopts a " + pt.name.toLowerCase() + " named " + name + ".");
+          return "Meet " + name + ", your new " + pt.name.toLowerCase() + "!";
+        }
+        throw new GameError("Unknown purchase.");
+      }
+      case "sell": {
+        if (p.kind === "car") {
+          const i = L.cars.indexOf(p.id);
+          const c = CARS.find((x) => x.id === p.id);
+          if (i < 0 || !c) throw new GameError("You don't own that car.");
+          L.cars.splice(i, 1);
+          if (L.driving === p.id) L.driving = L.cars[0] || null;
+          const back = Math.round(c.price * 0.6);
+          this.money += back;
+          return "Sold the " + c.name + " for " + fmtMoney(back) + ".";
+        }
+        throw new GameError("You can only sell cars here.");
+      }
+      case "drive": {
+        if (p.id && !L.cars.includes(p.id)) throw new GameError("You don't own that car.");
+        L.driving = p.id || null;
+        return null;
+      }
+      case "lifestyle": {
+        const i = Math.trunc(Number(p.level));
+        if (!(i >= 0 && i < LIFESTYLES.length)) throw new GameError("Unknown lifestyle.");
+        L.lifestyle = i;
+        return "Lifestyle: " + LIFESTYLES[i].name + " (" + fmtMoney(LIFESTYLES[i].cost) + "/week).";
+      }
+      case "meet": {
+        this.lifeReady("meet");
+        if (L.partner && L.partner.stage === "married") throw new GameError("You're married!");
+        L.done.meet = this.week;
+        const chance = 0.35 + this.fame / 250 + L.house * 0.04 + (L.lifestyle >= 2 ? 0.1 : 0);
+        if (rnd() > chance) return "You chat with a few people, but nobody clicks this time.";
+        L.candidate = { name: pickOf(PARTNER_NAMES), age: me.age - 3 + nextInt(7), look: randomLookString(), job: pickOf(JOBS), week: this.week };
+        return "You hit it off with " + L.candidate.name + ", a " + L.candidate.age + "-year-old " + L.candidate.job + "!";
+      }
+      case "ask": {
+        const c = L.candidate;
+        if (!c || c.week !== this.week) throw new GameError("Meet someone first.");
+        L.candidate = null;
+        if (L.partner) {
+          // cheating rarely ends well
+          this.log("Caught flirting! " + L.partner.name + " finds out.");
+          L.partner.affection = Math.max(0, L.partner.affection - 35);
+          if (L.partner.affection <= 0) this.breakUp("leaves you");
+          return "That was a bad idea. " + (L.partner ? L.partner.name + " is furious." : "You're single again.");
+        }
+        L.partner = { name: c.name, age: c.age, look: c.look, job: c.job, stage: "dating", affection: 35, since: this.week };
+        this.lifeJoy(8);
+        this.log("Starts dating " + c.name + ".");
+        return "You're dating " + c.name + "! ❤️";
+      }
+      case "date": {
+        this.lifeReady("date");
+        const P = L.partner;
+        if (!P) throw new GameError("You're single. Meet someone at the café or the club.");
+        const cost = [80, 400, 2500, 15000][L.lifestyle];
+        this.spend(cost, "a date");
+        L.done.date = this.week;
+        const gain = 8 + nextInt(8) + L.lifestyle * 2;
+        P.affection = clamp(P.affection + gain, 0, 100);
+        this.lifeJoy(5);
+        return pickOf(DATES) + " ❤️ (+" + gain + " affection)";
+      }
+      case "gift": {
+        this.lifeReady("gift");
+        const P = L.partner;
+        if (!P) throw new GameError("No one to give a gift to.");
+        const cost = Math.max(500, Math.round(this.money * 0.02));
+        this.spend(cost, "a gift");
+        L.done.gift = this.week;
+        P.affection = clamp(P.affection + 10, 0, 100);
+        return "You surprise " + P.name + " with a gift worth " + fmtMoney(cost) + ". 🎁";
+      }
+      case "propose": {
+        const P = L.partner;
+        if (!P || P.stage !== "dating") throw new GameError("You need to be dating someone.");
+        this.lifeReady("propose");
+        L.done.propose = this.week;
+        const ring = Math.max(5000, Math.round(this.money * 0.05));
+        this.spend(ring, "a ring");
+        if (rnd() < (P.affection - 30) / 50) {
+          P.stage = "engaged";
+          this.lifeJoy(15);
+          this.log("Engaged to " + P.name + "! 💍");
+          this.post("family", P.name + " said YES 💍 Forever starts now.", 2.5);
+          return P.name + " said YES! 💍";
+        }
+        P.affection = Math.max(0, P.affection - 10);
+        return P.name + " says it's too soon. (Build more affection first.)";
+      }
+      case "wedding": {
+        const P = L.partner;
+        if (!P || P.stage !== "engaged") throw new GameError("Get engaged first.");
+        const cost = [20000, 60000, 250000, 1500000][L.lifestyle];
+        this.spend(cost, "the wedding");
+        P.stage = "married";
+        P.affection = clamp(P.affection + 20, 0, 100);
+        this.lifeJoy(20);
+        this.fame = clamp(this.fame + 3, 0, 100);
+        this.log("Marries " + P.name + "! 💒");
+        this.post("family", "Just married 💒 Partners for life.", 3);
+        return "You married " + P.name + "! 💒";
+      }
+      case "kids": {
+        const P = L.partner;
+        if (!P || P.stage !== "married") throw new GameError("Get married first.");
+        L.tryingForKids = !L.tryingForKids;
+        return L.tryingForKids ? "You and " + P.name + " are trying for a baby. 👶" : "Not right now.";
+      }
+      case "family": {
+        this.lifeReady("family");
+        if (!L.partner && !L.kids.length && !L.pets.length) throw new GameError("There's nobody at home yet.");
+        L.done.family = this.week;
+        if (L.partner) L.partner.affection = clamp(L.partner.affection + 8, 0, 100);
+        this.lifeJoy(6 + L.kids.length * 2 + L.pets.length);
+        this.energy = Math.min(100, this.energy + 10);
+        return "Quality time at home. You feel recharged. (+10 energy)";
+      }
+      case "party": {
+        this.lifeReady("party");
+        L.done.party = this.week;
+        this.spend([200, 1000, 8000, 40000][L.lifestyle], "the bottle service");
+        this.lifeJoy(8);
+        this.energy = Math.max(0, this.energy - 20);
+        this.fame = clamp(this.fame + 1, 0, 100);
+        if (rnd() < 0.12) {
+          this.fame = clamp(this.fame - 4, 0, 100);
+          L.followers = Math.round(L.followers * 0.97);
+          if (L.partner) L.partner.affection = Math.max(0, L.partner.affection - 15);
+          this.log("Scandal! Blurry club photos of " + me.lastName() + " go viral.");
+          return "Big night… but the photos leaked. Scandal! (−fame" + (L.partner ? ", " + L.partner.name + " is upset" : "") + ")";
+        }
+        return "What a night! VIP section, the whole city knows your name. (−20 energy)";
+      }
+      default:
+        throw new GameError("Unknown life action.");
+    }
+  }
+
+  lifeJson() {
+    const L = this.lifeState;
+    return {
+      happiness: L.happiness, target: Math.round(this.happinessTarget()), followers: L.followers, moodMult: +this.moodMult().toFixed(2),
+      house: L.house, cars: [...L.cars], driving: L.driving, pets: L.pets.map((p) => ({ ...p })),
+      partner: L.partner ? { ...L.partner } : null, candidate: L.candidate && L.candidate.week === this.week ? { ...L.candidate } : null,
+      kids: L.kids.map((k) => ({ ...k, age: Math.floor((this.week - k.born) / 52) })), tryingForKids: L.tryingForKids,
+      lifestyle: L.lifestyle, feed: L.feed.slice(0, 15), done: Object.fromEntries(Object.entries(L.done).map(([k, w]) => [k, w === this.week])),
+      lastBills: L.lastBills || 0, lastSponsor: L.lastSponsor || 0, sponsorRate: Math.round(L.followers / 1000) * 20,
+      catalog: { houses: HOUSES, cars: CARS, pets: PETS, lifestyles: LIFESTYLES },
+      weddingCost: [20000, 60000, 250000, 1500000][L.lifestyle], dateCost: [80, 400, 2500, 15000][L.lifestyle],
+    };
+  }
+
+  /** Older saves predate the belt system and life outside the cage. */
   migrate() {
+    if (!this.lifeState) {
+      this.lifeState = {
+        happiness: 60, followers: 200 + (this.fame || 0) * (this.fame || 0) * 20, house: 0, cars: [], driving: null, pets: [], partner: null,
+        candidate: null, kids: [], tryingForKids: false, lifestyle: 1, feed: [], done: {}, exes: [],
+      };
+    }
     if (!this.heldBelts) this.heldBelts = {};
     if (!this.lineage) this.lineage = {};
     if (this.interim === undefined) this.interim = null;
@@ -1007,7 +1406,7 @@ export class Career {
 
   trainGain(stat) {
     const cur = this.me.get(stat);
-    return 4.0 * GYM_MULT[this.gym] * this.staffMult(stat) * this.ageFactor() * Math.pow(Math.max(0.01, 1 - cur / 97.5), 1.6)
+    return 4.0 * GYM_MULT[this.gym] * this.staffMult(stat) * this.ageFactor() * this.moodMult() * Math.pow(Math.max(0.01, 1 - cur / 97.5), 1.6)
       * (0.4 + this.energy / 166) * (0.7 + rnd() * 0.6);
   }
 
@@ -1635,6 +2034,7 @@ export class Career {
     if (this.retired) return;
     this.npcWeek();
     this.beltWeek();
+    this.lifeWeek();
     this.rivalWeek();
     if (++this.marketAge >= 8) this.refreshMarket();
     if (this.scheduled) {
@@ -1967,6 +2367,7 @@ export class Career {
       history: this.history,
       fight: this.fight ? this.fight.toJson() : null,
       lastResult: this.lastResult,
+      life: this.lifeJson(),
     };
   }
 }
@@ -2123,6 +2524,7 @@ export class Game {
       case "staff/hire": msg = this.need(career).hire(int(p.index)); break;
       case "staff/fire": msg = this.need(career).fire(p.role); break;
       case "division": msg = this.need(career).changeDivision(int(p.weightClass)); break;
+      case "life": msg = this.need(career).lifeAction(p.type, p); break;
       case "save/blank":
         if (prof.slots.length >= MAX_SLOTS) throw new GameError(`All ${MAX_SLOTS} save slots are full. Delete a save first.`);
         prof.active = null;

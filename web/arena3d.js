@@ -4,6 +4,7 @@
 import * as THREE from "./vendor/three.module.min.js";
 import { Fighter3D, GROUND_POSES, POSES, SEQUENCES, attack, groundShift, lookFromName, parseLook, submission, takedown } from "./fighter3d.js";
 import * as audio from "./audio.js";
+import { WorldView } from "./world3d.js";
 
 const R = 4.4; // cage radius to the fence posts
 const RED = "#d62828";
@@ -65,6 +66,7 @@ export function createStage() {
 
   const preview = new PreviewView();
   const arena = new ArenaView();
+  const world = new WorldView();
   let view = null;
   let host = null;
   const clock = new THREE.Clock();
@@ -82,18 +84,30 @@ export function createStage() {
 
   // drag to look around
   let drag = null;
-  canvas.addEventListener("pointerdown", (e) => { drag = { x: e.clientX }; canvas.setPointerCapture(e.pointerId); });
+  // views with their own controls (the open world) get the raw pointer events
+  const own = (type) => (e) => {
+    if (view && view.pointer) {
+      view.pointer(type, e, canvas);
+      return true;
+    }
+    return false;
+  };
+  const ownDown = own("down"), ownMove = own("move"), ownUp = own("up");
+  canvas.addEventListener("pointerdown", (e) => { if (ownDown(e)) return; drag = { x: e.clientX }; canvas.setPointerCapture(e.pointerId); });
   canvas.addEventListener("pointermove", (e) => {
+    if (ownMove(e)) return;
     if (!drag || !view) return;
     view.userYaw = (view.userYaw || 0) - (e.clientX - drag.x) * 0.008;
     drag.x = e.clientX;
   });
-  canvas.addEventListener("pointerup", () => { drag = null; });
+  canvas.addEventListener("pointerup", (e) => { if (ownUp(e)) return; drag = null; });
   canvas.addEventListener("pointercancel", () => { drag = null; });
 
   function show(container, which) {
-    const v = which === "arena" ? arena : preview;
+    const v = which === "arena" ? arena : which === "world" ? world : preview;
+    world.active = v === world;
     if (host === container && view === v) return;
+    if (v === world) world.enter();
     if (host) ro.unobserve(host);
     host = container;
     view = v;
@@ -109,7 +123,7 @@ export function createStage() {
     renderer.render(view.scene, view.camera);
   });
 
-  return { preview, arena, show };
+  return { preview, arena, world, show };
 }
 
 // ====================================================================== preview
@@ -171,6 +185,7 @@ class PreviewView {
     this.fighters = list.map((d, i) => {
       const f = new Fighter3D({ look: looks[i], weightClass: d.weightClass, style: d.style, glove: i ? BLUE : RED });
       f.setBelt(d.belt || null);
+      f.setInjured(!!d.injured);
       this.scene.add(f.root);
       return f;
     });
@@ -388,6 +403,12 @@ class Side {
     this.lungeTarget = 0;
     this.lungeUntil = 0;
     this.ring = null;
+    this.dmg = 0; // visible damage, 0..1
+  }
+
+  hurt(d) {
+    this.dmg = Math.min(1, Math.max(0, d));
+    this.f.setDamage(this.dmg);
   }
 }
 
@@ -457,6 +478,28 @@ class ArenaView {
       this.sparks.push({ s, t: 1, dur: 0.2, v: new THREE.Vector3(), size: 0.3 });
     }
 
+    // blood: droplets in flight, and the stains they leave on the canvas
+    const bloodM = new THREE.MeshStandardMaterial({ color: "#b3120f", roughness: 0.25, emissive: "#4a0000" });
+    const dropGeo = new THREE.SphereGeometry(0.018, 6, 5);
+    this.drops = [];
+    for (let i = 0; i < 48; i++) {
+      const m = new THREE.Mesh(dropGeo, bloodM);
+      m.visible = false;
+      scene.add(m);
+      this.drops.push({ m, v: new THREE.Vector3(), live: false });
+    }
+    const stainM = new THREE.MeshBasicMaterial({ color: "#7a0a0a", transparent: true, opacity: 0.85, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4 });
+    const stainGeo = new THREE.CircleGeometry(1, 14);
+    stainGeo.rotateX(-Math.PI / 2);
+    this.stains = [];
+    for (let i = 0; i < 70; i++) {
+      const m = new THREE.Mesh(stainGeo, stainM);
+      m.visible = false;
+      scene.add(m);
+      this.stains.push(m);
+    }
+    this.stainNext = 0;
+
     this.P = this.O = this.ref = null;
     this.key = "";
     this.t = 0;          // fight time (slows down in slow motion)
@@ -505,6 +548,30 @@ class ArenaView {
     this.restore(f);
   }
 
+  stain(x, z, size) {
+    const m = this.stains[this.stainNext++ % this.stains.length];
+    m.visible = true;
+    m.position.set(x, 0.016, z);
+    m.scale.set(size * (0.7 + Math.random() * 0.6), 1, size * (0.7 + Math.random() * 0.6));
+    m.rotation.y = Math.random() * TAU;
+  }
+
+  /** Blood flies off a fighter's face on a hard shot, away from the attacker. */
+  bloodSpray(D, A, strength) {
+    const from = D.f.worldPoint("head");
+    const away = D.pos.clone().sub(A.pos).setY(0).normalize();
+    const n = Math.round(4 + strength * 5);
+    for (let i = 0; i < n; i++) {
+      const d = this.drops.find((x) => !x.live);
+      if (!d) break;
+      d.live = true;
+      d.m.visible = true;
+      d.m.position.copy(from);
+      d.m.scale.setScalar(0.6 + Math.random() * 1.2);
+      d.v.copy(away).multiplyScalar(1 + Math.random() * 2.5 * strength).add(new THREE.Vector3((Math.random() - 0.5) * 1.6, 0.5 + Math.random() * 1.8, (Math.random() - 0.5) * 1.6));
+    }
+  }
+
   /** Jump straight to where the fight currently stands (opening the screen, reloading mid-fight). */
   restore(f) {
     this.timers = [];
@@ -532,6 +599,17 @@ class ArenaView {
     if (f.round === 0) {
       this.P.pos.copy(this.cornerSpot.p).multiplyScalar(0.5);
       this.O.pos.copy(this.cornerSpot.o).multiplyScalar(0.5);
+    }
+    // the damage so far shows on their faces, and blood is already on the canvas
+    for (const st of this.stains) st.visible = false;
+    for (const d of this.drops) { d.live = false; d.m.visible = false; }
+    const hurt = (c) => (f.round === 0 ? 0 : Math.min(1, (100 - c.health) / 90 + f.round * 0.05));
+    this.P.hurt(hurt(f.player));
+    this.O.hurt(hurt(f.opponent));
+    const stains = Math.round((this.P.dmg + this.O.dmg) * 14);
+    for (let i = 0; i < stains; i++) {
+      const a = Math.random() * TAU, r = Math.random() * R * 0.6;
+      this.stain(Math.cos(a) * r, Math.sin(a) * r, 0.04 + Math.random() * 0.14);
     }
     for (const e of f.logs.flat()) this.handle(e, f, true);
     this.layout(0);
@@ -841,6 +919,9 @@ class ArenaView {
 
   impact(A, D, kind, strength) {
     D.f.hit(kind, Math.min(1.6, strength));
+    const toHead = kind !== "body" && kind !== "leg";
+    D.hurt(D.dmg + (toHead ? 0.014 : 0.005) * strength);
+    if (toHead && (strength > 1.1 || (D.dmg > 0.3 && Math.random() < 0.35 + D.dmg * 0.4))) this.bloodSpray(D, A, strength);
     D.lungeTarget = -0.1 * strength;
     D.lungeUntil = this.t + 0.18;
     const part = kind === "body" ? "chest" : kind === "leg" ? "knL" : "head";
@@ -861,6 +942,8 @@ class ArenaView {
     this.down = D.tag;
     D.f.setBase("down");
     if (instant) return;
+    D.hurt(D.dmg + 0.12);
+    this.bloodSpray(D, this.other(D), 2.2);
     D.f.stopActions();
     this.slowUntil = this.real + 0.8;
     audio.sfx("ko");
@@ -1210,6 +1293,16 @@ class ArenaView {
     }
     this.excite += (0.25 - this.excite) * damp(0.35, dt);
     this.crowd.update(this.real, this.excite);
+    for (const d of this.drops) {
+      if (!d.live) continue;
+      d.v.y -= 9.8 * sdt;
+      d.m.position.addScaledVector(d.v, sdt);
+      if (d.m.position.y <= 0.02) {
+        d.live = false;
+        d.m.visible = false;
+        if (Math.hypot(d.m.position.x, d.m.position.z) < R - 0.3) this.stain(d.m.position.x, d.m.position.z, 0.03 + Math.random() * 0.07);
+      }
+    }
     for (const sp of this.sparks) {
       if (sp.t >= sp.dur) continue;
       sp.t += sdt;

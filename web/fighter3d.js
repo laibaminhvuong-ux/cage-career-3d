@@ -726,19 +726,23 @@ export class Fighter3D {
     this.look = look;
     const wc = opts.weightClass ?? 3;
     const styleW = { Wrestler: 0.05, "Jiu-Jitsu": 0.01, Striker: -0.03 }[opts.style] || 0;
+    // referees and people around town wear clothes instead of fight shorts and gloves
+    const civ = opts.ref || opts.casual;
     const width = opts.ref ? 0.98 : 0.9 + wc * 0.035 + styleW;
     const height = opts.ref ? 1.0 : 0.95 + wc * 0.016;
     this.width = width;
 
     const skin = mat(LOOK_OPTIONS.skin[look.skin], { roughness: 0.55 });
+    this.skinM = skin;
+    this.skinBase = skin.color.clone();
     const hairM = mat(LOOK_OPTIONS.hairColor[look.hairColor], { roughness: 0.9 });
-    const shortsM = mat(opts.ref ? "#3c3f46" : LOOK_OPTIONS.shorts[look.shorts], { roughness: 0.75 });
-    const trimM = mat(opts.ref ? "#2a2c31" : look.shorts === 3 ? "#151515" : "#f2f2f2", { roughness: 0.7 });
+    const shortsM = mat(civ ? opts.pants || "#3c3f46" : LOOK_OPTIONS.shorts[look.shorts], { roughness: 0.75 });
+    const trimM = mat(civ ? "#2a2c31" : look.shorts === 3 ? "#151515" : "#f2f2f2", { roughness: 0.7 });
     const gloveM = mat("#161616", { roughness: 0.42 });
     const bandM = mat(opts.glove || "#c8102e", { roughness: 0.5 });
-    const shirtM = mat("#17181c", { roughness: 0.8 });
+    const shirtM = mat(opts.shirt || "#17181c", { roughness: 0.8 });
     const dark = mat("#120d0b", { roughness: 0.4 });
-    const torsoM = opts.ref ? shirtM : skin;
+    const torsoM = civ ? shirtM : skin;
     const armM = opts.ref ? skin : skin;
 
     const root = new THREE.Group();
@@ -749,7 +753,7 @@ export class Fighter3D {
 
     // pelvis / shorts
     mesh(new THREE.CylinderGeometry(0.15 * width, 0.165 * width, 0.2, 14), shortsM, hips, 0, -0.02, 0).scale.z = 0.72;
-    mesh(new THREE.CylinderGeometry(0.152 * width, 0.152 * width, 0.035, 14), opts.ref ? mat("#111") : trimM, hips, 0, 0.085, 0).scale.z = 0.72;
+    mesh(new THREE.CylinderGeometry(0.152 * width, 0.152 * width, 0.035, 14), civ ? mat("#111") : trimM, hips, 0, 0.085, 0).scale.z = 0.72;
 
     const spine = joint(hips, 0, 0.08, 0);
     const abs = mesh(new THREE.SphereGeometry(0.14, 16, 12), torsoM, spine, 0, 0.1, 0);
@@ -757,7 +761,7 @@ export class Fighter3D {
     const chest = joint(spine, 0, 0.18, 0);
     const ribs = mesh(new THREE.SphereGeometry(0.17, 18, 14), torsoM, chest, 0, 0.1, 0);
     ribs.scale.set(1.12 * width, 1.05, 0.68);
-    if (!opts.ref) {
+    if (!civ) {
       // pecs and traps give the torso some shape
       for (const sx of [-1, 1]) {
         const pec = mesh(geo("pec", () => new THREE.SphereGeometry(0.09, 12, 10)), skin, chest, sx * 0.075 * width, 0.15, 0.06);
@@ -781,8 +785,8 @@ export class Fighter3D {
     for (const side of ["L", "R"]) {
       const sx = side === "L" ? 1 : -1;
       const sh = joint(chest, sx * 0.19 * width, 0.2, -0.01);
-      mesh(geo("delt" + width.toFixed(2), () => new THREE.SphereGeometry(0.07 * width, 12, 10)), opts.ref ? shirtM : skin, sh, 0, -0.01, 0);
-      if (opts.ref) {
+      mesh(geo("delt" + width.toFixed(2), () => new THREE.SphereGeometry(0.07 * width, 12, 10)), civ ? shirtM : skin, sh, 0, -0.01, 0);
+      if (civ) {
         const sleeve = new THREE.CylinderGeometry(0.058, 0.052, 0.14, 10);
         sleeve.translate(0, -0.07, 0);
         mesh(sleeve, shirtM, sh);
@@ -790,7 +794,7 @@ export class Fighter3D {
       limb(sh, 0.06 * width, 0.047 * width, 0.27, armM);
       const el = joint(sh, 0, -0.27, 0);
       limb(el, 0.047 * width, 0.037 * width, 0.23, armM);
-      if (opts.ref) {
+      if (civ) {
         mesh(geo("fist", () => new THREE.SphereGeometry(0.045, 10, 8)), skin, el, 0, -0.26, 0);
       } else {
         const glove = mesh(geo("glove", () => new THREE.SphereGeometry(0.062, 14, 10)), gloveM, el, 0, -0.27, 0.005);
@@ -810,32 +814,32 @@ export class Fighter3D {
       const hp = joint(hips, sx * 0.085 * width, -0.06, 0);
       const sleeve = new THREE.CylinderGeometry(0.088 * width, 0.08 * width, 0.2, 12);
       sleeve.translate(0, -0.08, 0);
-      mesh(sleeve, opts.ref ? shortsM : shortsM, hp);
-      if (opts.ref) {
+      mesh(sleeve, civ ? shortsM : shortsM, hp);
+      if (civ) {
         limb(hp, 0.075 * width, 0.055, 0.42, shortsM);
       } else {
         limb(hp, 0.085 * width, 0.058 * width, 0.42, skin);
       }
       const kn = joint(hp, 0, -0.42, 0);
-      limb(kn, opts.ref ? 0.055 : 0.058 * width, 0.04, 0.42, opts.ref ? shortsM : skin);
+      limb(kn, civ ? 0.055 : 0.058 * width, 0.04, 0.42, civ ? shortsM : skin);
       const foot = new THREE.BoxGeometry(0.075, 0.05, 0.2);
       foot.translate(0, -0.025, 0.05);
-      const f = mesh(foot, opts.ref ? dark : skin, kn, 0, -0.44, 0);
+      const f = mesh(foot, civ ? dark : skin, kn, 0, -0.44, 0);
       f.scale.x = width;
       legs["hip" + side] = hp;
       legs["kn" + side] = kn;
     }
 
     this.j = { hips, spine, chest, neck, ...arms, ...legs };
-    this.cur = pose(POSES[opts.ref ? "ref" : "stance"]);
-    this.base = opts.ref ? "ref" : "stance";
+    this.cur = pose(POSES[opts.ref ? "ref" : opts.casual ? "relaxed" : "stance"]);
+    this.base = opts.ref ? "ref" : opts.casual ? "relaxed" : "stance";
     this.queue = null;   // { frames, i, t }
     this.offsets = [];   // fading hit reactions
     this.time = Math.random() * 10;
     this.walk = 0;       // walking phase
     this.speed = 0;
     this.lastPos = new THREE.Vector3();
-    if (!opts.ref) this.buildBelt(width);
+    if (!civ) this.buildBelt(width);
     this.applyPose(this.cur);
   }
 
@@ -883,6 +887,100 @@ export class Fighter3D {
     sash.userData.plate = front;
     waist.visible = sash.visible = front.visible = false;
     this.belt = { waist, sash };
+  }
+
+  /**
+   * Visible fight damage, 0 (fresh) to 1 (a mess): cuts that open and bleed, a swelling eye,
+   * bruised cheekbones, blood running down the face onto the chest, and sweat on the skin.
+   */
+  setDamage(d) {
+    d = Math.max(0, Math.min(1, d));
+    if (Math.abs(d - (this.damage || 0)) < 0.01 && this.wounds) return;
+    this.damage = d;
+    if (!this.wounds) this.buildWounds();
+    const w = this.wounds;
+    const show = (m, from) => {
+      m.visible = d >= from;
+      return m.visible;
+    };
+    show(w.forehead, 0.22);
+    show(w.foreheadDrip, 0.32);
+    if (show(w.noseBlood, 0.3)) w.noseBlood.scale.y = 0.6 + d;
+    show(w.browCut, 0.42);
+    if (show(w.cheekDrip, 0.48)) w.cheekDrip.scale.y = 0.5 + d * 0.9;
+    show(w.mouth, 0.55);
+    show(w.browCut2, 0.72);
+    if (show(w.swell, 0.35)) w.swell.scale.setScalar(0.6 + (d - 0.35) * 1.6);
+    if (show(w.bruise, 0.45)) w.bruise.material.opacity = 0.25 + d * 0.45;
+    for (const [i, c] of w.chest.entries()) if (show(c, 0.55 + i * 0.1)) c.scale.y = 0.6 + d;
+    // skin flushes and gets slick with sweat and blood
+    if (this.skinM) {
+      this.skinM.color.copy(this.skinBase).lerp(new THREE.Color("#b5534a"), d * 0.1);
+      this.skinM.roughness = 0.55 - d * 0.12;
+    }
+  }
+
+  buildWounds() {
+    // a little self-glow keeps blood reading as red under the arena lights
+    const blood = mat("#b3120f", { roughness: 0.22, metalness: 0.05, emissive: "#4a0000" });
+    const fresh = mat("#d4201a", { roughness: 0.18, metalness: 0.05, emissive: "#5a0000" });
+    const H = this.head, C = this.j.chest;
+    const piece = (parent, w, h, d, x, y, z, m = blood, rz = 0) => {
+      const g = new THREE.BoxGeometry(w, h, d);
+      g.translate(0, -h / 2, 0); // hangs down from its top, so scaling makes it drip longer
+      const o = new THREE.Mesh(g, m);
+      o.position.set(x, y, z);
+      o.rotation.z = rz;
+      o.visible = false;
+      parent.add(o);
+      return o;
+    };
+    this.wounds = {
+      forehead: piece(H, 0.034, 0.006, 0.006, 0.015, 0.082, 0.088, fresh, 0.25),
+      foreheadDrip: piece(H, 0.006, 0.05, 0.005, 0.022, 0.08, 0.091),
+      browCut: piece(H, 0.026, 0.007, 0.006, 0.036, 0.06, 0.09, fresh, -0.3),
+      cheekDrip: piece(H, 0.007, 0.07, 0.005, 0.045, 0.055, 0.084),
+      browCut2: piece(H, 0.024, 0.006, 0.006, -0.034, 0.06, 0.09, fresh, 0.3),
+      noseBlood: piece(H, 0.012, 0.035, 0.006, 0.0, -0.01, 0.1),
+      mouth: piece(H, 0.03, 0.025, 0.006, 0.006, -0.04, 0.094),
+      swell: (() => {
+        const m = new THREE.Mesh(new THREE.SphereGeometry(0.024, 10, 8), mat("#8a4a5a", { roughness: 0.4 }));
+        m.position.set(-0.036, 0.035, 0.078);
+        m.scale.set(1, 0.8, 0.7);
+        m.visible = false;
+        H.add(m);
+        return m;
+      })(),
+      bruise: (() => {
+        const m = new THREE.Mesh(new THREE.SphereGeometry(0.03, 10, 8), new THREE.MeshStandardMaterial({ color: "#5a2b45", transparent: true, opacity: 0.4, roughness: 0.5 }));
+        m.position.set(0.05, 0.0, 0.07);
+        m.scale.set(1, 0.8, 0.4);
+        m.visible = false;
+        H.add(m);
+        return m;
+      })(),
+      chest: [piece(C, 0.007, 0.12, 0.004, 0.02, 0.27, 0.118), piece(C, 0.006, 0.09, 0.004, -0.03, 0.26, 0.115), piece(C, 0.008, 0.15, 0.004, 0.06, 0.22, 0.104)],
+    };
+  }
+
+  /** Out of the cage while injured: a head bandage and a strip of tape over the nose. */
+  setInjured(on) {
+    if (on && !this.bandage) {
+      const white = mat("#f4f1ea", { roughness: 0.9 });
+      const g = new THREE.Group();
+      const band = new THREE.Mesh(new THREE.TorusGeometry(0.098, 0.016, 6, 24), white);
+      band.rotation.x = Math.PI / 2 - 0.15;
+      band.position.y = 0.06;
+      band.scale.set(0.95, 1.05, 1);
+      g.add(band);
+      const tape = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.012, 0.01), white);
+      tape.position.set(0, 0.01, 0.105);
+      g.add(tape);
+      this.head.add(g);
+      this.bandage = g;
+    }
+    if (this.bandage) this.bandage.visible = !!on;
+    this.injured = !!on;
   }
 
   /** null, "waist" or "shoulder". */
@@ -1090,6 +1188,11 @@ export class Fighter3D {
       target.hipR[0] -= Math.sin(this.walk) * a;
       target.knR[0] += Math.max(0, -Math.cos(this.walk)) * a * 1.2;
       target.hipsPos[1] += Math.abs(Math.cos(this.walk)) * 0.02;
+      if (this.injured) {
+        // favouring one leg
+        target.hips[2] += Math.max(0, Math.sin(this.walk)) * 0.12;
+        target.spine[0] += 0.12;
+      }
     }
 
     const k = 1 - Math.exp(-dt * rate);

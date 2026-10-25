@@ -371,6 +371,26 @@ input:focus, select:focus { outline: 2px solid var(--red); outline-offset: 1px; 
 .lineage li.me b { color: var(--gold); }
 .lineage .muted { font-size: 12px; }
 
+/* life: the open world */
+.world-screen { padding: 0; background: #000; z-index: 40; }
+.world-stage { position: absolute; inset: 0; border-radius: 0; touch-action: none; }
+.world-hud { position: absolute; top: 0; left: 0; right: 0; display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: calc(10px + env(safe-area-inset-top)) 12px 10px; background: linear-gradient(rgba(8, 10, 14, .82), rgba(8, 10, 14, 0)); pointer-events: none; }
+.world-hud > * { pointer-events: auto; }
+.hud-stats { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; font-size: 14px; color: #fff; text-shadow: 0 1px 3px #000; }
+.hud-btns { display: flex; gap: 8px; }
+.world-bottom { position: absolute; left: 0; right: 0; bottom: calc(34px + env(safe-area-inset-bottom)); display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; padding: 0 12px; pointer-events: none; }
+.world-bottom .btn { pointer-events: auto; box-shadow: 0 6px 24px rgba(0, 0, 0, .45); }
+.world-help { position: absolute; left: 0; right: 0; bottom: calc(8px + env(safe-area-inset-bottom)); text-align: center; font-size: 12px; color: rgba(255, 255, 255, .8); text-shadow: 0 1px 3px #000; pointer-events: none; }
+.modal-panel .shop-row { display: grid; grid-template-columns: 36px 1fr auto; gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line, #262a33); }
+.swatch { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; font-size: 20px; border: 1px solid rgba(255, 255, 255, .15); }
+.phone { max-width: 420px; margin: 0 auto; }
+.phone-head { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 12px; background: linear-gradient(135deg, #7c3aed, #db2777); color: #fff; margin-bottom: 10px; }
+.feed { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; max-height: 50vh; overflow: auto; }
+.post { border: 1px solid var(--line, #262a33); border-radius: 12px; padding: 10px 12px; }
+.comment { font-size: 13px; margin-top: 4px; }
+.world-bottom .btn { width: auto; min-width: 180px; }
+
 </style>
 </head>
 <body>
@@ -378,6 +398,7 @@ input:focus, select:focus { outline: 2px solid var(--red); outline-offset: 1px; 
     <div class="brand">CAGE<span>CAREER</span><sup>3D</sup></div>
     <div class="topright">
       <div id="topstats" class="topstats"></div>
+      <button class="btn small gold" data-world id="lifeBtn">🌆 Life</button>
       <button class="btn small ghost" data-saves>💾 Saves</button>
       <button class="btn small ghost" data-hof>🏛 Hall of Fame</button>
       <button class="btn small ghost sound-btn" data-sound aria-label="Toggle sound">🔊</button>
@@ -458,6 +479,14 @@ input:focus, select:focus { outline: 2px solid var(--red); outline-offset: 1px; 
       <div class="fight-log" id="fightLog"></div>
       <div class="fight-controls" id="fightControls"></div>
     </div>
+  </div>
+
+  <!-- Life: the open world -->
+  <div id="worldScreen" class="overlay world-screen hidden">
+    <div id="worldStage" class="stage-host world-stage"></div>
+    <div class="world-hud" id="worldHud"></div>
+    <div class="world-bottom" id="worldBottom"></div>
+    <div class="world-help">Tap the ground or use WASD to walk · Shift to run · drag to look around</div>
   </div>
 
   <!-- Shared modal: save slots, staff market, trash talk, division change, Hall of Fame -->

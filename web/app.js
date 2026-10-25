@@ -40,6 +40,10 @@ let createLook = randomLook();
 let speed = 1;
 try { speed = Number(localStorage.getItem("cc3d_speed")) || 1; } catch { /* ignore */ }
 if (stage) stage.arena.setSpeed(speed);
+if (stage) {
+  stage.world.onNear = () => renderWorldBottom();
+  stage.world.onEnter = (id) => openModal("place", { place: id });
+}
 
 // ------------------------------------------------------------------ helpers
 
@@ -228,6 +232,7 @@ function render() {
   renderNews();
   renderFightScreen();
   renderModal();
+  renderWorld();
   render3d();
 }
 
@@ -237,6 +242,11 @@ function render3d() {
   const fightOpen = !$("fightScreen").classList.contains("hidden");
   if (stage) {
     if (fightOpen) stage.show($("arenaStage"), "arena");
+    else if (worldOpen() && state.exists) {
+      stage.show($("worldStage"), "world");
+      stage.world.setLife({ look: state.fighter.look, weightClass: state.weightClassIndex, style: state.fighter.style, life: state.life,
+        carCatalog: state.life.catalog.cars, injured: state.injuryWeeks > 0 });
+    }
     else if (!state.exists) {
       stage.show($("createStage"), "preview");
       updateCreatePreview();
@@ -275,7 +285,7 @@ function syncSoundButtons() {
 function showcaseFighters() {
   const s = state;
   const champ = s.rank === 0 || (s.belt && (s.belt.interimIsMe || s.belt.held.length > 0));
-  const me = { look: s.fighter.look, name: s.fighter.name, weightClass: s.weightClassIndex, style: s.fighter.style, belt: champ && !s.retired ? "waist" : null };
+  const me = { look: s.fighter.look, name: s.fighter.name, weightClass: s.weightClassIndex, style: s.fighter.style, belt: champ && !s.retired ? "waist" : null, injured: s.injuryWeeks > 0 };
   const o = s.scheduled && !s.retired ? s.scheduled : null;
   const opp = o ? o.opponent : null;
   return opp ? [me, { look: opp.look, name: opp.name, weightClass: s.weightClassIndex, style: opp.style, belt: o.oppRank === 0 ? "shoulder" : null }] : [me];
@@ -711,6 +721,10 @@ function renderModal() {
       <p class="muted">Champions keep their belt when they change division, so you can hold several at once, but each belt must be defended within a year and a half or it's stripped. You fight at <b style="color:var(--text)">${esc(s.weightClass)}</b>. Moving up adds power and chin but costs speed; cutting down adds speed, costs power, and the weight cut drains cardio. You start over in the new division's rankings${s.rank === 0 ? " — but as a champion, you get an immediate superfight for the other belt" : s.rank > 0 && s.rank <= 5 ? " — your reputation lands you at #10" : ""}.</p>
       ${s.divisionCooldown ? `<p class="badge red" style="display:inline-block">Your body needs ${s.divisionCooldown} more weeks before another move.</p>` : ""}
       <div class="btn-row">${opts.map((x) => `<button class="btn ${x > i ? "" : ""}" data-movediv="${x}" ${s.divisionCooldown ? "disabled" : ""}>${x > i ? "▲ Move up to" : "▼ Cut down to"} ${esc(s.weightClasses[x])}</button>`).join("")}</div>`;
+  } else if (modal.kind === "place") {
+    renderPlace(body);
+  } else if (modal.kind === "phone") {
+    renderPhone(body);
   } else if (modal.kind === "hof") {
     const hof = s.hallOfFame || [];
     body.innerHTML = `
@@ -734,6 +748,174 @@ function renderModal() {
           ${h.rivalries.length ? `<div class="muted" style="font-size:12px;margin-top:6px">Rivalries: ${h.rivalries.map(esc).join(" · ")}</div>` : ""}
         </div>`).join("") : `<p class="muted">No retired careers yet. Be the first legend.</p>`}`;
   }
+}
+
+
+// ------------------------------------------------------------------ life: the open world
+
+function worldOpen() {
+  return !$("worldScreen").classList.contains("hidden");
+}
+
+function openWorld() {
+  if (!state || !state.exists) return;
+  $("worldScreen").classList.remove("hidden");
+  if (stage) stage.world.goHome();
+  render();
+}
+
+function closeWorld() {
+  $("worldScreen").classList.add("hidden");
+  if (stage && stage.world.isDriving()) stage.world.toggleDrive();
+  render();
+}
+
+function compact(n) {
+  return n >= 1e6 ? (n / 1e6).toFixed(n >= 1e7 ? 0 : 1) + "M" : n >= 1e3 ? (n / 1e3).toFixed(n >= 1e4 ? 0 : 1) + "K" : String(n);
+}
+
+function moodFace(h) {
+  return h >= 80 ? "😁" : h >= 60 ? "🙂" : h >= 40 ? "😐" : h >= 20 ? "😕" : "😞";
+}
+
+function renderWorld() {
+  if (!worldOpen() || !state || !state.life) return;
+  const s = state, L = s.life;
+  $("worldHud").innerHTML = `
+    <div class="hud-stats">
+      <span title="Cash">💵 <b style="color:${s.money < 0 ? "var(--red)" : "var(--green)"}">${money(s.money)}</b></span>
+      <span title="Happiness: training ×${L.moodMult}">${moodFace(L.happiness)} <b>${L.happiness}</b></span>
+      <span title="Followers">📱 <b>${compact(L.followers)}</b></span>
+      <span title="Energy">⚡ <b>${s.energy}</b></span>
+      <span class="muted">Y${s.year} W${s.week}</span>
+      ${s.injuryWeeks ? `<span class="badge red">Injured ${s.injuryWeeks}w</span>` : ""}
+    </div>
+    <div class="hud-btns">
+      <button class="btn small" data-phone>📱 Phone</button>
+      <button class="btn small primary" data-closeworld>🥊 Career</button>
+    </div>`;
+  renderWorldBottom();
+}
+
+function renderWorldBottom() {
+  if (!worldOpen() || !state) return;
+  const near = stage ? stage.world.near : null;
+  const L = state.life;
+  const car = L.driving && L.catalog.cars.find((c) => c.id === L.driving);
+  const driving = stage && stage.world.isDriving();
+  $("worldBottom").innerHTML = `
+    ${near ? `<button class="btn gold big" data-enter="${near.id}">${near.icon} Enter ${esc(near.name)} <span class="sub">E</span></button>` : ""}
+    ${car ? `<button class="btn" data-drive>${driving ? "🚶 Get out" : "🚗 Drive " + esc(car.name)}</button>` : ""}`;
+}
+
+/** Buttons for one life action, disabled when it's already done this week. */
+function lifeBtn(type, text, extra = "", cls = "") {
+  const done = state.life.done[type];
+  return `<button class="btn ${cls}" data-life="${type}" ${extra} ${done ? "disabled" : ""}>${text}${done ? ` <span class="sub">done this week</span>` : ""}</button>`;
+}
+
+function renderPlace(body) {
+  const s = state, L = s.life, C = L.catalog;
+  const id = modal.place;
+  const P = L.partner;
+  const partnerLine = P ? `<p>❤️ <b>${esc(P.name)}</b> · ${esc(P.job)} · ${P.stage === "married" ? "married" : P.stage === "engaged" ? "engaged 💍" : "dating"}</p>
+      ${bar(P.affection, P.affection > 50 ? "var(--red)" : "var(--orange)")}<p class="muted" style="font-size:12px">Affection ${Math.round(P.affection)}/100</p>` : "";
+  const meet = () => `
+    ${lifeBtn("meet", "👋 Meet someone new")}
+    ${L.candidate ? `<div class="offer contender"><b>${esc(L.candidate.name)}</b>, ${L.candidate.age} · ${esc(L.candidate.job)}
+      <div class="btn-row"><button class="btn primary small" data-life="ask">❤️ Ask them out</button></div>
+      ${P ? `<p class="muted" style="font-size:12px">Careful — you're already with ${esc(P.name)}.</p>` : ""}</div>` : ""}`;
+  const head = (icon, title, sub) => `<h1>${icon} ${title}</h1>${sub ? `<p class="muted">${sub}</p>` : ""}`;
+  if (id === "home") {
+    const H = C.houses[L.house];
+    body.innerHTML = `
+      ${head("🏠", esc(H.name), `Upkeep ${money(H.upkeep)}/week · Happiness ${moodFace(L.happiness)} ${L.happiness} (heading to ${L.target}) · training ×${L.moodMult}`)}
+      ${partnerLine}
+      ${L.kids.length ? `<p>👶 ${L.kids.map((k) => `<b>${esc(k.name)}</b> (${k.age})`).join(", ")}</p>` : ""}
+      ${L.pets.length ? `<p>🐾 ${L.pets.map((p) => `<b>${esc(p.name)}</b> the ${p.kind}`).join(", ")}</p>` : ""}
+      <div class="btn-row">
+        ${lifeBtn("family", "👨‍👩‍👧 Family time")}
+        <button class="btn" data-action="rest" ${s.fightNight ? "disabled" : ""}>😴 Rest at home <span class="sub">ends the week</span></button>
+        ${P && P.stage === "married" ? `<button class="btn" data-life="kids">${L.tryingForKids ? "⏸ Stop trying for a baby" : "👶 Try for a baby"}</button>` : ""}
+      </div>
+      <div class="label">Lifestyle <span class="muted">(weekly spending — bigger means happier and more famous)</span></div>
+      <div class="btn-row">${C.lifestyles.map((l, i) => `<button class="btn small ${i === L.lifestyle ? "gold" : ""}" data-life="lifestyle" data-level="${i}">${esc(l.name)}<span class="sub">${money(l.cost)}/wk</span></button>`).join("")}</div>
+      <p class="muted" style="font-size:12px">Last week: bills ${money(L.lastBills)} · sponsors paid ${money(L.lastSponsor)}.</p>`;
+  } else if (id === "club") {
+    body.innerHTML = `
+      ${head("🪩", "Nightclub", "Bottle service, flashing lights, and the city's most eligible singles. Partying lifts your mood — but cameras are everywhere.")}
+      <div class="btn-row">${lifeBtn("party", "🍾 Party in the VIP section", "", "primary")}</div>
+      ${meet()}`;
+  } else if (id === "cafe") {
+    body.innerHTML = `
+      ${head("☕", "Café & Dining", "Quiet tables, good coffee, and a candlelit restaurant upstairs.")}
+      ${partnerLine}
+      <div class="btn-row">
+        ${P ? lifeBtn("date", `🍷 Take ${esc(P.name)} on a date <span class="sub">${money(L.dateCost)}</span>`, "", "primary") : ""}
+        ${P ? lifeBtn("gift", "🎁 Buy a gift") : ""}
+        ${P && P.stage === "dating" ? lifeBtn("propose", "💍 Propose") : ""}
+        ${P && P.stage === "engaged" ? `<button class="btn gold" data-life="wedding">💒 Have the wedding <span class="sub">${money(L.weddingCost)}</span></button>` : ""}
+      </div>
+      ${!P || P.stage !== "married" ? meet() : ""}`;
+  } else if (id === "gym") {
+    const hurt = s.injuryWeeks > 0, locked = !!s.fightNight;
+    body.innerHTML = `
+      ${head("🥊", "Iron Gym", `Energy ${s.energy}/100 · each session ends the week · happiness bonus ×${L.moodMult}`)}
+      <div class="train-grid">${Object.keys(STAT_LABELS).map((k) => `<button class="btn small" data-train="${k}" ${locked || hurt || s.energy < s.trainCost ? "disabled" : ""}>${STAT_LABELS[k]}</button>`).join("")}</div>
+      <div class="btn-row"><button class="btn" data-action="spar" ${locked || hurt || s.energy < 30 ? "disabled" : ""}>Spar</button></div>
+      ${hurt ? `<p class="badge red" style="display:inline-block">Injured — rest up at home first</p>` : ""}`;
+  } else if (id === "arena") {
+    const o = s.scheduled;
+    body.innerHTML = `
+      ${head("🏆", "GFC Arena", o ? `Next fight: vs ${esc(o.opponent.displayName)} in ${o.weeks} week(s)` : `${s.offers.length} fight offer(s) waiting`)}
+      ${s.fightNight ? `<button class="btn primary big" data-startfight>Walk out to the cage</button>` : `<button class="btn primary" data-closeworld>See fight offers & schedule</button>`}`;
+  } else if (id === "cars") {
+    body.innerHTML = `
+      ${head("🚗", "Luxury Motors", "Pick your ride. Cars lift your mood and your fame; sell them back for 60%.")}
+      ${C.cars.map((c) => {
+        const own = L.cars.includes(c.id);
+        return `<div class="shop-row"><span class="swatch" style="background:${c.color}"></span>
+          <div><b>${esc(c.name)}</b><div class="muted" style="font-size:12px">${money(c.price)} · +${c.joy} happiness${c.fame ? ` · +${c.fame} fame` : ""}</div></div>
+          ${own ? `<span class="btn-row"><button class="btn small ${L.driving === c.id ? "gold" : ""}" data-life="drive" data-id="${c.id}">${L.driving === c.id ? "Driving" : "Drive"}</button><button class="btn small ghost" data-life="sell" data-kind="car" data-id="${c.id}">Sell</button></span>`
+            : `<button class="btn small primary" data-life="buy" data-kind="car" data-id="${c.id}" ${s.money < c.price ? "disabled" : ""}>Buy</button>`}</div>`;
+      }).join("")}`;
+  } else if (id === "realty") {
+    const trade = Math.round(C.houses[L.house].price * 0.85);
+    body.innerHTML = `
+      ${head("🏡", "Prime Realty", `Your current home trades in for ${money(trade)}.`)}
+      ${C.houses.map((h, i) => `<div class="shop-row"><span class="swatch">${["🏢", "🏠", "🏡", "🏖️", "🏰"][i]}</span>
+        <div><b>${esc(h.name)}</b><div class="muted" style="font-size:12px">${h.price ? money(h.price) : "Rent"} · upkeep ${money(h.upkeep)}/wk · +${h.joy} happiness</div></div>
+        ${i === L.house ? `<span class="badge gold">Home</span>` : `<button class="btn small primary" data-life="buy" data-kind="house" data-id="${h.id}" ${s.money + trade < h.price ? "disabled" : ""}>Move in</button>`}</div>`).join("")}`;
+  } else if (id === "pets") {
+    body.innerHTML = `
+      ${head("🐾", "Paws Pet Shop", "A loyal companion follows you everywhere in town.")}
+      ${C.pets.map((p) => `<div class="shop-row"><span class="swatch">${{ dog: "🐕", cat: "🐈", parrot: "🦜", tiger: "🐅" }[p.id]}</span>
+        <div><b>${esc(p.name)}</b><div class="muted" style="font-size:12px">${money(p.price)} · ${money(p.upkeep)}/wk · +${p.joy} happiness</div></div>
+        <button class="btn small primary" data-life="buy" data-kind="pet" data-id="${p.id}" ${s.money < p.price ? "disabled" : ""}>Adopt</button></div>`).join("")}`;
+  }
+}
+
+function renderPhone(body) {
+  const L = state.life;
+  body.innerHTML = `
+    <div class="phone">
+      <div class="phone-head"><b>@${esc(state.fighter.name.toLowerCase().replace(/[^a-z0-9]+/g, ""))}</b>
+        <span>${compact(L.followers)} followers · sponsors ${money(L.sponsorRate)}/wk</span></div>
+      <div class="label">Post <span class="muted">(once a week)</span></div>
+      <div class="btn-row">
+        ${lifeBtn("post", "💪 Training clip", 'data-kind="training"', "small")}
+        ${lifeBtn("post", "🏎️ Flex", 'data-kind="flex"', "small")}
+        ${lifeBtn("post", "❤️ Family pic", 'data-kind="family"', "small")}
+        ${lifeBtn("post", "🎤 Call someone out", 'data-kind="callout"', "small")}
+      </div>
+      <div class="feed">${L.feed.length ? L.feed.map((p) => `
+        <div class="post">
+          <div class="muted" style="font-size:12px">${esc(p.date)}</div>
+          <div>${esc(p.text)}</div>
+          <div class="muted" style="font-size:12px">❤️ ${compact(p.likes)} · +${compact(p.gained)} followers</div>
+          ${p.comments.map((c) => `<div class="comment"><b>@${esc(c.user)}</b> ${esc(c.text)}</div>`).join("")}
+        </div>`).join("") : `<p class="muted">No posts yet. Your fans are waiting.</p>`}</div>
+    </div>`;
 }
 
 // ------------------------------------------------------------------ fight screen
@@ -982,6 +1164,23 @@ document.addEventListener("click", async (ev) => {
     return;
   }
   if (d.closemodal !== undefined) return closeModal();
+  if (d.world !== undefined) return openWorld();
+  if (d.closeworld !== undefined) {
+    modal = null;
+    return closeWorld();
+  }
+  if (d.enter) return openModal("place", { place: d.enter });
+  if (d.phone !== undefined) return openModal("phone");
+  if (d.drive !== undefined) {
+    if (stage) stage.world.toggleDrive();
+    return renderWorldBottom();
+  }
+  if (d.life) {
+    const params = { type: d.life };
+    for (const k of ["kind", "id", "level"]) if (d[k] !== undefined) params[k] = d[k];
+    if (await api("life", params)) render();
+    return;
+  }
   if (d.market !== undefined) return openModal("market");
   if (d.hire !== undefined) return act("staff/hire", { index: d.hire });
   if (d.fire !== undefined) {

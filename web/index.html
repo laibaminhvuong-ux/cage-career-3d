@@ -15,6 +15,7 @@
     <div class="brand">CAGE<span>CAREER</span><sup>3D</sup></div>
     <div class="topright">
       <div id="topstats" class="topstats"></div>
+      <button class="btn small gold" data-world id="lifeBtn">🌆 Life</button>
       <button class="btn small ghost" data-saves>💾 Saves</button>
       <button class="btn small ghost" data-hof>🏛 Hall of Fame</button>
       <button class="btn small ghost sound-btn" data-sound aria-label="Toggle sound">🔊</button>
@@ -95,6 +96,14 @@
       <div class="fight-log" id="fightLog"></div>
       <div class="fight-controls" id="fightControls"></div>
     </div>
+  </div>
+
+  <!-- Life: the open world -->
+  <div id="worldScreen" class="overlay world-screen hidden">
+    <div id="worldStage" class="stage-host world-stage"></div>
+    <div class="world-hud" id="worldHud"></div>
+    <div class="world-bottom" id="worldBottom"></div>
+    <div class="world-help">Tap the ground or use WASD to walk · Shift to run · drag to look around</div>
   </div>
 
   <!-- Shared modal: save slots, staff market, trash talk, division change, Hall of Fame -->
