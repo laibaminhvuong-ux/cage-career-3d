@@ -264,12 +264,13 @@ function render3d() {
       // the fighter editor keeps the 3D preview while it's open
       const e = modal.draft;
       stage.show($("editStage"), "preview");
-      stage.preview.setFighters([{ look: lookString(e.look), weightClass: state.weightClassIndex, style: e.style, ink: e.nickname || state.fighter.name.split(" ").pop() }]);
+      stage.preview.setFighters([{ look: lookString(e.look), weightClass: state.weightClassIndex, style: e.style, name: state.fighter.name, ink: e.nickname || state.fighter.name.split(" ").pop() }]);
     } else if (fightOpen) stage.show($("arenaStage"), "arena");
     else if (worldOpen() && state.exists) {
       stage.show($("worldStage"), "world");
       stage.world.setLife({ look: state.fighter.look, weightClass: state.weightClassIndex, style: state.fighter.style, life: state.life,
         ink: state.fighter.nickname || state.fighter.name.split(" ").pop(),
+        seed: state.fighter.name,
         carCatalog: state.life.catalog.cars, injured: state.injuryWeeks > 0 });
     }
     else if (!state.exists) {
@@ -338,6 +339,7 @@ function lookRows(look, attr) {
   return row("skin", "Skin tone", "swatch") + row("face", "Face", "chip") + row("hair", "Hair", "chip") + row("hairColor", "Hair color", "swatch")
     + row("beard", "Facial hair", "chip") + row("shorts", "Fight shorts", "swatch")
     + row("body", "Body type", "chip") + row("abs", "Abs", "chip")
+    + `<div class="label" style="margin-top:8px">Accessories</div>` + row("headband", "Headband", "chip") + row("wraps", "Feet", "chip") + row("knees", "Knees", "chip")
     + `<div class="label" style="margin-top:8px">Tattoos</div>` + TATTOO_REGIONS.map((r) => row(r.key, r.name, "chip")).join("");
 }
 
@@ -803,7 +805,7 @@ function renderModal() {
       <div class="btn-row"><button class="btn primary" data-saveedit>Save changes</button><button class="btn ghost" data-closemodal>Cancel</button></div>`;
     if (stage) {
       stage.show($("editStage"), "preview");
-      stage.preview.setFighters([{ look: lookString(e.look), weightClass: s.weightClassIndex, style: e.style, ink: e.nickname || s.fighter.name.split(" ").pop() }]);
+      stage.preview.setFighters([{ look: lookString(e.look), weightClass: s.weightClassIndex, style: e.style, name: state.fighter.name, ink: e.nickname || s.fighter.name.split(" ").pop() }]);
     }
   } else if (modal.kind === "place") {
     renderPlace(body);

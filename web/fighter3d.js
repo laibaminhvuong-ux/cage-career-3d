@@ -7,17 +7,23 @@ import { TATTOO_DESIGNS, TATTOO_REGIONS, addTattoos } from "./tattoo3d.js";
 export const LOOK_OPTIONS = {
   skin: ["#f2d2b6", "#e3b48e", "#c98e64", "#a96c45", "#7c4b2c", "#4f301d"],
   hair: ["Bald", "Buzz", "Short", "Mohawk", "Man bun", "Long", "Afro", "Braids", "Dreadlocks"],
-  hairColor: ["#15120f", "#3b2416", "#6e4524", "#c9a25a", "#9c3a1a", "#9b9b9b"],
+  hairColor: ["#15120f", "#3b2416", "#6e4524", "#c9a25a", "#9c3a1a", "#9b9b9b",
+    "#ece6d6", "#e2c46a", "#c2561e", "#2d4fd6", "#e0559a", "#7c3aed", "#1f9d55", "#f4f4f4"],
   beard: ["None", "Stubble", "Goatee", "Full"],
-  shorts: ["#c8102e", "#1d4ed8", "#151515", "#f2f2f2", "#15803d", "#e8a91c", "#7c3aed", "#f97316"],
+  shorts: ["#c8102e", "#1d4ed8", "#151515", "#f2f2f2", "#15803d", "#e8a91c", "#7c3aed", "#f97316",
+    "#0f2a5c", "#0d9488", "#ec4899", "#9ca3af", "#7f1d1d", "#38bdf8", "#84cc16"],
   body: BODY_TYPES.map((b) => b.name),
   abs: ABS.map((a) => a.name),
   ...Object.fromEntries(TATTOO_REGIONS.map((r) => [r.key, TATTOO_DESIGNS])),
   face: FACES.map((f) => f.name),
+  headband: ["None", "Red", "Black", "White", "Blue", "Gold", "Bandana"],
+  wraps: ["None", "White tape", "Black tape", "Ankle sleeves"],
+  knees: ["None", "Black sleeves", "White sleeves"],
 };
+const HEADBAND_COLORS = [null, "#c8102e", "#151515", "#f2f2f2", "#1d4ed8", "#e8a91c", "#7f1d1d"];
 export { TATTOO_REGIONS };
-export const SHORTS_NAMES = ["Red", "Blue", "Black", "White", "Green", "Gold", "Purple", "Orange"];
-const KEYS = ["skin", "hair", "hairColor", "beard", "shorts", "body", "abs", ...TATTOO_REGIONS.map((r) => r.key), "face"];
+export const SHORTS_NAMES = ["Red", "Blue", "Black", "White", "Green", "Gold", "Purple", "Orange", "Navy", "Teal", "Pink", "Silver", "Maroon", "Sky blue", "Lime"];
+const KEYS = ["skin", "hair", "hairColor", "beard", "shorts", "body", "abs", ...TATTOO_REGIONS.map((r) => r.key), "face", "headband", "wraps", "knees"];
 // looks saved before body type and abs existed are athletic and toned
 const LOOK_DEFAULTS = { body: 1, abs: 1 };
 
@@ -47,7 +53,8 @@ export function lookFromName(name) {
   const pick = (k) => Math.floor(r() * LOOK_OPTIONS[k].length);
   return { skin: pick("skin"), hair: pick("hair"), hairColor: Math.floor(r() * 5), beard: pick("beard"), shorts: pick("shorts"), body: pick("body"), abs: pick("abs"),
     ...Object.fromEntries(TATTOO_REGIONS.map((t) => [t.key, r() < 0.3 ? 1 + Math.floor(r() * (TATTOO_DESIGNS.length - 1)) : 0])),
-    face: 1 + Math.floor(r() * (FACES.length - 1)) };
+    face: 1 + Math.floor(r() * (FACES.length - 1)),
+    headband: r() < 0.12 ? 1 + Math.floor(r() * 6) : 0, wraps: r() < 0.35 ? 1 + Math.floor(r() * 3) : 0, knees: r() < 0.15 ? 1 + Math.floor(r() * 2) : 0 };
 }
 
 export function randomLook() {
@@ -876,7 +883,7 @@ export class Fighter3D {
     root.scale.setScalar(height);
 
     // the face is its own finer mesh on the head bone
-    const face = new THREE.Mesh(withColors(buildHeadGeo(look.face || 0)), skin);
+    const face = new THREE.Mesh(withColors(buildHeadGeo(look.face || 0, opts.faceSeed || "")), skin);
     this.faceMesh = face;
     this.bruiseBase = { width, chestY: chest.getWorldPosition(new THREE.Vector3()).y };
     face.castShadow = face.receiveShadow = true;
@@ -898,6 +905,7 @@ export class Fighter3D {
         thumb.rotation.x = 0.6;
       }
     }
+    if (!civ) this.buildAccessories(look, width, head, legs);
     for (const side of ["L", "R"]) {
       if (!civ) continue;
       // shoes
@@ -918,6 +926,46 @@ export class Fighter3D {
     if (!civ) this.buildBelt(width);
     this.setDamage(0, 0, 0);
     this.applyPose(this.cur);
+  }
+
+  /** Headband or bandana, foot and ankle wraps, knee sleeves. */
+  buildAccessories(look, width, head, legs) {
+    const band = HEADBAND_COLORS[look.headband || 0];
+    if (band) {
+      const m = mat(band, { roughness: 0.7 });
+      // across the forehead, dipping lower at the back
+      const ring = mesh(geo("headband", () => new THREE.TorusGeometry(0.097, 0.0085, 8, 36)), m, head, 0, 0.062, -0.006);
+      ring.rotation.x = Math.PI / 2 - 0.28;
+      ring.scale.set(0.93, 1.07, 1.7);
+      if (look.headband === 6) {
+        // bandana: knot and tails at the back
+        mesh(geo("knot", () => new THREE.SphereGeometry(0.016, 8, 6)), m, head, 0, 0.05, -0.105);
+        for (const sx of [-1, 1]) {
+          const tail = mesh(geo("tail", () => new THREE.BoxGeometry(0.018, 0.07, 0.006)), m, head, sx * 0.012, 0.015, -0.11);
+          tail.rotation.z = sx * 0.3;
+        }
+      }
+    }
+    const wrap = look.wraps || 0;
+    if (wrap) {
+      const m = mat(wrap === 1 ? "#f1efe9" : "#141414", { roughness: 0.85 });
+      for (const side of ["L", "R"]) {
+        const kn = legs["kn" + side];
+        const ankle = mesh(new THREE.CylinderGeometry(0.034 * width, 0.036 * width, wrap === 3 ? 0.12 : 0.07, 14), m, kn, 0, wrap === 3 ? -0.36 : -0.39, 0);
+        ankle.scale.z = 1.05;
+        if (wrap !== 3) {
+          // a band around the arch of the foot
+          const arch = mesh(geo("arch", () => new THREE.CylinderGeometry(0.042, 0.042, 0.05, 14)), m, kn, 0, -0.452, 0.05);
+          arch.rotation.x = Math.PI / 2;
+          arch.scale.set(0.95 * width, 1, 0.78);
+        }
+      }
+    }
+    const knees = look.knees || 0;
+    if (knees) {
+      const m = mat(knees === 1 ? "#141414" : "#ecebe6", { roughness: 0.75 });
+      for (const side of ["L", "R"]) mesh(new THREE.CylinderGeometry(0.061 * width, 0.055 * width, 0.14, 16), m, legs["kn" + side], 0, -0.02, 0.004);
+    }
   }
 
   /** The championship belt: worn around the waist, or carried over the shoulder on the walk out. */
@@ -980,8 +1028,15 @@ export class Fighter3D {
     if (this.faceMesh) {
       paint(this.faceMesh.geometry, FACE_BRUISES, () => d, (x, y, z, out) => {
         // facial hair: skin color is multiplied by this, so darken toward the hair color
+        // lips: a touch darker and redder than the skin
+        const le = (x / 0.024) ** 2 + ((y + 0.041) / 0.012) ** 2;
+        const lip = z > 0.085 && le < 1 ? Math.min(1, (1 - le) * 2.5) : 0;
         const k = this.beardShade(x, y, z);
-        if (!k) return (out[0] = out[1] = out[2] = 1);
+        if (!k) {
+          out[0] = 1 - lip * 0.18;
+          out[1] = out[2] = 1 - lip * 0.34;
+          return;
+        }
         const c = this.beardColor, sk = this.skinBase;
         out[0] = 1 + (Math.min(1, c.r / Math.max(0.05, sk.r)) - 1) * k;
         out[1] = 1 + (Math.min(1, c.g / Math.max(0.05, sk.g)) - 1) * k;
@@ -1085,18 +1140,19 @@ export class Fighter3D {
     const browM = mat(LOOK_OPTIONS.hairColor[look.hairColor], { roughness: 0.9 });
     const lipM = mat(new THREE.Color(LOOK_OPTIONS.skin[look.skin]).multiplyScalar(0.72).getStyle(), { roughness: 0.45 });
     for (const sx of [-1, 1]) {
-      mesh(geo("eyeWhite", () => new THREE.SphereGeometry(0.0118, 14, 10)), white, head, sx * 0.034, 0.029, 0.083);
+      const Fx = FACES[look.face || 0];
+      mesh(geo("eyeWhite", () => new THREE.SphereGeometry(0.0118, 14, 10)), white, head, sx * 0.034, 0.029, 0.083).scale.y = Fx.eyeH || 1;
       mesh(geo("iris", () => new THREE.SphereGeometry(0.0062, 12, 8)), iris, head, sx * 0.034, 0.029, 0.0905).scale.z = 0.45;
       mesh(geo("pupil", () => new THREE.SphereGeometry(0.0032, 8, 6)), pupil, head, sx * 0.034, 0.029, 0.0935).scale.z = 0.4;
       const lid = mesh(geo("lid", () => withColors(new THREE.SphereGeometry(0.0128, 14, 8, 0, Math.PI * 2, 0, Math.PI * 0.42))), skin, head, sx * 0.034, 0.0305, 0.083);
       // heavier upper lids for monolid eyes
       const F = FACES[look.face || 0];
-      lid.rotation.x = 0.35 + (1 - (F.lid ?? 1)) * 0.7;
+      lid.rotation.x = 0.35 + (1 - (F.lid ?? 1)) * 0.35;
       const brow = mesh(geo("brow", () => new THREE.CapsuleGeometry(0.0045, 0.03, 3, 6)), browM, head, sx * 0.035, 0.056, 0.0985 + (F.browZ || 0));
       brow.rotation.z = Math.PI / 2 - sx * 0.12;
     }
-    const lips = mesh(geo("lips", () => new THREE.CapsuleGeometry(0.006, 0.03, 3, 8)), lipM, head, 0, -0.041, 0.1);
-    lips.rotation.z = Math.PI / 2;
+    // lips are part of the face mesh; their color is painted in (see the face paint in setDamage)
+    void lipM;
     if (ref) {
       // short, neat grey hair for the referee
       const cap = mesh(new THREE.SphereGeometry(0.104, 18, 12, 0, Math.PI * 2, 0, Math.PI * 0.45), mat("#8d8d8d", { roughness: 0.9 }), head, 0, 0.03, -0.004);

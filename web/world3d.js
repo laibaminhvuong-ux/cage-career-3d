@@ -784,7 +784,7 @@ export class WorldView {
     const S = this.scene;
     if (!this.player || this.playerLook !== info.look) {
       if (this.player) this.player.dispose();
-      this.player = new Fighter3D({ casual: true, look: parseLook(info.look), weightClass: info.weightClass, style: info.style, shirt: "#111111", pants: "#2b3a55", tattooText: info.ink });
+      this.player = new Fighter3D({ casual: true, look: parseLook(info.look), weightClass: info.weightClass, style: info.style, shirt: "#111111", pants: "#2b3a55", tattooText: info.ink, faceSeed: info.seed || "" });
       this.playerLook = info.look;
       this.player.setInjured(this.injured);
       S.add(this.player.root);
@@ -833,7 +833,7 @@ export class WorldView {
     const famX = L.house === 4 ? -35.5 : -30.5;
     if (L.partner) {
       const look = parseLook(L.partner.look);
-      const f = new Fighter3D({ casual: true, look, shirt: shirts[look.shorts], pants: "#1f2937", weightClass: 1, detail: "low" });
+      const f = new Fighter3D({ casual: true, look, shirt: shirts[look.shorts % 8], pants: "#1f2937", weightClass: 1, detail: "low", faceSeed: L.partner.name });
       f.root.position.set(famX, 0, doorZ + 2.4);
       f.root.rotation.y = -0.5;
       S.add(f.root);

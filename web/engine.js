@@ -1335,7 +1335,7 @@ export class Career {
   editFighter(p) {
     const me = this.me;
     if (p.look !== undefined) {
-      if (!/^\d(,\d){4,12}$/.test(String(p.look))) throw new GameError("That look isn't valid.");
+      if (!/^\d{1,2}(,\d{1,2}){4,15}$/.test(String(p.look))) throw new GameError("That look isn't valid.");
       me.look = String(p.look);
     }
     if (p.nickname !== undefined) {
@@ -2609,7 +2609,7 @@ export function unpackCareer(text) {
 // ------------------------------------------------------------------ the game API (formerly Main.java)
 
 const MAX_SLOTS = 5;
-const LOOK = /^\d(,\d){4,12}$/;
+const LOOK = /^\d{1,2}(,\d{1,2}){4,15}$/;
 
 /**
  * Runs the game against a storage backend: { kind, getProfile, setProfile, getCareer, setCareer,

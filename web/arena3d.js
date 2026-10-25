@@ -200,7 +200,7 @@ class PreviewView {
     const looks = list.map((d) => (d.look ? parseLook(d.look) : lookFromName(d.name || "x")));
     if (looks.length === 2 && looks[0].shorts === looks[1].shorts) looks[1].shorts = (looks[1].shorts + 3) % 8;
     this.fighters = list.map((d, i) => {
-      const f = new Fighter3D({ look: looks[i], weightClass: d.weightClass, style: d.style, glove: i ? BLUE : RED, tattooText: d.ink });
+      const f = new Fighter3D({ look: looks[i], weightClass: d.weightClass, style: d.style, glove: i ? BLUE : RED, tattooText: d.ink, faceSeed: d.name || "" });
       f.setBelt(d.belt || null);
       f.setInjured(!!d.injured);
       this.scene.add(f.root);
@@ -767,8 +767,8 @@ class ArenaView {
       for (const s of [this.P, this.O]) if (s) { s.f.dispose(); s.ring.removeFromParent(); }
       if (this.ref) this.ref.f.dispose();
       const ink = (c) => c.nickname || String(c.realName || c.name).split(" ").pop();
-      this.P = new Side("p", new Fighter3D({ look: pl, weightClass: info.weightClass, style: f.player.style, glove: RED, tattooText: ink(f.player) }));
-      this.O = new Side("o", new Fighter3D({ look: ol, weightClass: info.weightClass, style: f.opponent.style, glove: BLUE, tattooText: ink(f.opponent) }));
+      this.P = new Side("p", new Fighter3D({ look: pl, weightClass: info.weightClass, style: f.player.style, glove: RED, tattooText: ink(f.player), faceSeed: f.player.realName || f.player.name }));
+      this.O = new Side("o", new Fighter3D({ look: ol, weightClass: info.weightClass, style: f.opponent.style, glove: BLUE, tattooText: ink(f.opponent), faceSeed: f.opponent.realName || f.opponent.name }));
       this.ref = new Side("r", new Fighter3D({ ref: true, look: { skin: 1, hair: 0, hairColor: 5, beard: 0, shorts: 2 } }));
       this.ref.f.setBase("ref");
       for (const s of [this.P, this.O]) {
