@@ -313,11 +313,12 @@ function syncSoundButtons() {
 function showcaseFighters() {
   const s = state;
   const champ = s.rank === 0 || (s.belt && (s.belt.interimIsMe || s.belt.held.length > 0));
-  const me = { look: s.fighter.look, name: s.fighter.name, weightClass: s.weightClassIndex, style: s.fighter.style, female: s.gender === "F", belt: champ && !s.retired ? "waist" : null, injured: s.injuryWeeks > 0,
+  const org = s.gfc ? s.orgShort : "Iron Cage";
+  const me = { org, look: s.fighter.look, name: s.fighter.name, weightClass: s.weightClassIndex, style: s.fighter.style, female: s.gender === "F", belt: champ && !s.retired ? "waist" : null, injured: s.injuryWeeks > 0,
     ink: s.fighter.nickname || s.fighter.name.split(" ").pop() };
   const o = s.scheduled && !s.retired ? s.scheduled : null;
   const opp = o ? o.opponent : null;
-  return opp ? [me, { look: opp.look, name: opp.name, weightClass: s.weightClassIndex, style: opp.style, female: opp.gender === "F", belt: o.oppRank === 0 ? "shoulder" : null }] : [me];
+  return opp ? [me, { org, look: opp.look, name: opp.name, weightClass: s.weightClassIndex, style: opp.style, female: opp.gender === "F", belt: o.oppRank === 0 ? "shoulder" : null }] : [me];
 }
 
 function renderShowcaseCaption() {

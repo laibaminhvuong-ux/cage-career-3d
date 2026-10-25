@@ -1,7 +1,7 @@
 // Procedural 3D fighters: a jointed low-poly body built from primitives, a pose library,
 // and an animator that blends between poses so every move flows into the next.
 import * as THREE from "./vendor/three.module.min.js";
-import { ABS, BIND_POSE, BODY_TYPES, FACES, buildBody, buildHeadGeo } from "./body3d.js";
+import { ABS, BIND_POSE, BODY_TYPES, FACES, buildBody, buildGloveGeo, buildHeadGeo } from "./body3d.js";
 import { TATTOO_DESIGNS, TATTOO_REGIONS, addTattoos } from "./tattoo3d.js";
 
 export const LOOK_OPTIONS = {
@@ -23,6 +23,23 @@ export const LOOK_OPTIONS = {
 };
 const HEADBAND_COLORS = [null, "#c8102e", "#151515", "#f2f2f2", "#1d4ed8", "#e8a91c", "#7f1d1d"];
 export { TATTOO_REGIONS };
+/**
+ * How each promotion looks: its logo (shape, colors, wordmark) and its official gloves. Keyed by
+ * the promotion's short name as fights carry it ("GFC", "PFL", "Iron Cage", ...).
+ */
+export const ORG_STYLES = {
+  GFC: { shape: "octagon", bg: "#c8102e", ring: "#e8a91c", text: "#ffffff", font: "italic 900", gloves: { body: "#141414", panel: "#141414" } },
+  "Contender Series": { label: "CONTENDER", shape: "circle", bg: "#101012", ring: "#e8a91c", text: "#e8a91c", font: "900", gloves: { body: "#141414", panel: "#2a2a2a" } },
+  CWE: { label: "CAGE WARRIORS", shape: "shield", bg: "#0f2557", ring: "#c0c6d0", text: "#ffffff", font: "900", gloves: { body: "#121212", panel: "#e9e9e9" } },
+  PFL: { shape: "hexagon", bg: "#0b0b0b", ring: "#d4a017", text: "#d4a017", font: "900", gloves: { body: "#0d0d0d", panel: "#c99a12", metal: 0.35 } },
+  "Valor FC": { label: "VALOR", shape: "star", bg: "#14532d", ring: "#e5e7eb", text: "#ffffff", font: "italic 900", gloves: { body: "#123d25", panel: "#0d0d0d" } },
+  DFC: { label: "DRAGON FC", shape: "flame", bg: "#7f0d0d", ring: "#f2b705", text: "#f2b705", font: "900", gloves: { body: "#7a0c0c", panel: "#d9a406", metal: 0.3 } },
+  "Iron Cage": { label: "IRON CAGE", shape: "circle", bg: "#3f4248", ring: "#8b8f97", text: "#e6e6e6", font: "800", gloves: { body: "#3a2a1f", panel: "#2b1f17" } },
+};
+export function orgStyle(org) {
+  return ORG_STYLES[org] || ORG_STYLES.GFC;
+}
+
 export const SHORTS_NAMES = ["Red", "Blue", "Black", "White", "Green", "Gold", "Purple", "Orange", "Navy", "Teal", "Pink", "Silver", "Maroon", "Sky blue", "Lime"];
 const KEYS = ["skin", "hair", "hairColor", "beard", "shorts", "body", "abs", ...TATTOO_REGIONS.map((r) => r.key), "face", "headband", "wraps", "knees"];
 // looks saved before body type and abs existed are athletic and toned
@@ -774,12 +791,125 @@ function paint(geo, spots, amount, base) {
   C.needsUpdate = true;
 }
 
-/** Skin: a soft sheen at grazing angles and a thin clearcoat for sweat. */
+// Surface detail drawn by the shader, so it needs no textures or UVs: a 3D noise in the model's
+// own (bind-pose) space, so it sticks to the skin as it moves. kinds: skin (pores and a blotchy
+// tone), cloth (a fine weave), hair (strands), leather (grain). Every kind also darkens the
+// baked creases ("occl" attribute) and fades its fine bumps out with distance so it never shimmers.
+const NOISE_GLSL = `
+varying vec3 vDetailPos;
+varying float vOccl;
+float dHash(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+float dNoise(vec3 x) {
+  vec3 i = floor(x), f = fract(x);
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(mix(dHash(i), dHash(i + vec3(1, 0, 0)), f.x), mix(dHash(i + vec3(0, 1, 0)), dHash(i + vec3(1, 1, 0)), f.x), f.y),
+             mix(mix(dHash(i + vec3(0, 0, 1)), dHash(i + vec3(1, 0, 1)), f.x), mix(dHash(i + vec3(0, 1, 1)), dHash(i + vec3(1, 1, 1)), f.x), f.y), f.z);
+}
+vec3 dPerturb(vec3 surf_pos, vec3 surf_norm, vec2 dHdxy, float faceDir) {
+  vec3 sx = dFdx(surf_pos), sy = dFdy(surf_pos);
+  vec3 r1 = cross(sy, surf_norm), r2 = cross(surf_norm, sx);
+  float det = dot(sx, r1) * faceDir;
+  vec3 grad = sign(det) * (dHdxy.x * r1 + dHdxy.y * r2);
+  return normalize(abs(det) * surf_norm - grad);
+}`;
+const DETAIL = {
+  skin: { freq: 460, bump: 0.00011, tone: 0.11, toneFreq: 24, occl: [0.58, 0.46, 0.44], stretch: [1, 1, 1] },
+  cloth: { freq: 900, bump: 0.00011, tone: 0.06, toneFreq: 60, occl: [0.45, 0.45, 0.48], stretch: [1, 1, 1] },
+  hair: { freq: 520, bump: 0.00022, tone: 0.3, toneFreq: 260, occl: [0.5, 0.5, 0.5], stretch: [1, 0.12, 1] },
+  leather: { freq: 420, bump: 0.0002, tone: 0.08, toneFreq: 40, occl: [0.45, 0.45, 0.45], stretch: [1, 1, 1] },
+};
+function addDetail(m, kind) {
+  const D = DETAIL[kind];
+  m.customProgramCacheKey = () => "detail-" + kind;
+  m.onBeforeCompile = (sh) => {
+    sh.vertexShader = sh.vertexShader
+      .replace("#include <common>", "#include <common>\nattribute float occl;\nvarying vec3 vDetailPos;\nvarying float vOccl;")
+      .replace("#include <begin_vertex>", "#include <begin_vertex>\nvDetailPos = position;\nvOccl = occl;");
+    const st = `vec3(${D.stretch.map((v) => v.toFixed(3)).join(",")})`;
+    sh.fragmentShader = sh.fragmentShader
+      .replace("#include <common>", "#include <common>" + NOISE_GLSL)
+      .replace("#include <map_fragment>", `#include <map_fragment>
+        {
+          vec3 q = vDetailPos * ${st};
+          float tone = dNoise(q * ${D.toneFreq.toFixed(1)}) * 0.6 + dNoise(q * ${(D.toneFreq * 2.7).toFixed(1)}) * 0.4;
+          diffuseColor.rgb *= 1.0 - ${D.tone.toFixed(3)} * 0.5 + ${D.tone.toFixed(3)} * tone;
+          diffuseColor.rgb *= mix(vec3(1.0), vec3(${D.occl.join(",")}), clamp(vOccl, 0.0, 1.0));
+        }`)
+      .replace("#include <normal_fragment_maps>", `#include <normal_fragment_maps>
+        {
+          vec3 q = vDetailPos * ${st} * ${D.freq.toFixed(1)};
+          float h = dNoise(q) * 0.65 + dNoise(q * 2.3) * 0.35;
+          float fade = clamp(2.0 - length(fwidth(q)) * 1.6, 0.0, 1.0);
+          vec2 dh = vec2(dFdx(h), dFdy(h)) * ${D.bump.toFixed(6)} * fade;
+          normal = dPerturb(-vViewPosition, normal, dh, faceDirection);
+        }`)
+      .replace("#include <aomap_fragment>", `#include <aomap_fragment>
+        reflectedLight.indirectDiffuse *= 1.0 - clamp(vOccl, 0.0, 1.0) * 0.6;
+        reflectedLight.indirectSpecular *= 1.0 - clamp(vOccl, 0.0, 1.0) * 0.7;`);
+  };
+  return m;
+}
+
+/** Skin: pores and tone variation, a soft reddish sheen at grazing angles, a thin clearcoat for sweat. */
 function skinMat(color) {
-  return new THREE.MeshPhysicalMaterial({
-    color, roughness: 0.5, metalness: 0, envMap, envMapIntensity: 0.4,
-    sheen: 0.5, sheenRoughness: 0.6, sheenColor: new THREE.Color("#ff9c84"), clearcoat: 0.12, clearcoatRoughness: 0.55,
-  });
+  return addDetail(new THREE.MeshPhysicalMaterial({
+    color, roughness: 0.52, metalness: 0, envMap, envMapIntensity: 0.38,
+    sheen: 0.55, sheenRoughness: 0.55, sheenColor: new THREE.Color("#ff8f74"), clearcoat: 0.1, clearcoatRoughness: 0.5,
+  }), "skin");
+}
+
+const SOLE = new THREE.Vector3();
+
+/** A hanging lock of hair, from 0 down to -len: knotted and twisted, not a smooth tube. */
+function ropeGeo(r0, r1, len, lump) {
+  const segs = Math.max(8, Math.round(len / 0.006));
+  const g = new THREE.CylinderGeometry(r0, r1, len, 8, segs);
+  g.translate(0, -len / 2, 0);
+  const P = g.attributes.position;
+  for (let i = 0; i < P.count; i++) {
+    const x = P.getX(i), y = P.getY(i), z = P.getZ(i);
+    const a = Math.atan2(z, x);
+    const k = 1 + lump * Math.sin(-y * 330 + a * 2) + lump * 0.6 * Math.sin(-y * 120 + 1.3);
+    // a gentle sway so a row of locks doesn't look combed
+    P.setXYZ(i, x * k + Math.sin(-y * 18) * 0.004, y, z * k + Math.sin(-y * 13 + 1) * 0.003);
+  }
+  g.computeVertexNormals();
+  return g;
+}
+
+const irisCache = {};
+/** An iris: fibres radiating from a dark pupil, a darker ring around the edge. */
+function irisTexture(color) {
+  if (irisCache[color]) return irisCache[color];
+  const c = document.createElement("canvas");
+  c.width = c.height = 128;
+  const g = c.getContext("2d");
+  const base = new THREE.Color(color);
+  g.fillStyle = color;
+  g.fillRect(0, 0, 128, 128);
+  for (let i = 0; i < 260; i++) {
+    const a = Math.random() * Math.PI * 2, r0 = 14 + Math.random() * 10, r1 = 40 + Math.random() * 22;
+    const k = 0.6 + Math.random() * 0.9;
+    g.strokeStyle = `rgba(${Math.min(255, base.r * 255 * k + 20) | 0},${Math.min(255, base.g * 255 * k + 14) | 0},${Math.min(255, base.b * 255 * k + 8) | 0},0.5)`;
+    g.lineWidth = 1 + Math.random() * 1.5;
+    g.beginPath();
+    g.moveTo(64 + Math.cos(a) * r0, 64 + Math.sin(a) * r0);
+    g.lineTo(64 + Math.cos(a + 0.05) * r1, 64 + Math.sin(a + 0.05) * r1);
+    g.stroke();
+  }
+  const ring = g.createRadialGradient(64, 64, 40, 64, 64, 64);
+  ring.addColorStop(0, "rgba(0,0,0,0)");
+  ring.addColorStop(0.75, "rgba(0,0,0,0.55)");
+  ring.addColorStop(1, "rgba(0,0,0,0.9)");
+  g.fillStyle = ring;
+  g.fillRect(0, 0, 128, 128);
+  g.fillStyle = "#050404";
+  g.beginPath();
+  g.arc(64, 64, 17, 0, Math.PI * 2);
+  g.fill();
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return (irisCache[color] = t);
 }
 
 function mesh(g, m, parent, x = 0, y = 0, z = 0) {
@@ -812,11 +942,14 @@ export class Fighter3D {
     const skin = skinMat(LOOK_OPTIONS.skin[look.skin]);
     this.skinM = skin;
     this.skinBase = skin.color.clone();
-    const hairM = mat(LOOK_OPTIONS.hairColor[look.hairColor], { roughness: 0.9 });
-    const shortsM = mat(civ ? opts.pants || "#3c3f46" : LOOK_OPTIONS.shorts[look.shorts], { roughness: 0.75 });
-    const gloveM = mat("#161616", { roughness: 0.42 });
+    const hairM = addDetail(mat(LOOK_OPTIONS.hairColor[look.hairColor], { roughness: 0.62, envMapIntensity: 0.5 }), "hair");
+    const shortsM = addDetail(mat(civ ? opts.pants || "#3c3f46" : LOOK_OPTIONS.shorts[look.shorts], { roughness: 0.62 }), "cloth");
+    // each promotion has its own glove: the body, the knuckle panel and (for some) a fixed strap color
+    const GS = orgStyle(opts.org).gloves;
+    const gloveM = addDetail(mat(GS.body, { roughness: 0.36, envMapIntensity: 0.6 }), "leather");
+    const panelM = addDetail(mat(GS.panel, { roughness: 0.32, envMapIntensity: 0.7, metalness: GS.metal || 0.02 }), "leather");
     const bandM = mat(opts.glove || "#c8102e", { roughness: 0.5 });
-    const shirtM = mat(opts.shirt || "#17181c", { roughness: 0.8 });
+    const shirtM = addDetail(mat(opts.shirt || "#17181c", { roughness: 0.8 }), "cloth");
     const dark = mat("#120d0b", { roughness: 0.4 });
 
     const root = new THREE.Group();
@@ -870,6 +1003,14 @@ export class Fighter3D {
       shortsM.side = THREE.DoubleSide;
       skinned(body.shorts, shortsM);
     }
+    if (body.trim) {
+      // the waistband and hem trim: darker on light shorts, lighter on dark ones
+      const sc = new THREE.Color(LOOK_OPTIONS.shorts[look.shorts]);
+      const lum = sc.r * 0.3 + sc.g * 0.59 + sc.b * 0.11;
+      const trimM = addDetail(mat(lum > 0.35 ? sc.clone().multiplyScalar(0.35) : sc.clone().lerp(new THREE.Color("#ffffff"), 0.55), { roughness: 0.55 }), "cloth");
+      trimM.side = THREE.DoubleSide;
+      skinned(body.trim, trimM);
+    }
     if (body.top) skinned(body.top, shortsM);
     if (body.shirt) skinned(body.shirt, shirtM);
     if (body.pants) skinned(body.pants, shortsM);
@@ -898,15 +1039,24 @@ export class Fighter3D {
     for (const side of ["L", "R"]) {
       const el = arms["el" + side];
       if (!civ) {
-        // open-finger MMA glove: padded knuckles over curled fingers, a wrist strap in the corner's color
-        const glove = mesh(geo("glove", () => new THREE.SphereGeometry(0.058, 16, 12)), gloveM, el, 0, -0.27, 0.008);
-        glove.scale.set(0.95, 1.12, 1.15);
-        const knuckle = mesh(geo("knuckle", () => new THREE.CapsuleGeometry(0.03, 0.05, 4, 10)), gloveM, el, 0, -0.3, 0.035);
-        knuckle.rotation.z = Math.PI / 2;
-        const band = mesh(geo("band", () => new THREE.CylinderGeometry(0.046, 0.046, 0.05, 14)), bandM, el, 0, -0.205, 0);
-        band.scale.z = 1.05;
-        const thumb = mesh(geo("thumb", () => withColors(new THREE.CapsuleGeometry(0.014, 0.035, 4, 8))), skin, el, (side === "L" ? -1 : 1) * 0.035, -0.255, 0.035);
-        thumb.rotation.x = 0.6;
+        // open-finger MMA glove: padded knuckles, bare fingers curled under them, a wrist strap in the corner's color
+        const G = buildGloveGeo(side === "L" ? -1 : 1);
+        mesh(G.leather, gloveM, el);
+        mesh(G.panel, panelM, el);
+        mesh(geo("fingers" + side, () => withColors(G.fingers)), skin, el);
+        const band = mesh(geo("band2", () => {
+          const g = new THREE.CylinderGeometry(0.047, 0.047, 0.042, 24, 1);
+          // rounded edges
+          const P = g.attributes.position;
+          for (let i = 0; i < P.count; i++) {
+            const k = 1 - 0.06 * (Math.abs(P.getY(i)) / 0.021) ** 4;
+            P.setX(i, P.getX(i) * k);
+            P.setZ(i, P.getZ(i) * k);
+          }
+          g.computeVertexNormals();
+          return g;
+        }), bandM, el, 0, -0.212, 0);
+        band.scale.z = 1.06;
       }
     }
     if (!civ) this.buildAccessories(look, width, head, legs);
@@ -1139,21 +1289,41 @@ export class Fighter3D {
 
   buildHead(head, skin, hairM, dark, look, ref) {
     const white = mat("#f1ece4", { roughness: 0.25 });
-    const iris = mat(["#3b2416", "#2a1a10", "#4a6b3a", "#3a5a7a"][(look.skin + look.hair) % 4], { roughness: 0.2 });
+    const iris = new THREE.MeshStandardMaterial({ map: irisTexture(["#4a2c18", "#2e1b10", "#4f6e3c", "#3d6488"][(look.skin + look.hair) % 4]), roughness: 0.3 });
     const pupil = mat("#050505", { roughness: 0.1 });
+    void pupil;
+    const cornea = new THREE.MeshPhysicalMaterial({ color: "#ffffff", transparent: true, opacity: 0.05, roughness: 0.03, clearcoat: 1, envMap, envMapIntensity: 0.5, depthWrite: false });
+    const lashM = mat("#0b0806", { roughness: 0.8 });
     const browM = mat(LOOK_OPTIONS.hairColor[look.hairColor], { roughness: 0.9 });
     const lipM = mat(new THREE.Color(LOOK_OPTIONS.skin[look.skin]).multiplyScalar(0.72).getStyle(), { roughness: 0.45 });
     for (const sx of [-1, 1]) {
       const Fx = FACES[look.face || 0];
-      mesh(geo("eyeWhite", () => new THREE.SphereGeometry(0.0118, 14, 10)), white, head, sx * 0.034, 0.029, 0.083).scale.y = Fx.eyeH || 1;
-      mesh(geo("iris", () => new THREE.SphereGeometry(0.0062, 12, 8)), iris, head, sx * 0.034, 0.029, 0.0905).scale.z = 0.45;
-      mesh(geo("pupil", () => new THREE.SphereGeometry(0.0032, 8, 6)), pupil, head, sx * 0.034, 0.029, 0.0935).scale.z = 0.4;
-      const lid = mesh(geo("lid", () => withColors(new THREE.SphereGeometry(0.0128, 14, 8, 0, Math.PI * 2, 0, Math.PI * 0.42))), skin, head, sx * 0.034, 0.0305, 0.083);
-      // heavier upper lids for monolid eyes
+      mesh(geo("eyeWhite", () => new THREE.SphereGeometry(0.0118, 20, 14)), white, head, sx * 0.034, 0.029, 0.083).scale.y = Fx.eyeH || 1;
+      const ir = mesh(geo("irisDisc", () => new THREE.CircleGeometry(0.0058, 28)), iris, head, sx * 0.034, 0.029, 0.0951);
+      ir.scale.y = Math.min(1, Fx.eyeH || 1);
+      // a clear, wet cornea over the iris catches the highlights
+      mesh(geo("cornea", () => new THREE.SphereGeometry(0.0072, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.5)), cornea, head, sx * 0.034, 0.029, 0.0905).rotation.x = Math.PI / 2;
+      // upper lid: its edge crosses the top of the iris (lower on heavier, monolid eyes), lashes along the edge
       const F = FACES[look.face || 0];
-      lid.rotation.x = 0.35 + (1 - (F.lid ?? 1)) * 0.35;
-      const brow = mesh(geo("brow", () => new THREE.CapsuleGeometry(0.0045, 0.03, 3, 6)), browM, head, sx * 0.035, 0.056, 0.0985 + (F.browZ || 0));
-      brow.rotation.z = Math.PI / 2 - sx * 0.12;
+      const lidCover = Math.PI * 0.42;
+      const lid = mesh(geo("lid", () => withColors(new THREE.SphereGeometry(0.0128, 18, 8, 0, Math.PI * 2, 0, lidCover))), skin, head, sx * 0.034, 0.0295, 0.083);
+      lid.rotation.x = -0.12 + (1 - (F.lid ?? 1)) * 0.3;
+      lid.scale.y = Fx.eyeH || 1;
+      const lash = mesh(geo("lash", () => new THREE.TorusGeometry(0.0128 * Math.sin(lidCover), 0.00075, 4, 20, Math.PI)), lashM, lid, 0, 0.0128 * Math.cos(lidCover), 0);
+      lash.rotation.x = Math.PI / 2;
+      lash.scale.set(1.03, 1.03, 1);
+      // lower lid holds the bottom of the eye
+      mesh(geo("lowLid", () => withColors(new THREE.SphereGeometry(0.0124, 18, 6, 0, Math.PI * 2, Math.PI * 0.655, Math.PI * 0.345))), skin, head, sx * 0.034, 0.029, 0.0832).scale.y = Fx.eyeH || 1;
+      const brow = mesh(geo("brow2", () => {
+        // a tapered brow: thick near the nose, thin at the tail
+        const g = new THREE.CapsuleGeometry(0.004, 0.034, 3, 8);
+        const P = g.attributes.position;
+        for (let i = 0; i < P.count; i++) P.setX(i, P.getX(i) * (1.15 - 0.45 * ((P.getY(i) + 0.021) / 0.042)));
+        g.computeVertexNormals();
+        return g;
+      }), browM, head, sx * 0.035, 0.0555, (F.browZ || 0) + Math.max(0.0935, 0.0735 + 0.0217 * (F.brow ?? 1) * (this.female ? 0.55 : 1)));
+      brow.rotation.set(-0.25, -sx * 0.35, -sx * (Math.PI / 2 - 0.12));
+      brow.scale.set(1, 1, 0.5);
     }
     // lips are part of the face mesh; their color is painted in (see the face paint in setDamage)
     void lipM;
@@ -1179,11 +1349,7 @@ export class Fighter3D {
       cap.rotation.x = -0.25;
       return cap;
     };
-    const strandGeo = (r, len) => geo("strand" + r + len, () => {
-      const g = new THREE.CylinderGeometry(r, r * 0.8, len, 6, 1);
-      g.translate(0, -len / 2, 0);
-      return g;
-    });
+    const strandGeo = (r, len) => geo("strand" + r + len, () => ropeGeo(r, r * 0.8, len, 0.12));
     if (h === "Ponytail") {
       fullCap(0.5);
       mesh(geo("tie", () => new THREE.SphereGeometry(0.02, 8, 6)), hairM, head, 0, 0.05, -0.105);
@@ -1269,8 +1435,10 @@ export class Fighter3D {
       cap.rotation.x = -0.25;
     }
     if (h === "Short") {
-      const fringe = mesh(new THREE.BoxGeometry(0.15, 0.03, 0.05), hairM, head, 0, 0.1, 0.06);
-      fringe.rotation.x = -0.4;
+      // a short fringe swept forward over the hairline
+      const fringe = mesh(geo("fringe", () => new THREE.SphereGeometry(0.06, 16, 10)), hairM, head, 0, 0.1, 0.05);
+      fringe.scale.set(1.2, 0.38, 0.85);
+      fringe.rotation.x = -0.35;
     }
     if (h === "Mohawk") {
       const strip = mesh(new THREE.BoxGeometry(0.04, 0.07, 0.2), hairM, head, 0, 0.1, -0.015);
@@ -1310,11 +1478,7 @@ export class Fighter3D {
       const cap = mesh(capGeo(0.5), hairM, head, 0, 0.03, -0.006);
       cap.scale.set(0.99, 1.2, 1.1);
       cap.rotation.x = -0.25;
-      const locGeo = (len) => geo("loc" + len, () => {
-        const g = new THREE.CylinderGeometry(0.0125, 0.011, len, 6, 1);
-        g.translate(0, -len / 2, 0);
-        return g;
-      });
+      const locGeo = (len) => geo("loc" + len, () => ropeGeo(0.0125, 0.0105, len, 0.09));
       const tipGeo = geo("loctip", () => new THREE.SphereGeometry(0.0115, 6, 5));
       const loc = (angle, y, ring, len, tilt) => {
         const g = new THREE.Group();
@@ -1497,6 +1661,16 @@ export class Fighter3D {
     const j = this.j;
     j.hips.position.set(p.hipsPos[0], this.hipsHome + p.hipsPos[1], p.hipsPos[2]);
     for (const name of JOINTS) j[name].rotation.set(p[name][0], p[name][1], p[name][2]);
+    // standing: bent knees must not push the feet through the canvas, so lift the body until the
+    // lowest heel or toe rests on it (jumps and ground positions are left alone)
+    if (j.hips.position.y > 0.55 && this.root.parent) {
+      this.root.updateMatrixWorld(true);
+      let low = Infinity;
+      for (const kn of [j.knL, j.knR]) for (const z of [-0.035, 0.13]) {
+        low = Math.min(low, this.root.worldToLocal(kn.localToWorld(SOLE.set(0, -0.487, z))).y);
+      }
+      if (low < 0) j.hips.position.y -= low;
+    }
   }
 
   dispose() {

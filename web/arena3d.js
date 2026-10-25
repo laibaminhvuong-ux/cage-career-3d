@@ -2,7 +2,7 @@
 // dashboard) and the fight arena (octagon, crowd, referee, cameras, and a director that
 // turns each fight-engine event into choreography).
 import * as THREE from "./vendor/three.module.min.js";
-import { Fighter3D, setFighterEnv, GROUND_POSES, POSES, SEQUENCES, attack, groundShift, lookFromName, parseLook, submission, takedown } from "./fighter3d.js";
+import { Fighter3D, orgStyle, setFighterEnv, GROUND_POSES, POSES, SEQUENCES, attack, groundShift, lookFromName, parseLook, submission, takedown } from "./fighter3d.js";
 import * as audio from "./audio.js";
 import { WorldView } from "./world3d.js";
 import { RoomEnvironment } from "./vendor/RoomEnvironment.js";
@@ -143,6 +143,72 @@ export function createStage() {
   return { preview, arena, world, show };
 }
 
+/** A promotion's logo: its badge shape in its colors with the wordmark across it. r = radius. */
+export function drawOrgLogo(g, org, x, y, r) {
+  const st = orgStyle(org);
+  const label = (st.label || org).toUpperCase();
+  const path = (rr) => {
+    g.beginPath();
+    if (st.shape === "circle") g.arc(x, y, rr, 0, TAU);
+    else if (st.shape === "octagon" || st.shape === "hexagon") {
+      const n = st.shape === "octagon" ? 8 : 6;
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * TAU + Math.PI / n;
+        g[i ? "lineTo" : "moveTo"](x + Math.cos(a) * rr, y + Math.sin(a) * rr);
+      }
+      g.closePath();
+    } else if (st.shape === "shield") {
+      g.moveTo(x - rr * 0.82, y - rr * 0.78);
+      g.lineTo(x + rr * 0.82, y - rr * 0.78);
+      g.quadraticCurveTo(x + rr * 0.86, y + rr * 0.35, x, y + rr);
+      g.quadraticCurveTo(x - rr * 0.86, y + rr * 0.35, x - rr * 0.82, y - rr * 0.78);
+      g.closePath();
+    } else if (st.shape === "star") {
+      for (let i = 0; i < 10; i++) {
+        const a = (i / 10) * TAU - Math.PI / 2, k = i % 2 ? 0.62 : 1;
+        g[i ? "lineTo" : "moveTo"](x + Math.cos(a) * rr * k, y + Math.sin(a) * rr * k);
+      }
+      g.closePath();
+    } else {
+      // flame: a circle wreathed in licks of fire
+      for (let i = 0; i <= 64; i++) {
+        const a = (i / 64) * TAU, k = 0.86 + 0.14 * Math.max(0, Math.sin(a * 8)) ** 3;
+        g[i ? "lineTo" : "moveTo"](x + Math.cos(a) * rr * k, y + Math.sin(a) * rr * k);
+      }
+      g.closePath();
+    }
+  };
+  g.save();
+  g.fillStyle = st.ring;
+  path(r);
+  g.fill();
+  g.fillStyle = st.bg;
+  path(r * 0.9);
+  g.fill();
+  if (st.shape === "flame") {
+    // a coiled dragon line behind the name
+    g.strokeStyle = st.ring;
+    g.globalAlpha = 0.35;
+    g.lineWidth = r * 0.06;
+    g.beginPath();
+    for (let i = 0; i <= 80; i++) {
+      const t = i / 80, a = t * TAU * 1.6, rr = r * (0.2 + 0.5 * t);
+      g[i ? "lineTo" : "moveTo"](x + Math.cos(a) * rr, y + Math.sin(a) * rr * 0.8);
+    }
+    g.stroke();
+    g.globalAlpha = 1;
+  }
+  g.fillStyle = st.text;
+  g.textAlign = "center";
+  g.textBaseline = "middle";
+  const words = label.split(" ");
+  const lines = label.length > 7 && words.length > 1 ? words : [label];
+  const size = (lines.length > 1 ? 0.42 : label.length <= 3 ? 0.62 : label.length <= 5 ? 0.46 : 0.3) * r;
+  g.font = `${st.font} ${size}px system-ui, sans-serif`;
+  lines.forEach((l, i) => g.fillText(l, x, y + (i - (lines.length - 1) / 2) * size * 1.02 + size * 0.04, r * 1.55));
+  g.restore();
+}
+
 // ====================================================================== preview
 
 class PreviewView {
@@ -200,7 +266,7 @@ class PreviewView {
     const looks = list.map((d) => (d.look ? parseLook(d.look) : lookFromName(d.name || "x")));
     if (looks.length === 2 && looks[0].shorts === looks[1].shorts) looks[1].shorts = (looks[1].shorts + 3) % 8;
     this.fighters = list.map((d, i) => {
-      const f = new Fighter3D({ look: looks[i], weightClass: d.weightClass, style: d.style, glove: i ? BLUE : RED, tattooText: d.ink, faceSeed: d.name || "", female: !!d.female });
+      const f = new Fighter3D({ look: looks[i], weightClass: d.weightClass, style: d.style, glove: i ? BLUE : RED, org: d.org, tattooText: d.ink, faceSeed: d.name || "", female: !!d.female });
       f.setBelt(d.belt || null);
       f.setInjured(!!d.injured);
       this.scene.add(f.root);
@@ -555,9 +621,7 @@ function buildExtras(scene, cornerSpots) {
     g.fillRect(0, 0, w, h);
     g.textAlign = "center";
     g.textBaseline = "middle";
-    g.fillStyle = "#f4b942";
-    g.font = "italic 900 70px system-ui, sans-serif";
-    g.fillText(org, w / 2, 70);
+    drawOrgLogo(g, org, w / 2, 78, 66);
     g.font = "800 54px system-ui, sans-serif";
     g.fillStyle = "#fff";
     g.fillText(red, w * 0.27, h * 0.48, w * 0.45);
@@ -757,19 +821,20 @@ class ArenaView {
     const pl = info.playerLook ? parseLook(info.playerLook) : lookFromName(f.player.realName || f.player.name);
     const ol = f.opponent.look ? parseLook(f.opponent.look) : lookFromName(f.opponent.realName || f.opponent.name);
     if (ol.shorts === pl.shorts) ol.shorts = (ol.shorts + 3) % 8;
-    const key = JSON.stringify([f.player.name, f.opponent.name, pl, ol, info.weightClass]);
+    const org = String(f.org || "GFC");
+    const key = JSON.stringify([f.player.name, f.opponent.name, pl, ol, info.weightClass, org]);
     const shortName = (c) => String(c.realName || c.name).split(" ").pop().toUpperCase();
     const billing = f.belt ? f.belt.label.toUpperCase() : f.rounds === 5 ? "MAIN EVENT · 5 ROUNDS" : "3 ROUNDS";
     const sp = info.sponsors && info.sponsors.length ? "  ·  PRESENTED BY " + info.sponsors.slice(0, 2).join(" & ").toUpperCase() : "";
-    this.extras.drawScreen(shortName(f.player), shortName(f.opponent), billing + sp, String(f.org || "GFC").toUpperCase());
-    this.drawCenterLogo(String(f.org || "GFC").toUpperCase());
+    this.extras.drawScreen(shortName(f.player), shortName(f.opponent), billing + sp, org);
+    this.drawCenterLogo(org);
     if (key !== this.key) {
       this.key = key;
       for (const s of [this.P, this.O]) if (s) { s.f.dispose(); s.ring.removeFromParent(); }
       if (this.ref) this.ref.f.dispose();
       const ink = (c) => c.nickname || String(c.realName || c.name).split(" ").pop();
-      this.P = new Side("p", new Fighter3D({ look: pl, weightClass: info.weightClass, style: f.player.style, glove: RED, tattooText: ink(f.player), faceSeed: f.player.realName || f.player.name, female: f.player.gender === "F" }));
-      this.O = new Side("o", new Fighter3D({ look: ol, weightClass: info.weightClass, style: f.opponent.style, glove: BLUE, tattooText: ink(f.opponent), faceSeed: f.opponent.realName || f.opponent.name, female: f.opponent.gender === "F" }));
+      this.P = new Side("p", new Fighter3D({ look: pl, weightClass: info.weightClass, style: f.player.style, glove: RED, org, tattooText: ink(f.player), faceSeed: f.player.realName || f.player.name, female: f.player.gender === "F" }));
+      this.O = new Side("o", new Fighter3D({ look: ol, weightClass: info.weightClass, style: f.opponent.style, glove: BLUE, org, tattooText: ink(f.opponent), faceSeed: f.opponent.realName || f.opponent.name, female: f.opponent.gender === "F" }));
       this.ref = new Side("r", new Fighter3D({ ref: true, look: { skin: 1, hair: 0, hairColor: 5, beard: 0, shorts: 2 } }));
       this.ref.f.setBase("ref");
       for (const s of [this.P, this.O]) {
@@ -804,25 +869,12 @@ class ArenaView {
     }
     const g = this.logoCanvas.getContext("2d");
     g.clearRect(0, 0, 512, 512);
+    // worn canvas around the logo
     g.fillStyle = "#c9c4b8";
     g.beginPath();
     g.arc(256, 256, 255, 0, TAU);
     g.fill();
-    g.strokeStyle = "rgba(20,20,24,.18)";
-    g.lineWidth = 10;
-    g.beginPath();
-    g.arc(256, 256, 240, 0, TAU);
-    g.stroke();
-    g.fillStyle = "#c8102e";
-    g.beginPath();
-    g.arc(256, 256, 214, 0, TAU);
-    g.fill();
-    g.fillStyle = "#fff";
-    g.textAlign = "center";
-    g.textBaseline = "middle";
-    const size = org.length <= 3 ? 150 : org.length <= 5 ? 110 : 66;
-    g.font = `italic 900 ${size}px system-ui, sans-serif`;
-    g.fillText(org, 256, 262, 400);
+    drawOrgLogo(g, org, 256, 256, 228);
     this.logoTex.needsUpdate = true;
   }
 

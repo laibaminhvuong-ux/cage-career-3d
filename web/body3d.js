@@ -58,27 +58,63 @@ function bodyShapes(w, opts) {
       e("spine", [s * 0.03, y, 0.083 + fat * 0.012], [0.028, 0.026 + (i === 0 ? 0.008 : 0), bump], 0.012 + 0.012 * (1 - A.show));
     }
   }
+  // collarbones, the chest-to-shoulder line every lean fighter shows
+  for (const s of [-1, 1]) c("chest", [s * 0.02, 0.236, 0.062], [s * 0.15 * g, 0.252, 0.012], 0.0105, 0.0095, 0.018);
+  // serratus: the finger-like ridges over the ribs below the armpit
+  if (!F && A.show > 0.4) for (let i = 0; i < 3; i++) for (const s of [-1, 1]) {
+    e("chest", [s * (0.126 - i * 0.004) * g, 0.085 - i * 0.034, 0.05 - i * 0.004], [0.016, 0.01, 0.004 + 0.005 * A.show], 0.028);
+  }
+  // the back: shoulder blades, the muscles between them and the two columns along the spine
+  for (const s of [-1, 1]) {
+    e("chest", [s * 0.078 * g, 0.165, -0.088], [0.048 * g, 0.06, 0.016 + 0.006 * m], 0.025); // shoulder blades
+    e("chest", [s * 0.12 * g, 0.13, -0.07], [0.034 * g * m, 0.04, 0.028 * m], 0.025); // teres / infraspinatus
+    e("chest", [s * 0.038, 0.12, -0.094], [0.032, 0.07, 0.012 + 0.006 * m], 0.025); // rhomboids
+    c("spine", [s * 0.03, -0.07, -0.072], [s * 0.031, 0.17, -0.078], 0.026 * g * (0.8 + 0.2 * m), 0.021 * g, 0.022); // spinal erectors
+  }
   // neck and head
   c("neck", [0, -0.02, 0], [0, 0.1, 0.012], 0.052 * g * (0.95 + m * 0.05), 0.047 * g, 0.04);
   e("neck", [0, -0.005, -0.03], [0.06 * g * m, 0.04, 0.035], 0.04); // back of the neck
+  for (const s of [-1, 1]) c("neck", [s * 0.038, 0.1, -0.008], [s * 0.012, -0.015, 0.042], 0.012 * g, 0.014 * g, 0.018); // the cords down the sides of the neck
+  if (!F) e("neck", [0, 0.045, 0.047], [0.009, 0.012, 0.008], 0.01); // Adam's apple
   for (const s of [-1, 1]) {
     const sh = s > 0 ? "shL" : "shR", el = s > 0 ? "elL" : "elR", hip = s > 0 ? "hipL" : "hipR", kn = s > 0 ? "knL" : "knR";
     // arms
     e(sh, [0, -0.02, 0], [0.07 * g * m, 0.075, 0.068 * g * m], 0.05, "arm"); // deltoid
+    e(sh, [0, -0.05, 0.03], [0.034 * g * m, 0.05, 0.024 * m], 0.02, "arm"); // front delt
+    e(sh, [0, -0.05, -0.03], [0.034 * g * m, 0.05, 0.024 * m], 0.02, "arm"); // rear delt
     c(sh, [0, -0.03, 0], [0, -0.26, 0], 0.052 * g, 0.043 * g, 0.04, "arm");
     e(sh, [0, -0.135, 0.022], [0.04 * g * m, 0.072, 0.04 * g * m], 0.03, "arm"); // biceps
     e(sh, [0, -0.12, -0.024], [0.04 * g * m, 0.085, 0.036 * g * m], 0.03, "arm"); // triceps
     c(el, [0, 0, 0], [0, -0.215, 0], 0.045 * g, 0.031 * g, 0.035, "forearm");
     e(el, [0, -0.06, 0.01], [0.044 * g * m, 0.072, 0.04 * g], 0.03, "forearm");
+    e(el, [s * 0.014, -0.045, 0.024], [0.028 * g * m, 0.065, 0.026 * m], 0.02, "forearm"); // brachioradialis
+    e(el, [0, 0.0, -0.032], [0.02, 0.022, 0.014], 0.015, "forearm"); // the point of the elbow
     if (opts.hands) e(el, [0, -0.265, 0.005], [0.034, 0.05, 0.024], 0.03, "hand");
     // legs
     c(hip, [0, -0.02, 0], [0, -0.4, 0], 0.088 * g, 0.054 * g, 0.05, "leg");
     e(hip, [s * 0.008, -0.17, 0.028], [0.068 * g * m, 0.15, 0.062 * g * m], 0.04, "leg"); // quads
     e(hip, [-s * 0.03, -0.12, 0.01], [0.04 * g, 0.12, 0.045 * g], 0.04, "leg"); // inner thigh
     e(hip, [0, -0.2, -0.03], [0.058 * g, 0.14, 0.05 * g * m], 0.04, "leg"); // hamstrings
+    e(hip, [-s * 0.034, -0.335, 0.036], [0.034 * g * m, 0.055, 0.033 * m], 0.025, "leg"); // the teardrop above the inner knee
+    e(hip, [s * 0.05, -0.2, 0.008], [0.036 * g * m, 0.13, 0.044 * m], 0.03, "leg"); // outer quad
     c(kn, [0, 0, 0], [0, -0.405, 0], 0.05 * g, 0.03 * g, 0.035, "shin");
-    e(kn, [0, -0.12, -0.034], [0.046 * g * m, 0.095, 0.045 * g * m], 0.035, "shin"); // calf
-    if (opts.feet) e(kn, [0, -0.455, 0.045], [0.038, 0.03, 0.105], 0.03, "foot");
+    e(kn, [0, -0.005, 0.044], [0.026, 0.03, 0.016], 0.018, "shin"); // kneecap
+    e(kn, [-s * 0.016, -0.115, -0.038], [0.03 * g * m, 0.08, 0.036 * g * m], 0.03, "shin"); // calf, inner head
+    e(kn, [s * 0.018, -0.1, -0.034], [0.026 * g * m, 0.07, 0.032 * g * m], 0.03, "shin"); // calf, outer head
+    e(kn, [s * 0.012, -0.13, 0.03], [0.016, 0.1, 0.016], 0.02, "shin"); // shin muscle
+    c(kn, [0, -0.25, -0.03], [0, -0.41, -0.034], 0.015, 0.012, 0.02, "shin"); // Achilles tendon
+    e(kn, [s * 0.025, -0.398, 0.002], [0.011, 0.013, 0.011], 0.01, "shin"); // ankle bones
+    e(kn, [-s * 0.022, -0.392, 0.004], [0.011, 0.013, 0.011], 0.01, "shin");
+    if (opts.feet) {
+      // heel, arch and the ball of the foot, then five toes (the big toe on the inside)
+      e(kn, [0, -0.452, -0.018], [0.03, 0.03, 0.036], 0.02, "foot");
+      e(kn, [s * 0.004, -0.456, 0.05], [0.038, 0.024, 0.07], 0.025, "foot");
+      e(kn, [s * 0.004, -0.469, 0.106], [0.042, 0.016, 0.03], 0.018, "foot");
+      c(kn, [-s * 0.021, -0.472, 0.122], [-s * 0.023, -0.474, 0.152], 0.0115, 0.0105, 0.007, "foot");
+      [[-0.001, 0.145, 0.0082], [0.013, 0.14, 0.0076], [0.025, 0.133, 0.0072], [0.035, 0.124, 0.0068]].forEach(([x, z, r]) => {
+        c(kn, [s * x, -0.474, 0.12], [s * x * 1.05, -0.477, z], r, r * 0.92, 0.006, "foot");
+      });
+    }
   }
   return P;
 }
@@ -133,13 +169,54 @@ function field(prims, x, y, z) {
   return d;
 }
 
+/**
+ * A spatial index over the shapes: the box is cut into cells and each cell keeps only the shapes
+ * that can reach it, so a lookup tests a handful of shapes instead of all of them.
+ * Returns the cell's shape list for a point (or null outside the box).
+ */
+function shapeGrid(prims, min, max, margin = 0, cell = 0.05) {
+  const nx = Math.ceil((max.x - min.x) / cell), ny = Math.ceil((max.y - min.y) / cell), nz = Math.ceil((max.z - min.z) / cell);
+  const cells = new Array(nx * ny * nz);
+  const reach = cell * 0.87 + margin;
+  for (let k = 0; k < nz; k++) for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+    const cx = min.x + (i + 0.5) * cell, cy = min.y + (j + 0.5) * cell, cz = min.z + (k + 0.5) * cell;
+    cells[i + nx * (j + ny * k)] = prims.filter((p) => (cx - p.center.x) ** 2 + (cy - p.center.y) ** 2 + (cz - p.center.z) ** 2 < (p.bound + reach) ** 2);
+  }
+  return (x, y, z) => {
+    const i = Math.floor((x - min.x) / cell), j = Math.floor((y - min.y) / cell), k = Math.floor((z - min.z) / cell);
+    if (i < 0 || j < 0 || k < 0 || i >= nx || j >= ny || k >= nz) return null;
+    return cells[i + nx * (j + ny * k)];
+  };
+}
+
+/** The distance field of a set of shapes, sped up with a shapeGrid. */
+function fastField(prims, min, max) {
+  const look = shapeGrid(prims, min, max);
+  return (x, y, z) => {
+    const list = look(x, y, z);
+    if (!list) return field(prims, x, y, z);
+    if (!list.length) return 0.1;
+    let d = 1e9;
+    for (const p of list) d = smin(d, primDist(p, x, y, z), p.k);
+    return d;
+  };
+}
+
 /** Marching cubes over a box; f(x, y, z) < 0 inside. Returns an indexed BufferGeometry. */
 function polygonize(f, min, max, step) {
   const nx = Math.ceil((max.x - min.x) / step) + 1, ny = Math.ceil((max.y - min.y) / step) + 1, nz = Math.ceil((max.z - min.z) / step) + 1;
   const vals = new Float32Array(nx * ny * nz);
   const idx = (i, j, k) => i + nx * (j + ny * k);
-  for (let k = 0; k < nz; k++) for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
-    vals[idx(i, j, k)] = f(min.x + i * step, min.y + j * step, min.z + k * step);
+  // sample in blocks: a block whose centre is far from the surface is all inside or all outside,
+  // so only blocks near the surface get every point evaluated (much faster for fine grids)
+  const BS = 4, reach = step * BS * 0.87 * 1.6 + 0.004;
+  for (let bk = 0; bk < nz; bk += BS) for (let bj = 0; bj < ny; bj += BS) for (let bi = 0; bi < nx; bi += BS) {
+    const ei = Math.min(nx, bi + BS + 1), ej = Math.min(ny, bj + BS + 1), ek = Math.min(nz, bk + BS + 1);
+    const c = f(min.x + (bi + BS / 2) * step, min.y + (bj + BS / 2) * step, min.z + (bk + BS / 2) * step);
+    const far = Math.abs(c) > reach;
+    for (let k = bk; k < ek; k++) for (let j = bj; j < ej; j++) for (let i = bi; i < ei; i++) {
+      vals[idx(i, j, k)] = far ? c : f(min.x + i * step, min.y + j * step, min.z + k * step);
+    }
   }
   const pos = [], index = [], edgeVert = new Map();
   // corner offsets (Bourke order) and edges as [corner, corner]
@@ -195,8 +272,30 @@ function polygonize(f, min, max, step) {
   return g;
 }
 
+/**
+ * Baked contact shading ("occl" attribute, 0 = open, 1 = deep crease): how much of the surface's
+ * own shape crowds each point, sampled a little way out along the normal. It darkens the lines
+ * between muscles, under the pecs, around the eyes and nose, and in folds of cloth.
+ */
+function bakeOcclusion(geo, f, radii = [0.008, 0.02, 0.04], spots = []) {
+  const P = geo.attributes.position.array, N = geo.attributes.normal.array;
+  const out = new Float32Array(P.length / 3);
+  for (let v = 0; v < out.length; v++) {
+    const x = P[v * 3], y = P[v * 3 + 1], z = P[v * 3 + 2], nx = N[v * 3], ny = N[v * 3 + 1], nz = N[v * 3 + 2];
+    let o = 0;
+    for (const r of radii) o += Math.max(0, 1 - Math.max(0, f(x + nx * r, y + ny * r, z + nz * r)) / r);
+    o = Math.min(1, (o / radii.length) * 1.7);
+    for (const [sx, sy, sz, rad, amt] of spots) {
+      const d2 = ((x - sx) ** 2 + (y - sy) ** 2 + (z - sz) ** 2) / (rad * rad);
+      if (d2 < 1) o = Math.max(o, amt * (1 - d2) * (1 - d2));
+    }
+    out[v] = o;
+  }
+  geo.setAttribute("occl", new THREE.BufferAttribute(out, 1));
+}
+
 /** Bone weights per vertex: each shape pulls its vertices toward its bone, nearer shapes pull harder. */
-function skin(geo, prims, boneIndex) {
+function skin(geo, prims, boneIndex, near = null) {
   const n = geo.attributes.position.count;
   const P = geo.attributes.position.array;
   const si = new Uint16Array(n * 4), sw = new Float32Array(n * 4);
@@ -204,7 +303,7 @@ function skin(geo, prims, boneIndex) {
   for (let v = 0; v < n; v++) {
     const x = P[v * 3], y = P[v * 3 + 1], z = P[v * 3 + 2];
     acc.clear();
-    for (const p of prims) {
+    for (const p of (near && near(x, y, z)) || prims) {
       const cx = x - p.center.x, cy = y - p.center.y, cz = z - p.center.z;
       if (cx * cx + cy * cy + cz * cz > (p.bound + 0.05) ** 2) continue;
       const d = Math.max(0, primDist(p, x, y, z));
@@ -224,6 +323,29 @@ function skin(geo, prims, boneIndex) {
   geo.setAttribute("skinWeight", new THREE.Float32BufferAttribute(sw, 4));
 }
 
+/** Joins geometries with the same attributes into one. */
+function mergeGeos(list) {
+  const out = new THREE.BufferGeometry();
+  for (const name of Object.keys(list[0].attributes)) {
+    const a0 = list[0].attributes[name];
+    const arr = new a0.array.constructor(list.reduce((n, g) => n + g.attributes[name].array.length, 0));
+    let o = 0;
+    for (const g of list) {
+      arr.set(g.attributes[name].array, o);
+      o += g.attributes[name].array.length;
+    }
+    out.setAttribute(name, new THREE.BufferAttribute(arr, a0.itemSize));
+  }
+  const idx = [];
+  let base = 0;
+  for (const g of list) {
+    for (const i of g.index.array) idx.push(i + base);
+    base += g.attributes.position.count;
+  }
+  out.setIndex(idx);
+  return out;
+}
+
 const cache = new Map();
 
 /**
@@ -238,22 +360,33 @@ export function buildBody(bones, order, w, kind, opts = {}) {
   const civ = kind !== "fighter";
   const shapes = prepare(bodyShapes(w, { ...opts, feet: !civ, hands: civ }), bones);
   const boneIndex = Object.fromEntries(order.map((n, i) => [n, i]));
-  const step = opts.step || (civ ? 0.02 : 0.015);
+  const step = opts.step || (civ ? 0.016 : 0.0105);
   const min = new THREE.Vector3(-0.62, -0.06, -0.3), max = new THREE.Vector3(0.62, 1.82, 0.3);
   const out = {};
-  out.skin = polygonize((x, y, z) => field(shapes, x, y, z), min, max, step);
-  skin(out.skin, shapes, boneIndex);
+  const skinField = fastField(shapes, min, max);
+  const near = shapeGrid(shapes, min, max, 0.05);
+  out.skin = polygonize(skinField, min, max, step);
+  skin(out.skin, shapes, boneIndex, near);
+  // the navel is a dimple in the shading
+  const navel = bones.spine.localToWorld(new THREE.Vector3(0, -0.005, 0.09));
+  bakeOcclusion(out.skin, skinField, undefined, civ ? [] : [[navel.x, navel.y, navel.z, 0.014, 0.9]]);
   const hipY = bones.hipL.getWorldPosition(L).y, kneeY = bones.knL.getWorldPosition(L).y;
   const sub = (filter) => shapes.filter(filter);
   const clothes = (parts, off, lo, hi) => {
-    const g = polygonize((x, y, z) => Math.max(field(parts, x, y, z) - off, lo - y, y - hi), min, max, step);
-    skin(g, shapes, boneIndex);
+    const pf = fastField(parts, min, max);
+    const g = polygonize((x, y, z) => Math.max(pf(x, y, z) - off, lo - y, y - hi), min, max, step);
+    skin(g, shapes, boneIndex, near);
+    bakeOcclusion(g, (x, y, z) => pf(x, y, z) - off, [0.01, 0.025]);
     return g;
   };
   const torsoBones = new Set(["hips", "spine", "chest"]);
   if (!civ) {
     // loose fight shorts: from the waist to mid-thigh
-    out.shorts = clothes(sub((p) => p.bone === "hips" || p.bone === "spine" || p.tag === "leg"), 0.016, kneeY + (hipY - kneeY) * 0.42, hipY + 0.14);
+    const shortsParts = sub((p) => p.bone === "hips" || p.bone === "spine" || p.tag === "leg");
+    const hem = kneeY + (hipY - kneeY) * 0.42;
+    out.shorts = clothes(shortsParts, 0.016, hem, hipY + 0.14);
+    // a stitched waistband and a trim along the hem, a shade apart from the shorts
+    out.trim = mergeGeos([clothes(shortsParts, 0.021, hipY + 0.105, hipY + 0.145), clothes(shortsParts, 0.019, hem - 0.003, hem + 0.022)]);
     if (opts.female) {
       // a sports bra over the chest
       const chestY = bones.chest.getWorldPosition(L).y;
@@ -312,8 +445,12 @@ function headShapes(F = FACES[0], seed = "", female = false) {
     if (soft[k] === undefined) return base;
     return k === "chinZ" ? base + soft[k] : base * soft[k];
   };
-  const e = (list, c, r, k) => list.push({ t: "e", c: new THREE.Vector3(...c), r: new THREE.Vector3(...r), k, inv: new THREE.Matrix4().elements, center: new THREE.Vector3(...c), bound: 9 });
-  const c = (list, a, b, ra, rb, k) => list.push({ t: "c", a: new THREE.Vector3(...a), b: new THREE.Vector3(...b), ra, rb, k, inv: new THREE.Matrix4().elements, center: new THREE.Vector3(...a), bound: 9 });
+  const e = (list, c, r, k) => list.push({ t: "e", c: new THREE.Vector3(...c), r: new THREE.Vector3(...r), k, inv: new THREE.Matrix4().elements,
+    center: new THREE.Vector3(...c), bound: Math.max(...r) + k + 0.01 });
+  const c = (list, a, b, ra, rb, k) => {
+    const A = new THREE.Vector3(...a), B = new THREE.Vector3(...b);
+    list.push({ t: "c", a: A, b: B, ra, rb, k, inv: new THREE.Matrix4().elements, center: A.clone().add(B).multiplyScalar(0.5), bound: A.distanceTo(B) / 2 + Math.max(ra, rb) + k + 0.01 });
+  };
   const fw = v("faceW") * J(0.06), fl = v("faceL") * J(0.05), jw = v("jawW") * J(0.1), lips = v("lips") * J(0.18);
   const bz = v("bridgeZ", 0) + (J(1) - 1) * 0.004, bt = v("bridgeTop", 0), nl = v("noseL") * J(0.12), tw = v("tipW") * J(0.15);
   const cx = v("cheekX") * J(0.06), cr = v("cheekR") * J(0.12), chin = v("chinZ", 0) + (J(1) - 1) * 0.006, brow = v("brow") * J(0.15);
@@ -329,11 +466,18 @@ function headShapes(F = FACES[0], seed = "", female = false) {
   e(add, [0, -0.035, 0.094 + v("lipZ", 0)], [0.024 * J(0.08), 0.008 * lips, 0.012 * (0.85 + lips * 0.15)], 0.006); // upper lip
   e(add, [0, -0.047, 0.092 + v("lipZ", 0)], [0.021 * J(0.08), 0.009 * lips, 0.012 * (0.85 + lips * 0.15)], 0.006); // lower lip
   for (const s of [-1, 1]) {
-    e(add, [s * 0.05 * cx, 0.0, 0.068 + v("cheekZ", 0)], [0.028 * cr, 0.02 * cr, 0.024], 0.015); // cheekbones
+    e(add, [s * 0.05 * cx, 0.0, 0.068 + v("cheekZ", 0)], [0.028 * cr, 0.02 * cr, 0.024], 0.024); // cheekbones
     e(add, [s * 0.012 * v("wingX") * J(0.1), tipY - 0.008, 0.099 + bz * 0.3], [0.009 * v("wingX"), 0.008, 0.009], 0.006); // nostril wings
     e(add, [s * 0.091, 0.01, -0.008], [0.012, 0.03 * J(0.12), 0.022], 0.008); // ears
     e(sub, [s * 0.034, 0.03, 0.095], [0.021, 0.015 * (0.7 + 0.3 * v("eyeH")), 0.014 * v("socket")], 0.01); // eye sockets
+    e(add, [s * 0.06 * jw, -0.056 * fl, -0.004], [0.012, 0.02, 0.024], 0.02); // angle of the jaw
+    e(sub, [s * 0.0075 * v("wingX"), tipY - 0.0125, 0.101 + bz * 0.3], [0.0042 * v("wingX"), 0.0028, 0.0055], 0.003); // nostrils
+    e(sub, [s * 0.097, 0.008, -0.003], [0.005, 0.015, 0.011], 0.004); // the bowl of the ear
+    e(add, [s * 0.098, 0.012, -0.016], [0.006, 0.024, 0.005], 0.004); // the rim of the ear
   }
+  // the line where the lips meet, the groove above the upper lip and the dent above the chin
+  e(sub, [0, -0.0415, 0.106 + v("lipZ", 0)], [0.02 * J(0.08), 0.0016, 0.012], 0.003);
+  e(sub, [0, -0.063 * fl, 0.09 + chin], [0.012, 0.003, 0.006], 0.006);
   return { add, sub };
 }
 
@@ -343,9 +487,13 @@ export function buildHeadGeo(face = 0, seed = "", female = false) {
   const key = face + "|" + seed + "|" + female;
   if (headGeos.has(key)) return headGeos.get(key);
   const { add, sub } = headShapes(FACES[face] || FACES[0], seed, female);
+  const lo = new THREE.Vector3(-0.12, -0.12, -0.13), hi = new THREE.Vector3(0.12, 0.15, 0.14);
+  const near = shapeGrid(add, lo, hi, 0, 0.02);
   const f = (x, y, z) => {
     let d = 1e9;
-    for (const p of add) d = smin(d, primDist(p, x, y, z), p.k);
+    const list = near(x, y, z) || add;
+    if (!list.length) d = 0.05;
+    for (const p of list) d = smin(d, primDist(p, x, y, z), p.k);
     for (const p of sub) {
       const s = -primDist(p, x, y, z), k = p.k;
       const h = Math.max(k - Math.abs(d - s), 0) / k;
@@ -353,7 +501,50 @@ export function buildHeadGeo(face = 0, seed = "", female = false) {
     }
     return d;
   };
-  const g = polygonize(f, new THREE.Vector3(-0.12, -0.12, -0.13), new THREE.Vector3(0.12, 0.15, 0.14), 0.005);
+  const g = polygonize(f, lo, hi, 0.0036);
+  bakeOcclusion(g, f, [0.0025, 0.005]);
   headGeos.set(key, g);
   return g;
+}
+
+const gloveGeos = new Map();
+/**
+ * An open-finger MMA glove in the forearm bone's space (thumb on the side given by thumbSign):
+ * padded knuckles and back of the hand, a palm strap and a thumb loop in leather, and the bare
+ * fingers curled into the palm below the padding.
+ */
+export function buildGloveGeo(thumbSign = 1) {
+  if (gloveGeos.has(thumbSign)) return gloveGeos.get(thumbSign);
+  const prim = (list, t, a, b, ra, rb, k) => list.push(t === "e"
+    ? { t, c: new THREE.Vector3(...a), r: new THREE.Vector3(...b), k: ra, inv: new THREE.Matrix4().elements, center: new THREE.Vector3(...a), bound: 9 }
+    : { t, a: new THREE.Vector3(...a), b: new THREE.Vector3(...b), ra, rb, k, inv: new THREE.Matrix4().elements, center: new THREE.Vector3(...a), bound: 9 });
+  // a fist: the back of the hand and the knuckles face out (-z, -y), the fingers curl into the palm (+z)
+  const leather = [], fingers = [];
+  prim(leather, "e", [0, -0.274, -0.012], [0.043, 0.05, 0.03], 0.014); // padding over the back of the hand
+  prim(leather, "c", [-0.031, -0.318, -0.006], [0.031, -0.318, -0.006], 0.021, 0.021, 0.016); // the knuckle roll
+  prim(leather, "e", [0, -0.262, 0.022], [0.036, 0.032, 0.012], 0.01); // palm strap
+  prim(leather, "c", [0, -0.228, 0], [0, -0.242, 0], 0.043, 0.043, 0.01); // cuff under the wrist strap
+  prim(leather, "c", [thumbSign * 0.039, -0.25, 0.004], [thumbSign * 0.032, -0.288, 0.028], 0.0125, 0.011, 0.008); // thumb loop
+  for (const x of [-0.026, -0.0087, 0.0087, 0.026]) {
+    const k = x === -0.026 * thumbSign ? 0.85 : 1; // the little finger is smaller
+    prim(fingers, "c", [x, -0.332, 0.008], [x * 1.02, -0.322, 0.032 * k], 0.0098 * k, 0.0094 * k, 0.004);
+    prim(fingers, "c", [x * 1.02, -0.322, 0.032 * k], [x, -0.302, 0.036 * k], 0.0094 * k, 0.0086 * k, 0.004);
+  }
+  prim(fingers, "c", [thumbSign * 0.032, -0.288, 0.028], [thumbSign * 0.012, -0.306, 0.045], 0.0102, 0.0094, 0.004); // the thumb, folded over the fingers
+  const sdf = (list) => (x, y, z) => {
+    let d = 1e9;
+    for (const p of list) d = smin(d, primDist(p, x, y, z), p.k);
+    return d;
+  };
+  const min = new THREE.Vector3(-0.075, -0.36, -0.06), max = new THREE.Vector3(0.075, -0.2, 0.075);
+  const out = {};
+  const all = sdf([...leather, ...fingers]), shell = sdf(leather);
+  // the knuckle panel: a skin of the glove's own shape over the front of the knuckles
+  const fields = { leather: shell, panel: (x, y, z) => Math.max(shell(x, y, z) - 0.0024, y + 0.296, z - 0.022), fingers: sdf(fingers) };
+  for (const name of ["leather", "panel", "fingers"]) {
+    out[name] = polygonize(fields[name], min, max, 0.0032);
+    bakeOcclusion(out[name], all, [0.003, 0.008]);
+  }
+  gloveGeos.set(thumbSign, out);
+  return out;
 }
