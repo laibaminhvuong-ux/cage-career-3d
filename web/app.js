@@ -5,6 +5,7 @@ import { Game, GameError } from "./engine.js";
 import { openStore, onSaveError } from "./store.js";
 import { introCall } from "./announcer.js";
 import { startTour } from "./tutorial.js";
+import { LANGUAGES, getLang, isBuiltIn, setLang, startI18n } from "./i18n.js";
 
 const STAT_LABELS = {
   striking: "Striking", power: "Power", speed: "Speed", wrestling: "Wrestling",
@@ -20,6 +21,8 @@ const PLANS = [
 ];
 
 const $ = (id) => document.getElementById(id);
+/** A name (fighter, promotion, gym, pet...) that a translation must leave alone. */
+const nm = (s) => `<span translate="no">${esc(s)}</span>`;
 let state = null;
 let busy = false;
 
@@ -39,10 +42,27 @@ try {
 } catch (e) {
   console.warn("3D disabled:", e);
 }
+// settings kept on this device: frame rate cap (0 = max) and the FPS counter
+const gfx = { fps: 60, meter: false };
+try { Object.assign(gfx, JSON.parse(localStorage.getItem("cc3d_gfx") || "{}")); } catch { /* defaults */ }
+function saveGfx() {
+  try { localStorage.setItem("cc3d_gfx", JSON.stringify(gfx)); } catch { /* ignore */ }
+}
+function applyGfx() {
+  if (!stage) return;
+  stage.setFps(gfx.fps);
+  const meter = $("fpsMeter");
+  meter.classList.toggle("hidden", !gfx.meter);
+  stage.watchFps(gfx.meter ? (n) => { meter.textContent = n + " FPS"; } : null);
+}
+startI18n((status) => {
+  if (status === "offline") toast("Couldn't reach the translator right now. Showing English for the rest.", true);
+});
 let createLook = randomLook();
 let speed = 1;
 try { speed = Number(localStorage.getItem("cc3d_speed")) || 1; } catch { /* ignore */ }
 if (stage) stage.arena.setSpeed(speed);
+applyGfx();
 // what the announcer says shows as a subtitle over the cage
 audio.onSay((text, mood) => {
   const el = $("announcerLine");
@@ -325,8 +345,8 @@ function renderShowcaseCaption() {
   const s = state;
   const opp = s.scheduled && !s.retired ? s.scheduled.opponent : null;
   $("showcaseCap").innerHTML = opp
-    ? `<span class="red">${esc(s.fighter.displayName)}</span><span class="vs">VS</span><span class="blue">${esc(opp.displayName)}</span>`
-    : `<span class="red">${esc(s.fighter.displayName)}</span><span class="muted">${esc(s.fighter.style)} · ${esc(s.weightClass)} · drag to spin</span>`;
+    ? `<span class="red">${nm(s.fighter.displayName)}</span><span class="vs">VS</span><span class="blue">${nm(opp.displayName)}</span>`
+    : `<span class="red">${nm(s.fighter.displayName)}</span><span class="muted">${esc(s.fighter.style)} · ${esc(s.weightClass)} · drag to spin</span>`;
 }
 
 // ------------------------------------------------------------------ fighter look (create screen)
@@ -406,7 +426,7 @@ function renderFighter() {
     ${s.retired ? "" : `<button class="btn ghost small edit-btn" data-editfighter title="Edit your fighter">✏️ Edit</button>`}
     <div class="fighter-top">
       <div>
-        <div class="fighter-name">${esc(f.displayName)}</div>
+        <div class="fighter-name">${nm(f.displayName)}</div>
         <div class="fighter-meta">${esc(f.style)} · ${esc(s.weightClass)} · ${esc(f.country)} · Age ${f.age}</div>
       </div>
       <div class="ovr"><b>${f.overall}</b><span>OVR</span></div>
@@ -438,7 +458,7 @@ function offerHtml(o, withButton) {
       <div class="offer-top">
         <div>
           <div class="offer-meta">${tag}${rank ? " · " + rank : ""}</div>
-          <div class="offer-name"><span class="flink" data-fighter="${o.oppId}">${esc(opp.displayName)}</span>${o.callout ? ` <span class="badge gold">📣 your callout</span>` : ""}</div>
+          <div class="offer-name"><span class="flink" data-fighter="${o.oppId}">${nm(opp.displayName)}</span>${o.callout ? ` <span class="badge gold">📣 your callout</span>` : ""}</div>
           <div class="offer-meta">${opp.record} · ${esc(opp.style)} · ${esc(opp.country)} · Age ${opp.age} · OVR <b>${opp.overall}</b></div>
         </div>
         ${difficulty(opp)}
@@ -467,7 +487,7 @@ function renderFightCard() {
       <h2>Career over</h2>
       <div class="fight-night">
         <h3>${esc(s.legacy)}</h3>
-        <p>${esc(s.fighter.displayName)} retired at ${s.fighter.age} with a record of <b>${s.fighter.record}</b>.</p>
+        <p>${nm(s.fighter.displayName)} retired at ${s.fighter.age} with a record of <b>${s.fighter.record}</b>.</p>
         <p class="muted">${s.titlesWon} title${s.titlesWon === 1 ? "" : "s"} won · ${s.titleDefenses} defenses · ${money(s.earnings)} career earnings · legacy score ${s.legacyScore}</p>
       </div>
       <div class="btn-row"><button class="btn primary big" data-newsave>Start a new career</button><button class="btn big" data-saves>💾 Saves</button></div>`;
@@ -550,8 +570,8 @@ function renderStatus() {
     ${bar(s.fame, "var(--gold)")}
     <div class="gym-box">
       <div style="display:flex;justify-content:space-between;gap:8px;align-items:center">
-        <div><b>${esc(g.name)}</b><div class="muted" style="font-size:12px">Training ×${g.mult} · ${money(g.fee)}/wk</div></div>
-        ${g.nextName ? `<button class="btn small" data-upgrade ${s.money < g.nextCost || s.retired ? "disabled" : ""}>Move up<span class="sub">${esc(g.nextName)} · ${money(g.nextCost)}</span></button>` : `<span class="badge gold">Best gym</span>`}
+        <div><b>${nm(g.name)}</b><div class="muted" style="font-size:12px">Training ×${g.mult} · ${money(g.fee)}/wk</div></div>
+        ${g.nextName ? `<button class="btn small" data-upgrade ${s.money < g.nextCost || s.retired ? "disabled" : ""}>Move up<span class="sub">${nm(g.nextName)} · ${money(g.nextCost)}</span></button>` : `<span class="badge gold">Best gym</span>`}
       </div>
     </div>
     <div class="footer-btns">
@@ -576,7 +596,7 @@ function renderRankings() {
         ${b.nextInLine ? `<span>Title shot</span><b style="color:var(--gold)">You're next in line</b>` : ""}
       </div>
       ${b.lineage.length ? `<details><summary>Belt lineage</summary><ol class="lineage">${b.lineage.map((l) => `
-        <li class="${l.player ? "me" : ""}"><b>${esc(l.name)}</b>${l.interim ? ` <span class="badge">interim</span>` : ""}
+        <li class="${l.player ? "me" : ""}"><b>${nm(l.name)}</b>${l.interim ? ` <span class="badge">interim</span>` : ""}
           <div class="muted">${esc(l.how)} · ${esc(l.date)}${l.defenses ? ` · ${l.defenses} defense${l.defenses === 1 ? "" : "s"}` : ""}</div></li>`).join("")}</ol></details>` : ""}
     </div>` : "";
   $("rankCard").innerHTML = `
@@ -589,7 +609,7 @@ function renderRankings() {
       ${s.rankings.map((r) => `
         <li class="${r.player ? "me" : "tap"} ${r.rank === 0 || r.interim ? "champ" : ""} ${r.rival ? "rivalrow" : ""}" ${r.player ? "" : `data-fighter="${r.id}"`}>
           <span class="rk">${r.rank === 0 ? "C" : r.interim ? "IC" : r.rank}</span>
-          <span>${esc(r.name)} <span class="muted">${r.record}</span></span>
+          <span>${nm(r.name)} <span class="muted">${r.record}</span></span>
           <span class="muted">${r.overall}</span>
         </li>`).join("")}
     </ul>`;
@@ -639,7 +659,7 @@ function renderRival() {
     <h2>⚔ Rival</h2>
     <div class="fighter-top">
       <div>
-        <div class="fighter-name" style="font-size:17px">${esc(r.displayName)}</div>
+        <div class="fighter-name" style="font-size:17px">${nm(r.displayName)}</div>
         <div class="fighter-meta">${r.record} · ${esc(r.style)} · ${esc(r.country)} · Age ${r.age}${r.rank === 0 ? " · Champion" : r.rank > 0 ? " · #" + r.rank : ""}</div>
       </div>
       <div class="ovr"><b>${r.overall}</b><span>OVR</span></div>
@@ -663,14 +683,14 @@ function renderPromotions() {
     <span style="color:${P.ovr >= n.ovr ? "var(--green)" : "var(--muted)"}">OVR ${P.ovr}/${n.ovr}</span>`;
   el.innerHTML = `
     <h2>🏢 Promotions</h2>
-    <p class="muted" style="font-size:13px">Now fighting in <b style="color:var(--text)">${esc(s.orgName)}</b>${s.gfc ? ` · ${s.contractFights ? s.contractFights + " fight" + (s.contractFights === 1 ? "" : "s") + " left on your contract" : "free agent"}` : ""}.
+    <p class="muted" style="font-size:13px">Now fighting in <b style="color:var(--text)">${nm(s.orgName)}</b>${s.gfc ? ` · ${s.contractFights ? s.contractFights + " fight" + (s.contractFights === 1 ? "" : "s") + " left on your contract" : "free agent"}` : ""}.
       Promotions call once you've earned it.</p>
     ${s.promotions.slice().reverse().map((p) => {
       const offer = s.promoOffers.find((o) => o.org === p.id);
       return `<div class="offer ${p.current ? "title" : offer ? "contender" : ""}">
         <div class="offer-top"><div>
           <div class="offer-meta">${esc(p.short)} · ${esc(p.about)}</div>
-          <div class="offer-name">${esc(p.name)}</div>
+          <div class="offer-name">${nm(p.name)}</div>
           <div class="offer-meta">${p.current ? "✅ Your promotion" : need(p.need)}</div>
         </div></div>
         ${offer ? `<div class="offer-money">Contract: ${offer.fights} fights · ${money(offer.bonus)} to sign · purses ×${offer.pay}</div>
@@ -712,7 +732,7 @@ function renderTeam() {
       <div class="staff-row">
         <div>
           <div class="role">${esc(t.title)}</div>
-          ${t.name ? `<b>${esc(t.name)}</b> ${starsHtml(t.stars)}<div class="perk">${esc(t.perk)} · ${money(t.salary)}/wk</div>` : `<span class="muted">Vacant</span>`}
+          ${t.name ? `<b>${nm(t.name)}</b> ${starsHtml(t.stars)}<div class="perk">${esc(t.perk)} · ${money(t.salary)}/wk</div>` : `<span class="muted">Vacant</span>`}
         </div>
         ${t.name && !s.retired ? `<button class="btn small ghost" data-fire="${t.role}">Release</button>` : ""}
       </div>`).join("")}
@@ -750,7 +770,7 @@ function renderModal() {
       ${s.saves.length ? s.saves.map((v) => `
         <div class="hof-entry ${v.active ? "active" : ""}">
           <div class="top">
-            <div><b>${v.missing ? "Missing save" : esc(v.name)}</b>
+            <div><b>${v.missing ? "Missing save" : nm(v.name)}</b>
               ${v.missing ? "" : `<div class="muted" style="font-size:12px">${esc(v.weightClass)} · ${esc(v.style)} · ${esc(v.record)} · ${v.overall} OVR · age ${v.age}</div>`}</div>
             <span>${v.active ? `<span class="badge red">PLAYING</span>` : ""}${v.retired ? ` <span class="badge gold">RETIRED</span>` : ""}</span>
           </div>
@@ -778,7 +798,7 @@ function renderModal() {
     });
   } else if (modal.kind === "export") {
     body.innerHTML = `
-      <h1>⬆️ Export ${esc(modal.name)}</h1>
+      <h1>⬆️ Export ${nm(modal.name)}</h1>
       <p class="muted">Use this to move the fighter to another device or browser, or to share them. Open 💾 Saves → 📂 Load a career there.</p>
       <div class="btn-row"><button class="btn primary" data-savefile>Save as file</button><button class="btn" data-copycode ${modal.code ? "" : "disabled"}>Copy save code</button></div>
       <textarea id="exportCode" rows="5" readonly spellcheck="false" style="width:100%;box-sizing:border-box;font-family:monospace;font-size:12px;background:#0e1014;color:inherit;border:1px solid #333a48;border-radius:8px;padding:8px;margin-top:10px">${esc(modal.code || "Preparing code…")}</textarea>
@@ -792,7 +812,7 @@ function renderModal() {
         return `
         <div class="candidate">
           <div class="top">
-            <div><div class="role muted" style="font-size:11px;letter-spacing:.06em;text-transform:uppercase">${esc(c.title)}</div><b>${esc(c.name)}</b> ${starsHtml(c.stars)}</div>
+            <div><div class="role muted" style="font-size:11px;letter-spacing:.06em;text-transform:uppercase">${esc(c.title)}</div><b>${nm(c.name)}</b> ${starsHtml(c.stars)}</div>
             <button class="btn small ${famous && rich ? "primary" : ""}" data-hire="${c.index}" ${famous && rich ? "" : "disabled"}>Sign · ${money(c.fee)}</button>
           </div>
           <div class="muted" style="font-size:13px;margin-top:4px">${esc(c.perk)}</div>
@@ -806,7 +826,7 @@ function renderModal() {
     if (!target) return closeModal();
     body.innerHTML = `
       <h1>🎤 Press conference</h1>
-      <p class="muted">The cameras are on. What do you say about <b style="color:var(--text)">${esc(target.displayName)}</b>?</p>
+      <p class="muted">The cameras are on. What do you say about <b style="color:var(--text)">${nm(target.displayName)}</b>?</p>
       <div class="tones">
         <button class="btn" data-tone="respect">Respectful<span class="sub">+1 fame, cools the rivalry</span></button>
         <button class="btn" data-tone="trash">Trash talk<span class="sub">Fame & hype, opponent gets motivated</span></button>
@@ -817,7 +837,7 @@ function renderModal() {
     const t = s.lastTalk;
     body.innerHTML = `
       <h1>🎤 Headlines</h1>
-      <div class="quote"><span class="who">${esc(s.fighter.displayName)}</span>"${esc(t.you)}"</div>
+      <div class="quote"><span class="who">${nm(s.fighter.displayName)}</span>"${esc(t.you)}"</div>
       <div class="quote them"><span class="who">${esc(t.target)}</span>"${esc(t.them)}"</div>
       <ul class="news">${t.effects.map((e) => `<li>${esc(e)}</li>`).join("")}</ul>
       <button class="btn primary big" data-closemodal style="margin-top:12px">Done</button>`;
@@ -834,7 +854,7 @@ function renderModal() {
       <div class="start-menu">
         <div class="boot-mark">CAGE<span>CAREER</span><sup>3D</sup></div>
         <p class="muted">Welcome back. What do you want to do?</p>
-        ${s.exists ? `<button class="btn primary big" data-closemodal>▶ Continue as ${esc(s.fighter.displayName)}</button>` : ""}
+        ${s.exists ? `<button class="btn primary big" data-closemodal>▶ Continue as ${nm(s.fighter.displayName)}</button>` : ""}
         <button class="btn big" data-newsave>➕ Start a new fighter</button>
         <button class="btn big" data-saves>💾 Saved fighters & load a career</button>
       </div>`;
@@ -874,7 +894,7 @@ function renderModal() {
       <ul class="ranks">${D.list.map((r) => `
         <li class="${r.player ? "me" : "tap"} ${r.rank === 0 || r.interim ? "champ" : ""} ${r.rival ? "rivalrow" : ""}" ${r.player ? "" : `data-fighter="${r.id}"`}>
           <span class="rk">${r.rank === 0 ? "C" : r.interim ? "IC" : r.rank}</span>
-          <span>${esc(r.name)} <span class="muted">${r.record} · ${esc(r.country)}</span>${relBadge(r.rel)}</span>
+          <span>${nm(r.name)} <span class="muted">${r.record} · ${esc(r.country)}</span>${relBadge(r.rel)}</span>
           <span class="muted">${r.overall}</span>
         </li>`).join("")}</ul>`;
   } else if (modal.kind === "fighter") {
@@ -887,7 +907,7 @@ function renderModal() {
       ${modal.back ? `<button class="btn small ghost" data-backdivs>← ${esc(modal.back)} rankings</button>` : ""}
       <div class="fighter-top" style="margin-top:8px">
         <div>
-          <h1 style="margin:0">${esc(f.displayName)}</h1>
+          <h1 style="margin:0">${nm(f.displayName)}</h1>
           <div class="fighter-meta">${f.record} (${f.koWins} KO · ${f.subWins} SUB · ${f.decWins} DEC) · ${esc(f.style)} · ${esc(f.country)} · Age ${f.age}</div>
           <div class="fighter-meta">${esc(s.orgShort)} ${esc(f.division)} · ${f.rank === 0 ? "🏆 Champion" : f.rank > 0 ? "#" + f.rank : "Unranked"}${f.rival ? " · ⚔ Your rival" : ""}${f.booked ? " · 🥊 Your next opponent" : ""}${f.streak > 1 ? ` · 🔥 ${f.streak}-fight win streak` : ""}</div>
           ${f.h2h ? `<div class="fighter-meta">Against you: ${esc(f.h2h)}</div>` : ""}
@@ -896,7 +916,7 @@ function renderModal() {
       </div>
       <div class="lbl" style="display:flex;justify-content:space-between;font-size:13px;margin:10px 0 4px"><span>Relationship</span><b>${esc(f.relLabel)} · ${f.rel > 0 ? "+" : ""}${f.rel}</b></div>
       <div class="relbar"><i style="left:${relPct}%"></i></div>
-      ${m ? `<div class="quote" style="margin-top:12px"><span class="who">${esc(s.fighter.displayName)}</span>"${esc(m.you)}"</div>
+      ${m ? `<div class="quote" style="margin-top:12px"><span class="who">${nm(s.fighter.displayName)}</span>"${esc(m.you)}"</div>
         <div class="quote them"><span class="who">${esc(m.target)}</span>"${esc(m.them)}"</div>
         <ul class="news">${m.effects.map((e) => `<li>${esc(e)}</li>`).join("")}</ul>` : ""}
       <div class="label">Interact${f.met ? " · you've talked this week" : ""}</div>
@@ -910,6 +930,36 @@ function renderModal() {
       </div>
       <div class="label">Stats <span style="float:right">You · Them</span></div>
       ${taleOfTape(f)}`;
+  } else if (modal.kind === "settings") {
+    const v = audio.volumes(), on = audio.isOn(), cur = getLang();
+    const slider = (k, label) => `<label class="set-row"><span>${label}</span>
+      <input type="range" min="0" max="100" step="5" value="${Math.round(v[k] * 100)}" data-vol="${k}" ${on ? "" : "disabled"}><b data-volval="${k}">${Math.round(v[k] * 100)}%</b></label>`;
+    const opt = (l) => `<option value="${l[0]}" ${l[0] === cur ? "selected" : ""}>${esc(l[1])}</option>`;
+    body.innerHTML = `
+      <h1>⚙️ Settings</h1>
+      <div class="label">🌐 Language</div>
+      <select id="langSelect" class="set-select" translate="no">
+        <optgroup label="Built in">${LANGUAGES.filter((l) => isBuiltIn(l[0])).map(opt).join("")}</optgroup>
+        <optgroup label="More languages (machine translated)">${LANGUAGES.filter((l) => !isBuiltIn(l[0])).map(opt).join("")}</optgroup>
+      </select>
+      <p class="muted" style="font-size:12px">${isBuiltIn(cur) ? "Menus and buttons are translated by hand. Other text is machine translated when you're online." : "Machine translated, by your browser's own translator or online through Google Translate. The commentators still speak English; their words show translated on screen."}</p>
+      <div class="label">🔊 Sound</div>
+      <div class="btn-row">
+        <button class="btn small ${on ? "gold" : "ghost"}" data-soundset="on">On</button>
+        <button class="btn small ${on ? "ghost" : "gold"}" data-soundset="off">Off</button>
+      </div>
+      ${slider("master", "Master volume")}
+      ${slider("music", "Music")}
+      ${slider("sfx", "Sound effects")}
+      ${slider("crowd", "Crowd")}
+      ${slider("voice", "Commentary voice")}
+      <div class="label">🖥️ Graphics</div>
+      <div class="set-row"><span>Frame rate</span><div class="btn-row" style="margin:0">
+        ${[[30, "30 FPS"], [60, "60 FPS"], [0, "Max"]].map(([n, l]) => `<button class="btn small ${gfx.fps === n ? "gold" : "ghost"}" data-fps="${n}">${l}</button>`).join("")}
+      </div></div>
+      <label class="set-row"><span>Show FPS counter</span><input type="checkbox" id="fpsToggle" ${gfx.meter ? "checked" : ""}></label>
+      <p class="muted" style="font-size:12px">30 FPS saves battery and keeps phones cool. Max runs as fast as your screen and device allow.</p>
+      <button class="btn primary big" data-closemodal style="margin-top:10px">Done</button>`;
   } else if (modal.kind === "hof") {
     const hof = s.hallOfFame || [];
     body.innerHTML = `
@@ -918,7 +968,7 @@ function renderModal() {
       ${hof.length ? hof.map((h, n) => `
         <div class="hof-entry ${h.inducted ? "inducted" : ""}">
           <div class="top">
-            <div><b>${n + 1}. ${esc(h.name)}</b>${h.mine ? ` <span class="badge red">YOU</span>` : ""}<div class="muted" style="font-size:12px">${esc(h.style)} · ${esc(h.country)} · ${h.divisions.map(esc).join(" / ")}</div></div>
+            <div><b>${n + 1}. ${nm(h.name)}</b>${h.mine ? ` <span class="badge red">YOU</span>` : ""}<div class="muted" style="font-size:12px">${esc(h.style)} · ${esc(h.country)} · ${h.divisions.map(esc).join(" / ")}</div></div>
             <span class="badge ${h.inducted ? "gold" : ""}">${h.inducted ? "INDUCTED · " : ""}${esc(h.legacy)}</span>
           </div>
           <div class="kv" style="margin-top:8px;font-size:13px">
@@ -1005,21 +1055,21 @@ function renderPlace(body) {
   const s = state, L = s.life, C = L.catalog;
   const id = modal.place;
   const P = L.partner;
-  const partnerLine = P ? `<p>❤️ <b>${esc(P.name)}</b> · ${esc(P.job)} · ${P.stage === "married" ? "married" : P.stage === "engaged" ? "engaged 💍" : "dating"}</p>
+  const partnerLine = P ? `<p>❤️ <b>${nm(P.name)}</b> · ${esc(P.job)} · ${P.stage === "married" ? "married" : P.stage === "engaged" ? "engaged 💍" : "dating"}</p>
       ${bar(P.affection, P.affection > 50 ? "var(--red)" : "var(--orange)")}<p class="muted" style="font-size:12px">Affection ${Math.round(P.affection)}/100</p>` : "";
   const meet = () => `
     ${lifeBtn("meet", "👋 Meet someone new")}
-    ${L.candidate ? `<div class="offer contender"><b>${esc(L.candidate.name)}</b>, ${L.candidate.age} · ${esc(L.candidate.job)}
+    ${L.candidate ? `<div class="offer contender"><b>${nm(L.candidate.name)}</b>, ${L.candidate.age} · ${esc(L.candidate.job)}
       <div class="btn-row"><button class="btn primary small" data-life="ask">❤️ Ask them out</button></div>
-      ${P ? `<p class="muted" style="font-size:12px">Careful — you're already with ${esc(P.name)}.</p>` : ""}</div>` : ""}`;
+      ${P ? `<p class="muted" style="font-size:12px">Careful — you're already with ${nm(P.name)}.</p>` : ""}</div>` : ""}`;
   const head = (icon, title, sub) => `<h1>${icon} ${title}</h1>${sub ? `<p class="muted">${sub}</p>` : ""}`;
   if (id === "home") {
     const H = C.houses[L.house];
     body.innerHTML = `
       ${head("🏠", esc(H.name), `Upkeep ${money(H.upkeep)}/week · Happiness ${moodFace(L.happiness)} ${L.happiness} (heading to ${L.target}) · training ×${L.moodMult}`)}
       ${partnerLine}
-      ${L.kids.length ? `<p>👶 ${L.kids.map((k) => `<b>${esc(k.name)}</b> (${k.age})`).join(", ")}</p>` : ""}
-      ${L.pets.length ? `<p>🐾 ${L.pets.map((p) => `<b>${esc(p.name)}</b> the ${p.kind}`).join(", ")}</p>` : ""}
+      ${L.kids.length ? `<p>👶 ${L.kids.map((k) => `<b>${nm(k.name)}</b> (${k.age})`).join(", ")}</p>` : ""}
+      ${L.pets.length ? `<p>🐾 ${L.pets.map((p) => `<b>${nm(p.name)}</b> the ${p.kind}`).join(", ")}</p>` : ""}
       <div class="btn-row">
         ${lifeBtn("family", "👨‍👩‍👧 Family time")}
         <button class="btn" data-action="rest" ${s.fightNight ? "disabled" : ""}>😴 Rest at home <span class="sub">ends the week</span></button>
@@ -1038,7 +1088,7 @@ function renderPlace(body) {
       ${head("☕", "Café & Dining", "Quiet tables, good coffee, and a candlelit restaurant upstairs.")}
       ${partnerLine}
       <div class="btn-row">
-        ${P ? lifeBtn("date", `🍷 Take ${esc(P.name)} on a date <span class="sub">${money(L.dateCost)}</span>`, "", "primary") : ""}
+        ${P ? lifeBtn("date", `🍷 Take ${nm(P.name)} on a date <span class="sub">${money(L.dateCost)}</span>`, "", "primary") : ""}
         ${P ? lifeBtn("gift", "🎁 Buy a gift") : ""}
         ${P && P.stage === "dating" ? lifeBtn("propose", "💍 Propose") : ""}
         ${P && P.stage === "engaged" ? `<button class="btn gold" data-life="wedding">💒 Have the wedding <span class="sub">${money(L.weddingCost)}</span></button>` : ""}
@@ -1060,7 +1110,7 @@ function renderPlace(body) {
   } else if (id === "arena") {
     const o = s.scheduled;
     body.innerHTML = `
-      ${head("🏆", "The Arena", o ? `Next fight: vs ${esc(o.opponent.displayName)} in ${o.weeks} week(s)` : `${s.offers.length} fight offer(s) waiting`)}
+      ${head("🏆", "The Arena", o ? `Next fight: vs ${nm(o.opponent.displayName)} in ${o.weeks} week(s)` : `${s.offers.length} fight offer(s) waiting`)}
       ${s.fightNight ? `<button class="btn primary big" data-startfight>Walk out to the cage</button>` : `<button class="btn primary" data-closeworld>See fight offers & schedule</button>`}`;
   } else if (id === "cars") {
     body.innerHTML = `
@@ -1253,7 +1303,7 @@ function updateFightBars(e) {
 function renderFightHead(f) {
   const corner = (c, side) => `
     <div class="corner ${side}">
-      <div class="cn">${esc(c.name)}</div>
+      <div class="cn">${nm(c.name)}</div>
       <div class="cm">${c.record} · Sig <span class="sig">${c.sig}</span> · TD ${c.td}${c.kd ? " · KD " + c.kd : ""}</div>
       <div class="bl">HEALTH</div>${bar(c.health, healthColor(c.health), "lg")}
       <div class="bl">STAMINA</div>${bar(c.stamina, "var(--gold)")}
@@ -1317,7 +1367,20 @@ document.addEventListener("click", async (ev) => {
     return;
   }
   if (d.skip !== undefined) { skipPlayback = true; return; }
-  if (d.sound !== undefined) { audio.toggle(); syncSoundButtons(); updateMusic(); return; }
+  if (d.sound !== undefined) { audio.toggle(); syncSoundButtons(); updateMusic(); if (modal && modal.kind === "settings") renderModal(); return; }
+  if (d.settings !== undefined) return openModal("settings");
+  if (d.soundset !== undefined) {
+    audio.setOn(d.soundset === "on");
+    syncSoundButtons();
+    updateMusic();
+    return renderModal();
+  }
+  if (d.fps !== undefined) {
+    gfx.fps = Number(d.fps);
+    saveGfx();
+    applyGfx();
+    return renderModal();
+  }
   if (d.speed !== undefined) {
     speed = speed === 1 ? 2 : speed === 2 ? 0.5 : 1;
     try { localStorage.setItem("cc3d_speed", String(speed)); } catch { /* ignore */ }
@@ -1480,6 +1543,26 @@ function resetFightScreen() {
 
 $("modal").addEventListener("click", (ev) => {
   if (ev.target.id === "modal") closeModal();
+});
+
+// settings: volume sliders, language, FPS counter
+document.addEventListener("input", (ev) => {
+  const k = ev.target.dataset && ev.target.dataset.vol;
+  if (!k) return;
+  audio.setVolume(k, ev.target.value / 100);
+  const out = document.querySelector(`[data-volval="${k}"]`);
+  if (out) out.textContent = ev.target.value + "%";
+});
+document.addEventListener("change", (ev) => {
+  if (ev.target.id === "langSelect") {
+    setLang(ev.target.value);
+    renderModal();
+  }
+  if (ev.target.id === "fpsToggle") {
+    gfx.meter = ev.target.checked;
+    saveGfx();
+    applyGfx();
+  }
 });
 
 $("createForm").addEventListener("change", (ev) => {

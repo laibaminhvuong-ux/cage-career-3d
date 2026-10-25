@@ -53,7 +53,7 @@ export function startTour(ctx, force = false) {
   root.className = "tut";
   root.innerHTML = `<div class="tut-spot"></div><div class="tut-bubble" role="dialog" aria-live="polite">
     <div class="tut-count"></div><h3></h3><p></p>
-    <div class="btn-row"><button class="btn ghost small" data-tut="back">Back</button><button class="btn primary small" data-tut="next">Next</button>
+    <div class="btn-row"><button class="btn ghost small" data-tut="back">Previous</button><button class="btn primary small" data-tut="next">Next</button>
     <button class="btn ghost small" data-tut="skip">Skip tutorial</button></div></div>`;
   document.body.appendChild(root);
   active = { ctx, steps, i: 0, root };

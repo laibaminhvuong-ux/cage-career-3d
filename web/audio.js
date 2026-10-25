@@ -7,11 +7,12 @@ const STORE_KEY = "cc3d_sound";
 let ctx = null;
 let out, musicBus, sfxBus, crowdBus, noiseBuf;
 let on = true;
-let musicVol = 0.8;
+// volume levels, 0..1: everything, music, hits and bells, the crowd, the commentators' voices
+const vol = { master: 1, music: 0.8, sfx: 1, crowd: 1, voice: 1 };
 try {
   const saved = JSON.parse(localStorage.getItem(STORE_KEY) || "{}");
   if (saved.on === false) on = false;
-  if (typeof saved.music === "number") musicVol = saved.music;
+  for (const k of Object.keys(vol)) if (typeof saved[k] === "number") vol[k] = Math.max(0, Math.min(1, saved[k]));
 } catch { /* storage blocked: defaults are fine */ }
 
 let wanted = { name: null, intensity: 1 }; // track the game wants, started once audio is unlocked
@@ -22,7 +23,7 @@ let crowd = null;   // { gain, base }
 const mtof = (m) => 440 * Math.pow(2, (m - 69) / 12);
 
 function persist() {
-  try { localStorage.setItem(STORE_KEY, JSON.stringify({ on, music: musicVol })); } catch { /* ignore */ }
+  try { localStorage.setItem(STORE_KEY, JSON.stringify({ on, ...vol })); } catch { /* ignore */ }
 }
 
 function init() {
@@ -34,16 +35,16 @@ function init() {
   comp.threshold.value = -14;
   comp.ratio.value = 4;
   out = ctx.createGain();
-  out.gain.value = on ? 1 : 0;
+  out.gain.value = on ? vol.master : 0;
   out.connect(comp).connect(ctx.destination);
   musicBus = ctx.createGain();
-  musicBus.gain.value = 0.34 * musicVol;
+  musicBus.gain.value = 0.34 * vol.music;
   musicBus.connect(out);
   sfxBus = ctx.createGain();
-  sfxBus.gain.value = 0.9;
+  sfxBus.gain.value = 0.9 * vol.sfx;
   sfxBus.connect(out);
   crowdBus = ctx.createGain();
-  crowdBus.gain.value = 0.5;
+  crowdBus.gain.value = 0.5 * vol.crowd;
   crowdBus.connect(out);
   noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
   const d = noiseBuf.getChannelData(0);
@@ -65,11 +66,37 @@ export function isOn() {
 }
 
 export function toggle() {
-  on = !on;
+  return setOn(!on);
+}
+
+export function setOn(v) {
+  on = !!v;
   persist();
-  if (ctx) out.gain.setTargetAtTime(on ? 1 : 0, ctx.currentTime, 0.05);
+  applyVolumes();
   if (!on && "speechSynthesis" in window) speechSynthesis.cancel();
   return on;
+}
+
+/** The volume levels (0..1) for master, music, sfx, crowd and voice. */
+export function volumes() {
+  return { ...vol };
+}
+
+export function setVolume(kind, v) {
+  if (!(kind in vol)) return;
+  vol[kind] = Math.max(0, Math.min(1, Number(v) || 0));
+  persist();
+  applyVolumes();
+  if (kind === "voice" && !vol.voice && "speechSynthesis" in window) speechSynthesis.cancel();
+}
+
+function applyVolumes() {
+  if (!ctx) return;
+  const t = ctx.currentTime;
+  out.gain.setTargetAtTime(on ? vol.master : 0, t, 0.05);
+  musicBus.gain.setTargetAtTime(0.34 * vol.music, t, 0.05);
+  sfxBus.gain.setTargetAtTime(0.9 * vol.sfx, t, 0.05);
+  crowdBus.gain.setTargetAtTime(0.5 * vol.crowd, t, 0.05);
 }
 
 // ------------------------------------------------------------------ instruments
@@ -564,13 +591,14 @@ function nextLine() {
   const go = () => {
     if (onSayHook) onSayHook(seg.t, seg.mood);
     if (seg.roar) roar(seg.roar);
-    if (!on || !("speechSynthesis" in window)) {
+    if (!on || !vol.voice || !vol.master || !("speechSynthesis" in window)) {
       sayTimer = setTimeout(nextLine, 600 + seg.t.length * 55);
       return;
     }
     try {
       const u = new SpeechSynthesisUtterance(seg.t);
       Object.assign(u, MOODS[seg.mood] || MOODS.calm);
+      u.volume = Math.min(1, u.volume * vol.voice * vol.master);
       const v = pickVoice(MOODS[seg.mood] && ["call", "color", "ref", "coach", "interview", "fighter"].includes(seg.mood) ? seg.mood : "announcer");
       if (v) u.voice = v;
       let done = false;

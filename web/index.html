@@ -12,7 +12,7 @@
 </head>
 <body>
   <header class="topbar">
-    <div class="brand">CAGE<span>CAREER</span><sup>3D</sup></div>
+    <div class="brand" translate="no">CAGE<span>CAREER</span><sup>3D</sup></div>
     <div class="topright">
       <div id="topstats" class="topstats"></div>
       <button class="btn small gold" data-world id="lifeBtn">🌆 Life</button>
@@ -20,9 +20,11 @@
       <button class="btn small ghost" data-hof>🏛 Hall of Fame</button>
       <button class="btn small ghost" data-help title="How to play">❓</button>
       <button class="btn small ghost sound-btn" data-sound aria-label="Toggle sound">🔊</button>
+      <button class="btn small ghost" data-settings title="Settings" aria-label="Settings">⚙️</button>
     </div>
   </header>
 
+  <div id="fpsMeter" class="fps-meter hidden" translate="no"></div>
   <div id="boot" class="boot">
     <div class="boot-mark">CAGE<span>CAREER</span><sup>3D</sup></div>
     <div class="muted">Loading your fighters…</div>
@@ -96,6 +98,7 @@
           <button class="btn small gold hidden" data-skiptalk id="skipTalk" title="Skip the announcements">⏭ Skip talk</button>
           <button class="btn small ghost" data-speed id="speedBtn" title="Playback speed">1×</button>
           <button class="btn small ghost sound-btn" data-sound aria-label="Toggle sound">🔊</button>
+          <button class="btn small ghost" data-settings title="Settings" aria-label="Settings">⚙️</button>
           <button class="btn small ghost" data-togglelog title="Show the full play-by-play">📜 Log</button>
           <button class="btn small ghost" data-help title="How fights work">❓</button>
         </div>

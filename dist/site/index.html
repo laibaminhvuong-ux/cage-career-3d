@@ -430,11 +430,19 @@ input:focus, select:focus { outline: 2px solid var(--red); outline-offset: 1px; 
 .relbar i { position: absolute; top: -4px; width: 4px; height: 16px; margin-left: -2px; border-radius: 2px; background: var(--text); }
 .tones.meet { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
 
+.set-row { display: grid; grid-template-columns: 1fr minmax(120px, 2fr) 48px; gap: 10px; align-items: center; margin: 8px 0; font-size: 14px; }
+.set-row:has(> .btn-row), .set-row:has(> input[type="checkbox"]) { grid-template-columns: 1fr auto; }
+.set-row input[type="range"] { width: 100%; accent-color: var(--gold); }
+.set-row b { text-align: right; font-variant-numeric: tabular-nums; }
+.set-select { width: 100%; padding: 10px; border-radius: 8px; background: #0f1116; color: var(--text); border: 1px solid var(--line); font-size: 15px; }
+.fps-meter { position: fixed; bottom: 8px; left: 8px; z-index: 50; padding: 2px 8px; border-radius: 6px;
+  background: rgba(0, 0, 0, .6); color: #7cfc9a; font: 700 12px/1.4 ui-monospace, monospace; pointer-events: none; }
+
 </style>
 </head>
 <body>
   <header class="topbar">
-    <div class="brand">CAGE<span>CAREER</span><sup>3D</sup></div>
+    <div class="brand" translate="no">CAGE<span>CAREER</span><sup>3D</sup></div>
     <div class="topright">
       <div id="topstats" class="topstats"></div>
       <button class="btn small gold" data-world id="lifeBtn">🌆 Life</button>
@@ -442,9 +450,11 @@ input:focus, select:focus { outline: 2px solid var(--red); outline-offset: 1px; 
       <button class="btn small ghost" data-hof>🏛 Hall of Fame</button>
       <button class="btn small ghost" data-help title="How to play">❓</button>
       <button class="btn small ghost sound-btn" data-sound aria-label="Toggle sound">🔊</button>
+      <button class="btn small ghost" data-settings title="Settings" aria-label="Settings">⚙️</button>
     </div>
   </header>
 
+  <div id="fpsMeter" class="fps-meter hidden" translate="no"></div>
   <div id="boot" class="boot">
     <div class="boot-mark">CAGE<span>CAREER</span><sup>3D</sup></div>
     <div class="muted">Loading your fighters…</div>
@@ -518,6 +528,7 @@ input:focus, select:focus { outline: 2px solid var(--red); outline-offset: 1px; 
           <button class="btn small gold hidden" data-skiptalk id="skipTalk" title="Skip the announcements">⏭ Skip talk</button>
           <button class="btn small ghost" data-speed id="speedBtn" title="Playback speed">1×</button>
           <button class="btn small ghost sound-btn" data-sound aria-label="Toggle sound">🔊</button>
+          <button class="btn small ghost" data-settings title="Settings" aria-label="Settings">⚙️</button>
           <button class="btn small ghost" data-togglelog title="Show the full play-by-play">📜 Log</button>
           <button class="btn small ghost" data-help title="How fights work">❓</button>
         </div>

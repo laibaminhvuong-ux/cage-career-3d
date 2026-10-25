@@ -132,15 +132,27 @@ export function createStage() {
     resize();
   }
 
-  renderer.setAnimationLoop(() => {
+  // frame rate: capped at 30 or 60, or as fast as the screen allows (0); onFps reports the measured rate
+  let fpsCap = 0, lastFrame = 0, frames = 0, fpsSince = performance.now(), onFps = null;
+  renderer.setAnimationLoop((now) => {
+    if (fpsCap && now - lastFrame < 1000 / fpsCap - 2) return;
+    lastFrame = now;
     const dt = Math.min(clock.getDelta(), 0.1);
     if (!view || !host || !host.isConnected || host.offsetParent === null || document.hidden) return;
     view.update(dt);
     renderer.toneMappingExposure = view.exposure || 1.05;
     renderer.render(view.scene, view.camera);
+    frames++;
+    if (now - fpsSince >= 500) {
+      if (onFps) onFps(Math.round((frames * 1000) / (now - fpsSince)));
+      frames = 0;
+      fpsSince = now;
+    }
   });
+  const setFps = (cap) => { fpsCap = cap === 30 || cap === 60 ? cap : 0; };
+  const watchFps = (fn) => { onFps = fn; };
 
-  return { preview, arena, world, show };
+  return { preview, arena, world, show, setFps, watchFps };
 }
 
 /** A promotion's logo: its badge shape in its colors with the wordmark across it. r = radius. */
