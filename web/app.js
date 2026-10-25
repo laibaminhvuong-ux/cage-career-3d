@@ -777,6 +777,15 @@ function renderModal() {
       <p class="muted">Champions keep their belt when they change division, so you can hold several at once, but each belt must be defended within a year and a half or it's stripped. You fight at <b style="color:var(--text)">${esc(s.weightClass)}</b>. Moving up adds power and chin but costs speed; cutting down adds speed, costs power, and the weight cut drains cardio. You start over in the new division's rankings${s.rank === 0 ? " — but as a champion, you get an immediate superfight for the other belt" : s.rank > 0 && s.rank <= 5 ? " — your reputation lands you at #10" : ""}.</p>
       ${s.divisionCooldown ? `<p class="badge red" style="display:inline-block">Your body needs ${s.divisionCooldown} more weeks before another move.</p>` : ""}
       <div class="btn-row">${opts.map((x) => `<button class="btn ${x > i ? "" : ""}" data-movediv="${x}" ${s.divisionCooldown ? "disabled" : ""}>${x > i ? "▲ Move up to" : "▼ Cut down to"} ${esc(s.weightClasses[x])}</button>`).join("")}</div>`;
+  } else if (modal.kind === "start") {
+    body.innerHTML = `
+      <div class="start-menu">
+        <div class="boot-mark">CAGE<span>CAREER</span><sup>3D</sup></div>
+        <p class="muted">Welcome back. What do you want to do?</p>
+        ${s.exists ? `<button class="btn primary big" data-closemodal>▶ Continue as ${esc(s.fighter.displayName)}</button>` : ""}
+        <button class="btn big" data-newsave>➕ Start a new fighter</button>
+        <button class="btn big" data-saves>💾 Saved fighters & load a career</button>
+      </div>`;
   } else if (modal.kind === "edit") {
     const e = modal.draft;
     body.innerHTML = `
@@ -1365,6 +1374,19 @@ $("createForm").addEventListener("submit", (ev) => {
   }
   $("boot").classList.add("hidden");
   act("state");
+  let linked = false, fresh = false;
+  try {
+    const q = new URLSearchParams(location.search);
+    linked = q.has("career");
+    fresh = q.has("new");
+  } catch { /* no query */ }
+  if (fresh) {
+    // ?new opens straight on the create screen (saved fighters stay in Saves)
+    try { history.replaceState(null, "", location.pathname); } catch { /* keep the url */ }
+    if (state && state.saves.length < state.maxSaves && (await api("save/blank"))) render();
+  } else if (!linked && state && state.saves.length) {
+    openModal("start");
+  }
   loadLinkedCareer();
 })();
 

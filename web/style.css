@@ -402,3 +402,6 @@ input:focus, select:focus { outline: 2px solid var(--red); outline-offset: 1px; 
 .tut-bubble h3 { margin: 2px 0 6px; font-size: 17px; }
 .tut-bubble p { margin: 0 0 12px; font-size: 14px; line-height: 1.45; color: #d6d9e0; }
 .tut-count { font-size: 11px; color: var(--gold); letter-spacing: .08em; }
+
+.start-menu { display: flex; flex-direction: column; gap: 12px; align-items: stretch; text-align: center; padding: 10px 6px; min-width: min(380px, 80vw); }
+.start-menu .boot-mark { font-size: 34px; margin-bottom: 4px; }
