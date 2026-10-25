@@ -520,19 +520,98 @@ export function sting(result) {
 }
 
 /** Ring announcer, using the browser's built-in voice. */
+// The voices: an arena announcer (deep, theatrical) and a play-by-play commentator (quicker, excitable).
+// Lines are queued as segments, each with its own delivery, so an introduction can build: slow and
+// low for "Ladies and gentlemen", rising to a shout on the name.
+const MOODS = {
+  calm: { rate: 0.92, pitch: 0.62, volume: 0.85 },
+  build: { rate: 0.82, pitch: 0.72, volume: 0.95 },
+  hype: { rate: 0.74, pitch: 0.95, volume: 1 },
+  shout: { rate: 0.68, pitch: 1.1, volume: 1 },
+  tense: { rate: 0.78, pitch: 0.55, volume: 0.9 },
+  call: { rate: 1.12, pitch: 1.15, volume: 1 },
+};
+let sayQueue = [];
+let sayTimer = null;
+let onSayHook = null;
+/** The app shows each spoken line as a subtitle: fn(text, mood) (null text clears it). */
+export function onSay(fn) {
+  onSayHook = fn;
+}
+
+function pickVoice(kind) {
+  const voices = speechSynthesis.getVoices();
+  const en = voices.filter((x) => /^en/i.test(x.lang));
+  if (kind === "call") return en.find((x) => /GB|AU/i.test(x.lang)) || en[1] || en[0];
+  return en.find((x) => /en[-_](US)/i.test(x.lang) && /male|david|daniel|alex|fred|guy/i.test(x.name)) || en.find((x) => /en[-_]US/i.test(x.lang)) || en[0];
+}
+
+function nextLine() {
+  sayTimer = null;
+  const seg = sayQueue.shift();
+  if (!seg) {
+    if (onSayHook) onSayHook(null);
+    return;
+  }
+  const go = () => {
+    if (onSayHook) onSayHook(seg.t, seg.mood);
+    if (seg.roar) roar(seg.roar);
+    if (!on || !("speechSynthesis" in window)) {
+      sayTimer = setTimeout(nextLine, 600 + seg.t.length * 55);
+      return;
+    }
+    try {
+      const u = new SpeechSynthesisUtterance(seg.t);
+      Object.assign(u, MOODS[seg.mood] || MOODS.calm);
+      const v = pickVoice(seg.mood === "call" ? "call" : "announcer");
+      if (v) u.voice = v;
+      let done = false;
+      const finish = () => {
+        if (done) return;
+        done = true;
+        nextLine();
+      };
+      u.onend = finish;
+      u.onerror = finish;
+      // some browsers never fire onend: move on anyway
+      sayTimer = setTimeout(finish, 1500 + seg.t.length * 110);
+      speechSynthesis.speak(u);
+    } catch {
+      sayTimer = setTimeout(nextLine, 800);
+    }
+  };
+  if (seg.gap) sayTimer = setTimeout(go, seg.gap);
+  else go();
+}
+
+/**
+ * Speak a sequence of segments: [{ t: text, mood: calm|build|hype|shout|tense|call, gap: ms pause before, roar: crowd 0..1 }].
+ * A new sequence replaces whatever was being said unless queue is set.
+ */
+export function say(segments, queue = false) {
+  if (!queue) {
+    sayQueue = [];
+    clearTimeout(sayTimer);
+    sayTimer = null;
+    try { if ("speechSynthesis" in window) speechSynthesis.cancel(); } catch { /* ignore */ }
+  }
+  sayQueue.push(...segments);
+  if (!sayTimer && !(queue && "speechSynthesis" in window && speechSynthesis.speaking)) nextLine();
+}
+
+/** True while a sequence is being read out. */
+export function talking() {
+  return sayQueue.length > 0 || !!sayTimer || ("speechSynthesis" in window && speechSynthesis.speaking);
+}
+
+/** A quick commentator call during the action; skipped if the announcer is mid-sentence. */
+export function shout(text) {
+  if (talking()) return;
+  say([{ t: text, mood: "call" }]);
+}
+
 export function announce(text) {
-  if (!on || !("speechSynthesis" in window)) return;
-  try {
-    speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text);
-    u.rate = 0.92;
-    u.pitch = 0.6;
-    u.volume = 0.9;
-    const v = speechSynthesis.getVoices().find((x) => /en[-_](US|GB)/i.test(x.lang) && /male|david|daniel|alex|fred/i.test(x.name))
-      || speechSynthesis.getVoices().find((x) => /^en/i.test(x.lang));
-    if (v) u.voice = v;
-    speechSynthesis.speak(u);
-  } catch { /* speech not available */ }
+  say([{ t: text, mood: "hype" }]);
 }
 
 /** Brief dip in the music so big moments cut through. */

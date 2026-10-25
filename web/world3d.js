@@ -388,6 +388,7 @@ function makeHouse(tier) {
 export const PLACES = [
   { id: "home", name: "Home", icon: "🏠", color: "#f4b942", door: [-38, -9] },
   { id: "club", name: "Nightclub", icon: "🪩", color: "#c084fc", door: [-12, -9] },
+  { id: "ink", name: "Ink Studio", icon: "🖋️", color: "#94a3b8", door: [-1.5, -9] },
   { id: "cafe", name: "Café", icon: "☕", color: "#fca5a5", door: [8, -9] },
   { id: "gym", name: "Gym", icon: "🥊", color: "#f87171", door: [28, -9] },
   { id: "cars", name: "Car Dealer", icon: "🚗", color: "#60a5fa", door: [-34, 9] },
@@ -539,6 +540,7 @@ export class WorldView {
       }
     });
     shop("gym", 16, 7, 12, 28, -16, "#30343b", "IRON GYM", "#b91c1c");
+    shop("ink", 7, 4.2, 8, -1.5, -14, "#1f2329", "INK STUDIO", "#334155");
     shop("cars", 18, 6, 12, -34, 16, "#dbe7f3", "LUXURY MOTORS", "#1d4ed8", (g) => {
       // showroom cars
       [["super", "#f97316"], ["suv", "#111111"], ["muscle", "#1d4ed8"]].forEach(([id, c], i) => {
@@ -583,7 +585,7 @@ export class WorldView {
     const spots = [];
     for (let x = -64; x <= 64; x += 9) spots.push([x, -40], [x, 40]);
     for (let z = -32; z <= 32; z += 9) spots.push([-66, z], [66, z]);
-    spots.push([-2, -16], [18, -16], [-24, 18], [0, 18], [18, 18], [-22, -30], [40, -30], [-2, 30], [42, 36]);
+    spots.push([18, -16], [-24, 18], [0, 18], [18, 18], [-22, -30], [40, -30], [-2, 30], [42, 36]);
     for (const [x, z] of spots) {
       const t = tree(Math.random() < 0.5 ? "round" : "dark");
       t.position.set(x + (Math.random() - 0.5) * 2, 0, z + (Math.random() - 0.5) * 2);
@@ -608,7 +610,8 @@ export class WorldView {
     this.walkers = [];
     const shirts = ["#e11d48", "#2563eb", "#16a34a", "#f59e0b", "#6b7280", "#111827", "#f5f5f5", "#7c3aed"];
     for (let i = 0; i < 8; i++) {
-      const f = new Fighter3D({ casual: true, look: lookFromName("walker" + i), shirt: shirts[i], pants: i % 2 ? "#1f2937" : "#3b5b8a", weightClass: 2 + (i % 4) });
+      // pedestrians share one body build (meshing a body takes a moment)
+      const f = new Fighter3D({ casual: true, look: { ...lookFromName("walker" + i), body: 1, abs: 1 }, shirt: shirts[i], pants: i % 2 ? "#1f2937" : "#3b5b8a", weightClass: 2, detail: "low" });
       const side = i % 2 ? 1 : -1;
       const w = { f, x: -55 + Math.random() * 110, z: side * 6.6, dir: side, v: 1.1 + Math.random() * 0.6 };
       f.root.position.set(w.x, 0, w.z);
@@ -637,7 +640,7 @@ export class WorldView {
     const S = this.scene;
     if (!this.player || this.playerLook !== info.look) {
       if (this.player) this.player.dispose();
-      this.player = new Fighter3D({ casual: true, look: parseLook(info.look), weightClass: info.weightClass, style: info.style, shirt: "#111111", pants: "#2b3a55" });
+      this.player = new Fighter3D({ casual: true, look: parseLook(info.look), weightClass: info.weightClass, style: info.style, shirt: "#111111", pants: "#2b3a55", tattooText: info.ink });
       this.playerLook = info.look;
       this.player.setInjured(this.injured);
       S.add(this.player.root);
@@ -686,7 +689,7 @@ export class WorldView {
     const famX = L.house === 4 ? -35.5 : -30.5;
     if (L.partner) {
       const look = parseLook(L.partner.look);
-      const f = new Fighter3D({ casual: true, look, shirt: shirts[look.shorts], pants: "#1f2937", weightClass: 1 });
+      const f = new Fighter3D({ casual: true, look, shirt: shirts[look.shorts], pants: "#1f2937", weightClass: 1, detail: "low" });
       f.root.position.set(famX, 0, doorZ + 2.4);
       f.root.rotation.y = -0.5;
       S.add(f.root);
@@ -694,7 +697,7 @@ export class WorldView {
     }
     L.kids.forEach((k, i) => {
       const look = parseLook(k.look);
-      const f = new Fighter3D({ casual: true, look: { ...look, beard: 0 }, shirt: shirts[(look.shorts + i + 2) % 8], pants: "#334155", weightClass: 0 });
+      const f = new Fighter3D({ casual: true, look: { ...look, beard: 0, body: 0, abs: 0 }, shirt: shirts[(look.shorts + i + 2) % 8], pants: "#334155", weightClass: 0, detail: "low" });
       const s = Math.min(0.85, 0.42 + k.age * 0.035);
       f.root.scale.multiplyScalar(s);
       f.root.position.set(famX + 1.4 + i * 1.0, 0, doorZ + 3.2 + (i % 2) * 0.6);

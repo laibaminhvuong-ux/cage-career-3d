@@ -2,9 +2,11 @@
 // dashboard) and the fight arena (octagon, crowd, referee, cameras, and a director that
 // turns each fight-engine event into choreography).
 import * as THREE from "./vendor/three.module.min.js";
-import { Fighter3D, GROUND_POSES, POSES, SEQUENCES, attack, groundShift, lookFromName, parseLook, submission, takedown } from "./fighter3d.js";
+import { Fighter3D, setFighterEnv, GROUND_POSES, POSES, SEQUENCES, attack, groundShift, lookFromName, parseLook, submission, takedown } from "./fighter3d.js";
 import * as audio from "./audio.js";
 import { WorldView } from "./world3d.js";
+import { RoomEnvironment } from "./vendor/RoomEnvironment.js";
+import { finishShout, reaction, resultCall, roundCall } from "./announcer.js";
 
 const R = 4.4; // cage radius to the fence posts
 const RED = "#d62828";
@@ -62,6 +64,13 @@ export function createStage() {
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.05;
   const canvas = renderer.domElement;
+  // soft studio reflections for skin, sweat, gloves and blood
+  try {
+    const pm = new THREE.PMREMGenerator(renderer);
+    setFighterEnv(pm.fromScene(new RoomEnvironment(), 0.04).texture);
+  } catch (e) {
+    console.warn("No reflection map", e);
+  }
   canvas.className = "stage3d";
 
   const preview = new PreviewView();
@@ -183,7 +192,7 @@ class PreviewView {
     const looks = list.map((d) => (d.look ? parseLook(d.look) : lookFromName(d.name || "x")));
     if (looks.length === 2 && looks[0].shorts === looks[1].shorts) looks[1].shorts = (looks[1].shorts + 3) % 8;
     this.fighters = list.map((d, i) => {
-      const f = new Fighter3D({ look: looks[i], weightClass: d.weightClass, style: d.style, glove: i ? BLUE : RED });
+      const f = new Fighter3D({ look: looks[i], weightClass: d.weightClass, style: d.style, glove: i ? BLUE : RED, tattooText: d.ink });
       f.setBelt(d.belt || null);
       f.setInjured(!!d.injured);
       this.scene.add(f.root);
@@ -403,12 +412,16 @@ class Side {
     this.lungeTarget = 0;
     this.lungeUntil = 0;
     this.ring = null;
-    this.dmg = 0; // visible damage, 0..1
+    this.dmg = 0; // visible damage to the head, 0..1
+    this.bdmg = 0; // body (ribs, liver)
+    this.ldmg = 0; // legs
   }
 
-  hurt(d) {
+  hurt(d, body = this.bdmg, leg = this.ldmg) {
     this.dmg = Math.min(1, Math.max(0, d));
-    this.f.setDamage(this.dmg);
+    this.bdmg = Math.min(1, Math.max(0, body));
+    this.ldmg = Math.min(1, Math.max(0, leg));
+    this.f.setDamage(this.dmg, this.bdmg, this.ldmg);
   }
 }
 
@@ -529,8 +542,9 @@ class ArenaView {
       this.key = key;
       for (const s of [this.P, this.O]) if (s) { s.f.dispose(); s.ring.removeFromParent(); }
       if (this.ref) this.ref.f.dispose();
-      this.P = new Side("p", new Fighter3D({ look: pl, weightClass: info.weightClass, style: f.player.style, glove: RED }));
-      this.O = new Side("o", new Fighter3D({ look: ol, weightClass: info.weightClass, style: f.opponent.style, glove: BLUE }));
+      const ink = (c) => c.nickname || String(c.realName || c.name).split(" ").pop();
+      this.P = new Side("p", new Fighter3D({ look: pl, weightClass: info.weightClass, style: f.player.style, glove: RED, tattooText: ink(f.player) }));
+      this.O = new Side("o", new Fighter3D({ look: ol, weightClass: info.weightClass, style: f.opponent.style, glove: BLUE, tattooText: ink(f.opponent) }));
       this.ref = new Side("r", new Fighter3D({ ref: true, look: { skin: 1, hair: 0, hairColor: 5, beard: 0, shorts: 2 } }));
       this.ref.f.setBase("ref");
       for (const s of [this.P, this.O]) {
@@ -604,8 +618,8 @@ class ArenaView {
     for (const st of this.stains) st.visible = false;
     for (const d of this.drops) { d.live = false; d.m.visible = false; }
     const hurt = (c) => (f.round === 0 ? 0 : Math.min(1, (100 - c.health) / 90 + f.round * 0.05));
-    this.P.hurt(hurt(f.player));
-    this.O.hurt(hurt(f.opponent));
+    this.P.hurt(hurt(f.player), hurt(f.player) * 0.7, hurt(f.player) * 0.6);
+    this.O.hurt(hurt(f.opponent), hurt(f.opponent) * 0.7, hurt(f.opponent) * 0.6);
     const stains = Math.round((this.P.dmg + this.O.dmg) * 14);
     for (let i = 0; i < stains; i++) {
       const a = Math.random() * TAU, r = Math.random() * R * 0.6;
@@ -674,18 +688,24 @@ class ArenaView {
           this.top = this.down = null;
           this.refIn = false;
           this.C.set(0, 0, 0);
+          // touching gloves, or one fighter leaving the other hanging
+          const rn = Number((e.text.match(/Round (\d+)/) || [])[1]) || f.round;
+          const touch = e.touch !== undefined ? e.touch : rn === 1 ? "both" : null;
           for (const s of [this.P, this.O]) {
             s.fixedYaw = null;
             s.f.setBelt(null);
-            act(s, SEQUENCES.touch, "stance");
+            const offers = touch === "both" || (touch === "p" && s === this.P) || (touch === "o" && s === this.O);
+            if (offers) act(s, SEQUENCES.touch, "stance");
+            else if (touch) act(s, SEQUENCES.refuse, "stance");
+            else act(s, [[POSES.stance, 0.3, 8]], "stance");
           }
           if (!instant) {
             audio.sfx("bell");
             audio.roar(0.5);
             this.excite = 0.7;
             const n = Number((e.text.match(/Round (\d+)/) || [])[1]) || f.round;
-            const call = n === f.rounds && f.rounds > 1 ? "Final round!" : `Round ${["one", "two", "three", "four", "five"][n - 1] || n}!`;
-            audio.announce(n === 1 && f.belt ? `This contest is scheduled for five rounds, and it is for the ${f.belt.label} of the world! ${call}` : call);
+            // round one waits for the introductions to finish
+            audio.say(roundCall(n, f), n === 1);
           }
           ms = 2300;
         } else {
@@ -856,6 +876,11 @@ class ArenaView {
         break;
     }
 
+    if (!instant) {
+      const call = reaction(e, f);
+      if (call) audio.shout(call);
+    }
+
     // keep the position in step with the engine
     if (e.type !== "finish" && e.type !== "round" && !(e.type === "info" && e.side === "n")) {
       if (g === "" && this.mode === "ground") this.standUp(instant, act);
@@ -920,7 +945,7 @@ class ArenaView {
   impact(A, D, kind, strength) {
     D.f.hit(kind, Math.min(1.6, strength));
     const toHead = kind !== "body" && kind !== "leg";
-    D.hurt(D.dmg + (toHead ? 0.014 : 0.005) * strength);
+    D.hurt(D.dmg + (toHead ? 0.016 : 0.003) * strength, D.bdmg + (kind === "body" ? 0.045 : 0) * strength, D.ldmg + (kind === "leg" ? 0.05 : 0) * strength);
     if (toHead && (strength > 1.1 || (D.dmg > 0.3 && Math.random() < 0.35 + D.dmg * 0.4))) this.bloodSpray(D, A, strength);
     D.lungeTarget = -0.1 * strength;
     D.lungeUntil = this.t + 0.18;
@@ -1030,7 +1055,7 @@ class ArenaView {
       if (instant) go();
       else {
         audio.sfx("bell3");
-        audio.announce(W ? `Your winner, by ${f.method.toLowerCase()}... ${f.belt ? (W.tag === f.belt.champ ? "and STILL" : "and NEW") + " " : ""}${W.tag === "p" ? f.player.name : f.opponent.name}!` : "This one is a draw!");
+        audio.say(resultCall(f, W ? W.tag : null));
         this.later(1.2, go);
       }
       return 4200;
@@ -1041,7 +1066,8 @@ class ArenaView {
         const base = L.f.base;
         L.f.play(SEQUENCES.tap(base), base);
         audio.sfx("tap");
-        audio.announce("Tap! Tap! It's all over!");
+        audio.say([{ t: finishShout(f, W.tag, false), mood: "call", roar: 1 }]);
+        audio.say(resultCall(f, W.tag), true);
         this.closeUp(L, 2.0, true);
       }
       this.later(1.3, () => {
@@ -1058,7 +1084,8 @@ class ArenaView {
       else this.later(0.15, () => this.knockDown(L, false));
     }
     if (!instant) {
-      audio.announce(doctor ? "The doctor has stopped the fight!" : "It's all over!");
+      audio.say([{ t: finishShout(f, W.tag, doctor), mood: "call", roar: 1 }]);
+      audio.say(resultCall(f, W.tag), true);
       if (!doctor) this.closeUp(L, 1.8);
       this.refIn = true;
     }
@@ -1080,7 +1107,6 @@ class ArenaView {
     if (!instant) W.f.play(SEQUENCES.celebrate, "victory");
     if (f && f.belt) {
       W.f.setBelt("waist");
-      if (!instant) audio.announce(`${W.tag === f.belt.champ ? "And STILL" : "And NEW"}, ${f.belt.label.replace(/^GFC /, "G F C ")}... ${W.tag === "p" ? f.player.name : f.opponent.name}!`);
     }
   }
 

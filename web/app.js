@@ -1,8 +1,9 @@
 import { createStage } from "./arena3d.js";
 import * as audio from "./audio.js";
-import { LOOK_OPTIONS, SHORTS_NAMES, lookString, randomLook } from "./fighter3d.js";
+import { LOOK_OPTIONS, SHORTS_NAMES, TATTOO_REGIONS, lookString, randomLook } from "./fighter3d.js";
 import { Game, GameError } from "./engine.js";
 import { openStore, onSaveError } from "./store.js";
+import { introCall } from "./announcer.js";
 
 const STAT_LABELS = {
   striking: "Striking", power: "Power", speed: "Speed", wrestling: "Wrestling",
@@ -25,6 +26,7 @@ let busy = false;
 let fightShown = 0;      // events already on screen
 let playing = false;
 let skipPlayback = false;
+let touchGloves = true; // the choice before round one
 let headSnapshot = null; // fight json shown in the header while a round plays out
 let modal = null;        // { kind: "saves" | "market" | "talk" | "talkResult" | "division" | "hof", target?, code? }
 const PLAN_NAMES = Object.fromEntries(PLANS.map((p) => [p.id, p.name]));
@@ -40,6 +42,17 @@ let createLook = randomLook();
 let speed = 1;
 try { speed = Number(localStorage.getItem("cc3d_speed")) || 1; } catch { /* ignore */ }
 if (stage) stage.arena.setSpeed(speed);
+// what the announcer says shows as a subtitle over the cage
+audio.onSay((text, mood) => {
+  const el = $("announcerLine");
+  if (!el) return;
+  if (!text) {
+    el.className = "announcer-line";
+    return;
+  }
+  el.textContent = (mood === "call" ? "🎙 " : "🎤 ") + text;
+  el.className = "announcer-line show " + (mood || "");
+});
 if (stage) {
   stage.world.onNear = () => renderWorldBottom();
   stage.world.onEnter = (id) => openModal("place", { place: id });
@@ -203,6 +216,7 @@ async function copyText(text) {
 
 function render() {
   if (!state) return;
+  $("lifeBtn").classList.toggle("hidden", !state.exists);
   if (!state.exists) {
     $("create").classList.remove("hidden");
     $("dash").classList.add("hidden");
@@ -245,6 +259,7 @@ function render3d() {
     else if (worldOpen() && state.exists) {
       stage.show($("worldStage"), "world");
       stage.world.setLife({ look: state.fighter.look, weightClass: state.weightClassIndex, style: state.fighter.style, life: state.life,
+        ink: state.fighter.nickname || state.fighter.name.split(" ").pop(),
         carCatalog: state.life.catalog.cars, injured: state.injuryWeeks > 0 });
     }
     else if (!state.exists) {
@@ -285,7 +300,8 @@ function syncSoundButtons() {
 function showcaseFighters() {
   const s = state;
   const champ = s.rank === 0 || (s.belt && (s.belt.interimIsMe || s.belt.held.length > 0));
-  const me = { look: s.fighter.look, name: s.fighter.name, weightClass: s.weightClassIndex, style: s.fighter.style, belt: champ && !s.retired ? "waist" : null, injured: s.injuryWeeks > 0 };
+  const me = { look: s.fighter.look, name: s.fighter.name, weightClass: s.weightClassIndex, style: s.fighter.style, belt: champ && !s.retired ? "waist" : null, injured: s.injuryWeeks > 0,
+    ink: s.fighter.nickname || s.fighter.name.split(" ").pop() };
   const o = s.scheduled && !s.retired ? s.scheduled : null;
   const opp = o ? o.opponent : null;
   return opp ? [me, { look: opp.look, name: opp.name, weightClass: s.weightClassIndex, style: opp.style, belt: o.oppRank === 0 ? "shoulder" : null }] : [me];
@@ -310,7 +326,9 @@ function renderLookPickers() {
         : `<button type="button" class="btn chip ${createLook[key] === i ? "on" : ""}" data-look="${key}:${i}">${esc(v)}</button>`).join("")}
     </div></div>`;
   el.innerHTML = row("skin", "Skin tone", "swatch") + row("hair", "Hair", "chip") + row("hairColor", "Hair color", "swatch")
-    + row("beard", "Facial hair", "chip") + row("shorts", "Fight shorts", "swatch");
+    + row("beard", "Facial hair", "chip") + row("shorts", "Fight shorts", "swatch")
+    + row("body", "Body type", "chip") + row("abs", "Abs", "chip")
+    + `<div class="label" style="margin-top:8px">Tattoos</div>` + TATTOO_REGIONS.map((r) => row(r.key, r.name, "chip")).join("");
   $("lookInput").value = lookString(createLook);
 }
 
@@ -864,6 +882,12 @@ function renderPlace(body) {
       <div class="train-grid">${Object.keys(STAT_LABELS).map((k) => `<button class="btn small" data-train="${k}" ${locked || hurt || s.energy < s.trainCost ? "disabled" : ""}>${STAT_LABELS[k]}</button>`).join("")}</div>
       <div class="btn-row"><button class="btn" data-action="spar" ${locked || hurt || s.energy < 30 ? "disabled" : ""}>Spar</button></div>
       ${hurt ? `<p class="badge red" style="display:inline-block">Injured — rest up at home first</p>` : ""}`;
+  } else if (id === "ink") {
+    const cur = (state.fighter.look || "").split(",").map(Number);
+    body.innerHTML = `
+      ${head("🖋️", "Ink Studio", "Pick a spot, pick a design. A new piece costs " + money(1500 + s.fame * 40) + "; laser removal $2,500.")}
+      ${TATTOO_REGIONS.map((r, i) => `<div class="label">${esc(r.name)}</div><div class="btn-row">${LOOK_OPTIONS[r.key].map((d, j) =>
+        `<button class="btn small ${(cur[7 + i] || 0) === j ? "gold" : ""}" data-life="tattoo" data-region="${r.key}" data-design="${j}">${esc(d)}</button>`).join("")}</div>`).join("")}`;
   } else if (id === "arena") {
     const o = s.scheduled;
     body.innerHTML = `
@@ -941,7 +965,7 @@ function renderFightScreen() {
     // fresh walkout or page reload mid-fight: show everything so far instantly
     loadArena(f);
     if (f.round === 0) {
-      audio.announce(`In the red corner... ${f.player.name}! And in the blue corner... ${f.opponent.name}!`);
+      audio.say(introCall(f));
     }
     caption(null);
     $("fightLog").innerHTML = f.round === 0 ? introHtml(f) : "";
@@ -1016,6 +1040,7 @@ async function playEvents(events, f) {
       if (e.type === "finish") finishShown = true;
       let pause = e.type === "kd" || e.type === "finish" ? 1100 : e.type === "big" || e.type === "subatt" ? 750 : 420;
       if (stage) pause = stage.arena.play(e, f);
+      updateFightBars(e);
       await new Promise((r) => setTimeout(r, pause / speed));
     }
   }
@@ -1038,11 +1063,28 @@ async function playEvents(events, f) {
   scrollLog();
 }
 
+/** Health and stamina drain live as each moment of the round plays out. */
+function updateFightBars(e) {
+  if (!e.hp) return;
+  ["p", "o"].forEach((side, i) => {
+    const c = document.querySelector(`#fightHead .corner.${side}`);
+    if (!c) return;
+    const [hp, st] = c.querySelectorAll(".bar > i");
+    if (hp) {
+      hp.style.width = e.hp[i] + "%";
+      hp.style.background = healthColor(e.hp[i]);
+    }
+    if (st) st.style.width = e.st[i] + "%";
+    const sig = c.querySelector(".sig");
+    if (sig && e.sg) sig.textContent = e.sg[i];
+  });
+}
+
 function renderFightHead(f) {
   const corner = (c, side) => `
     <div class="corner ${side}">
       <div class="cn">${esc(c.name)}</div>
-      <div class="cm">${c.record} · Sig ${c.sig} · TD ${c.td}${c.kd ? " · KD " + c.kd : ""}</div>
+      <div class="cm">${c.record} · Sig <span class="sig">${c.sig}</span> · TD ${c.td}${c.kd ? " · KD " + c.kd : ""}</div>
       <div class="bl">HEALTH</div>${bar(c.health, healthColor(c.health), "lg")}
       <div class="bl">STAMINA</div>${bar(c.stamina, "var(--gold)")}
     </div>`;
@@ -1067,6 +1109,9 @@ function renderFightControls(f) {
       <div class="prompt">${f.round === 0 ? "Choose your game plan for round 1" : `Corner advice between rounds — game plan for round ${f.round + 1}?`}
         ${f.scout ? `<br><span class="scout">🧠 Coach: "They're going to ${esc(PLAN_NAMES[f.scout])} this round."</span>` : ""}
         ${f.oppFiredUp && f.round === 0 ? `<br><span style="color:#ff6b6e">Your opponent is fired up after the trash talk.</span>` : ""}</div>
+      ${f.round === 0 ? `<div class="touch-row"><span>Before the bell:</span>
+        <button class="btn small ${touchGloves ? "gold" : ""}" data-touch="1">🤜🤛 Touch gloves</button>
+        <button class="btn small ${touchGloves ? "" : "primary"}" data-touch="0">🙅 Refuse</button></div>` : ""}
       <div class="plans">
         ${PLANS.map((p) => `<button class="btn" data-plan="${p.id}">${p.name}<span class="sub">${p.desc}</span></button>`).join("")}
       </div>`;
@@ -1098,7 +1143,7 @@ document.addEventListener("click", async (ev) => {
   if (d.startfight !== undefined) return act("fight/start");
   if (d.plan) {
     if (playing) return;
-    if (await api("fight/round", { plan: d.plan })) render();
+    if (await api("fight/round", { plan: d.plan, touch: touchGloves })) render();
     return;
   }
   if (d.skip !== undefined) { skipPlayback = true; return; }
@@ -1164,6 +1209,10 @@ document.addEventListener("click", async (ev) => {
     return;
   }
   if (d.closemodal !== undefined) return closeModal();
+  if (d.touch !== undefined) {
+    touchGloves = d.touch === "1";
+    return renderFightControls(state.fight);
+  }
   if (d.world !== undefined) return openWorld();
   if (d.closeworld !== undefined) {
     modal = null;
@@ -1177,7 +1226,7 @@ document.addEventListener("click", async (ev) => {
   }
   if (d.life) {
     const params = { type: d.life };
-    for (const k of ["kind", "id", "level"]) if (d[k] !== undefined) params[k] = d[k];
+    for (const k of ["kind", "id", "level", "region", "design"]) if (d[k] !== undefined) params[k] = d[k];
     if (await api("life", params)) render();
     return;
   }

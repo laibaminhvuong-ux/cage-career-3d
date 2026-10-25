@@ -317,7 +317,7 @@ export class Corner {
   toJson() {
     return {
       name: this.f.displayName(), record: this.f.record(), overall: this.f.overall(), style: this.f.style,
-      look: this.f.look, realName: this.f.name, health: Math.max(0, 100 - this.damage), stamina: Math.max(0, this.stamina),
+      look: this.f.look, realName: this.f.name, nickname: this.f.nickname, country: this.f.country, health: Math.max(0, 100 - this.damage), stamina: Math.max(0, this.stamina),
       sig: this.totSig, td: this.totTd, kd: this.totKd, plan: this.plan,
     };
   }
@@ -350,9 +350,28 @@ export class Fight {
 
   playerDamage() { return this.p.damage; }
 
-  simulateRound(plan) {
+  simulateRound(plan, touch = true) {
     if (this.finished) throw new GameError("The fight is over.");
     this.round++;
+    let opening = "Round " + this.round + " — touch gloves and let's go!", gloves = this.round === this.rounds && this.rounds > 1 ? "both" : null;
+    if (this.round === 1) {
+      // the first glove touch: respect, or a statement
+      const theyRefuse = rnd() < 0.12 + (this.o.bonus > 0 ? 0.4 : 0);
+      const p = this.p.n(), o = this.o.n();
+      if (!touch) {
+        gloves = "o";
+        this.o.bonus += 1;
+        opening = "Round 1 — " + p + " refuses to touch gloves! The crowd boos and " + o + " looks furious.";
+      } else if (theyRefuse) {
+        gloves = "p";
+        this.p.stamina = Math.min(100, this.p.stamina + 3);
+        opening = "Round 1 — " + o + " leaves " + p + " hanging! No glove touch. This is personal.";
+      } else {
+        gloves = "both";
+        opening = "Round 1 — they touch gloves, a sign of respect, and we're underway!";
+      }
+      this.touch = gloves;
+    }
     this.p.plan = plan;
     this.o.plan = this.oppNext;
     this.p.newRound();
@@ -363,7 +382,8 @@ export class Fight {
     this.clock = 0;
     this.current = [];
     this.logs.push(this.current);
-    this.ev("info", null, "Round " + this.round + " — touch gloves and let's go!");
+    this.ev("info", null, opening);
+    if (gloves) this.current[this.current.length - 1].touch = gloves;
     while (!this.finished) {
       const step = 10 + nextInt(16);
       if (this.clock + step >= ROUND_SECONDS) {
@@ -692,6 +712,10 @@ export class Fight {
   ev(type, side, text, move = null, landed = 0) {
     const e = { t: fmt(this.clock), type, side: side ? side.tag : "n", text, g: this.ground && this.topTag ? this.topTag : "" };
     if (this.ground && this.topTag) e.p = this.pos || "guard";
+    // health and stamina right after this moment, so the bars can drop as the fight plays out
+    e.hp = [Math.max(0, Math.round(100 - this.p.damage)), Math.max(0, Math.round(100 - this.o.damage))];
+    e.st = [Math.max(0, Math.round(this.p.stamina)), Math.max(0, Math.round(this.o.stamina))];
+    e.sg = [this.p.totSig, this.o.totSig];
     if (move != null) e.move = move;
     if (landed > 0) e.n = landed;
     this.current.push(e);
@@ -1061,6 +1085,20 @@ export class Career {
         if (p.id && !L.cars.includes(p.id)) throw new GameError("You don't own that car.");
         L.driving = p.id || null;
         return null;
+      }
+      case "tattoo": {
+        const region = ["tChest", "tBack", "tArmL", "tArmR", "tLegs"].indexOf(p.region);
+        const design = Math.trunc(Number(p.design));
+        if (region < 0 || !(design >= 0 && design <= 7)) throw new GameError("Pick a spot and a design.");
+        const parts = String(me.look || "1,2,0,0,0").split(",");
+        while (parts.length < 12) parts.push(parts.length === 5 || parts.length === 6 ? "1" : "0");
+        if (Number(parts[7 + region]) === design) throw new GameError("You already have that one there.");
+        const cost = design === 0 ? 2500 : 1500 + this.fame * 40;
+        this.spend(cost, design === 0 ? "laser removal" : "the tattoo");
+        parts[7 + region] = String(design);
+        me.look = parts.join(",");
+        if (design) this.lifeJoy(3);
+        return design === 0 ? "Tattoo removed with a laser. Ouch." : "Fresh ink! 🖋️ Looking good.";
       }
       case "lifestyle": {
         const i = Math.trunc(Number(p.level));
@@ -1760,10 +1798,10 @@ export class Career {
     return null;
   }
 
-  fightRound(plan) {
+  fightRound(plan, touch = true) {
     if (!this.fight || this.fight.finished) throw new GameError("No fight in progress.");
     if (!PLANS[plan]) throw new GameError("Pick a game plan.");
-    this.fight.simulateRound(plan);
+    this.fight.simulateRound(plan, touch);
     if (this.fight.finished) this.resolveFight();
   }
 
@@ -1800,6 +1838,11 @@ export class Career {
     } else if (o.talkLevel > 0 && lost) {
       this.fame -= 2 * o.talkLevel;
       talkNote = "You ate your words.";
+    }
+    // refusing the glove touch is a promise: keep it and the fans love it, break it and they don't
+    if (f.touch === "o") {
+      this.fame += won ? 2 : lost ? -2 : 0;
+      talkNote = (talkNote + (won ? " You refused the glove touch and backed it up." : lost ? " Refusing the glove touch didn't age well." : "")).trim();
     }
     this.fame = clamp(this.fame, 0, 100);
 
@@ -2424,7 +2467,7 @@ export function unpackCareer(text) {
 // ------------------------------------------------------------------ the game API (formerly Main.java)
 
 const MAX_SLOTS = 5;
-const LOOK = /^\d(,\d){4}$/;
+const LOOK = /^\d(,\d){4,11}$/;
 
 /**
  * Runs the game against a storage backend: { kind, getProfile, setProfile, getCareer, setCareer,
@@ -2517,7 +2560,7 @@ export class Game {
       case "accept": msg = this.need(career).accept(int(p.index)); break;
       case "upgrade": msg = this.need(career).upgradeGym(); break;
       case "fight/start": msg = this.need(career).startFight(); break;
-      case "fight/round": this.need(career).fightRound(p.plan); break;
+      case "fight/round": this.need(career).fightRound(p.plan, p.touch !== false && p.touch !== "false"); break;
       case "fight/close": this.need(career).closeFight(); break;
       case "retire": msg = this.need(career).retire(); break;
       case "talk": msg = this.need(career).talk(p.target, p.tone); break;

@@ -391,6 +391,18 @@ input:focus, select:focus { outline: 2px solid var(--red); outline-offset: 1px; 
 .comment { font-size: 13px; margin-top: 4px; }
 .world-bottom .btn { width: auto; min-width: 180px; }
 
+/* the announcer's lines, styled by delivery */
+.announcer-line { position: absolute; left: 50%; top: 64px; transform: translateX(-50%) scale(.96); max-width: 92%; z-index: 3; pointer-events: none;
+  text-align: center; font-weight: 800; letter-spacing: .02em; color: #fff; text-shadow: 0 2px 10px #000, 0 0 2px #000; opacity: 0; transition: opacity .25s, transform .25s; font-size: 17px; }
+.announcer-line.show { opacity: 1; transform: translateX(-50%) scale(1); }
+.announcer-line.build, .announcer-line.tense { color: #e8e2d4; font-style: italic; }
+.announcer-line.hype { color: #f4b942; font-size: 20px; }
+.announcer-line.shout { color: #ffd76a; font-size: 26px; text-transform: uppercase; animation: shoutPulse .6s ease-out; }
+.announcer-line.call { color: #ff8a8a; font-size: 20px; text-transform: uppercase; }
+@keyframes shoutPulse { 0% { transform: translateX(-50%) scale(1.25); } 100% { transform: translateX(-50%) scale(1); } }
+@media (max-width: 640px) { .announcer-line { font-size: 14px; top: 58px; } .announcer-line.shout { font-size: 19px; } }
+.touch-row { display: flex; gap: 8px; align-items: center; justify-content: center; flex-wrap: wrap; margin: 6px 0 10px; font-size: 13px; color: var(--muted); }
+
 </style>
 </head>
 <body>
@@ -470,6 +482,7 @@ input:focus, select:focus { outline: 2px solid var(--red); outline-offset: 1px; 
         <div id="arenaStage" class="stage-host arena-stage"></div>
         <div class="fight-head" id="fightHead"></div>
         <div class="caption" id="fightCaption"></div>
+        <div class="announcer-line" id="announcerLine"></div>
         <div class="arena-tools">
           <button class="btn small ghost" data-speed id="speedBtn" title="Playback speed">1×</button>
           <button class="btn small ghost sound-btn" data-sound aria-label="Toggle sound">🔊</button>
