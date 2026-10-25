@@ -4,6 +4,7 @@ import { LOOK_OPTIONS, SHORTS_NAMES, TATTOO_REGIONS, lookString, parseLook, rand
 import { Game, GameError } from "./engine.js";
 import { openStore, onSaveError } from "./store.js";
 import { introCall } from "./announcer.js";
+import { startTour } from "./tutorial.js";
 
 const STAT_LABELS = {
   striking: "Striking", power: "Power", speed: "Speed", wrestling: "Wrestling",
@@ -46,6 +47,7 @@ if (stage) stage.arena.setSpeed(speed);
 audio.onSay((text, mood) => {
   const el = $("announcerLine");
   if (!el) return;
+  $("skipTalk").classList.toggle("hidden", !text);
   if (!text) {
     el.className = "announcer-line";
     return;
@@ -217,6 +219,8 @@ async function copyText(text) {
 function render() {
   if (!state) return;
   $("lifeBtn").classList.toggle("hidden", !state.exists);
+  // the first time a career screen shows, offer the tour
+  if (state.exists && !state.fight && !modal && !worldOpen()) setTimeout(() => startTour("career"), 900);
   if (!state.exists) {
     $("create").classList.remove("hidden");
     $("dash").classList.add("hidden");
@@ -331,7 +335,7 @@ function lookRows(look, attr) {
         ? `<button type="button" class="swatch ${look[key] === i ? "on" : ""}" style="background:${v}" data-${attr}="${key}:${i}" title="${key === "shorts" ? SHORTS_NAMES[i] : ""}" aria-label="${label} ${i + 1}"></button>`
         : `<button type="button" class="btn chip ${look[key] === i ? "on" : ""}" data-${attr}="${key}:${i}">${esc(v)}</button>`).join("")}
     </div></div>`;
-  return row("skin", "Skin tone", "swatch") + row("hair", "Hair", "chip") + row("hairColor", "Hair color", "swatch")
+  return row("skin", "Skin tone", "swatch") + row("face", "Face", "chip") + row("hair", "Hair", "chip") + row("hairColor", "Hair color", "swatch")
     + row("beard", "Facial hair", "chip") + row("shorts", "Fight shorts", "swatch")
     + row("body", "Body type", "chip") + row("abs", "Abs", "chip")
     + `<div class="label" style="margin-top:8px">Tattoos</div>` + TATTOO_REGIONS.map((r) => row(r.key, r.name, "chip")).join("");
@@ -833,6 +837,7 @@ function openWorld() {
   $("worldScreen").classList.remove("hidden");
   if (stage) stage.world.goHome();
   render();
+  setTimeout(() => startTour("world"), 1200);
 }
 
 function closeWorld() {
@@ -862,6 +867,7 @@ function renderWorld() {
       ${s.injuryWeeks ? `<span class="badge red">Injured ${s.injuryWeeks}w</span>` : ""}
     </div>
     <div class="hud-btns">
+      <button class="btn small ghost" data-help title="How to play">❓</button>
       <button class="btn small" data-phone>📱 Phone</button>
       <button class="btn small primary" data-closeworld>🥊 Career</button>
     </div>`;
@@ -1023,6 +1029,7 @@ function renderFightScreen() {
     caption(null);
     $("fightLog").innerHTML = f.round === 0 ? introHtml(f) : "";
     events.forEach((e) => $("fightLog").appendChild(eventEl(e, false)));
+    if (f.round === 0) setTimeout(() => startTour("fight"), 1500);
     fightShown = events.length;
     headSnapshot = f;
     renderFightHead(f);
@@ -1262,6 +1269,11 @@ document.addEventListener("click", async (ev) => {
     return;
   }
   if (d.closemodal !== undefined) return closeModal();
+  if (d.skiptalk !== undefined) return audio.say([]);
+  if (d.help !== undefined) {
+    const fightOpen = !$("fightScreen").classList.contains("hidden");
+    return startTour(fightOpen ? "fight" : worldOpen() ? "world" : "career", true);
+  }
   if (d.editfighter !== undefined) {
     return openModal("edit", { draft: { look: parseLook(state.fighter.look), nickname: state.fighter.nickname || "", style: state.fighter.style } });
   }

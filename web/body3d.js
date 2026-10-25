@@ -263,33 +263,49 @@ export function buildBody(bones, order, w, kind, opts = {}) {
 export const BIND_POSE = { shL: [0, 0, 0.55], shR: [0, 0, -0.55], hipL: [0, 0, 0.07], hipR: [0, 0, -0.07] };
 
 /** The head, in the head bone's own space: skull, cheekbones, brow, nose, lips, chin and ears, with eye sockets. */
-function headShapes() {
+// Face shapes by ancestry. Each is a set of adjustments to the classic head: how high and narrow the
+// nose bridge is, how wide the nose and cheekbones are, lip fullness, eye-socket depth, jaw and face length.
+export const FACES = [
+  { name: "Classic" },
+  { name: "East Asian", bridgeZ: -0.008, bridgeTop: -0.012, tipW: 1.12, cheekX: 1.1, cheekR: 1.15, faceW: 1.04, browZ: -0.004, socket: 0.55, lid: 0.55, jawW: 1.02 },
+  { name: "South Asian", tipW: 1.1, lips: 1.1, socket: 1.1, faceL: 1.02, brow: 1.05 },
+  { name: "African", bridgeZ: -0.006, tipW: 1.35, wingX: 1.35, lips: 1.45, jawW: 1.06, cheekR: 1.05, socket: 0.95 },
+  { name: "European", bridgeZ: 0.005, tipW: 0.88, wingX: 0.9, lips: 0.85, socket: 1.35, brow: 1.2, browZ: 0.003, faceL: 1.05, jawW: 0.97 },
+  { name: "Latino", tipW: 1.08, cheekX: 1.04, lips: 1.12, jawW: 1.02 },
+  { name: "Middle Eastern", bridgeZ: 0.008, bridgeTop: 0.004, hump: true, tipW: 1.05, brow: 1.25, browZ: 0.004, socket: 1.3, faceL: 1.04 },
+];
+
+/** The head, in the head bone's own space: skull, cheekbones, brow, nose, lips, chin and ears, with eye sockets. */
+function headShapes(F = FACES[0]) {
   const add = [], sub = [];
+  const v = (k, d = 1) => (F[k] === undefined ? d : F[k]);
   const e = (list, c, r, k) => list.push({ t: "e", c: new THREE.Vector3(...c), r: new THREE.Vector3(...r), k, inv: new THREE.Matrix4().elements, center: new THREE.Vector3(...c), bound: 9 });
   const c = (list, a, b, ra, rb, k) => list.push({ t: "c", a: new THREE.Vector3(...a), b: new THREE.Vector3(...b), ra, rb, k, inv: new THREE.Matrix4().elements, center: new THREE.Vector3(...a), bound: 9 });
+  const fw = v("faceW"), fl = v("faceL"), jw = v("jawW"), lips = v("lips"), bz = v("bridgeZ", 0), bt = v("bridgeTop", 0);
   e(add, [0, 0.025, -0.005], [0.09, 0.105, 0.1], 0.03); // cranium
-  e(add, [0, -0.005, 0.03], [0.074, 0.085, 0.075], 0.03); // face
-  e(add, [0, -0.05, 0.03], [0.068, 0.05, 0.07], 0.025); // jaw
-  e(add, [0, -0.083, 0.068], [0.026, 0.02, 0.022], 0.015); // chin
-  e(add, [0, 0.052, 0.076], [0.07, 0.017, 0.025], 0.015); // brow ridge
-  c(add, [0, 0.04, 0.093], [0, -0.004, 0.107], 0.009, 0.011, 0.01); // nose bridge
-  e(add, [0, -0.008, 0.106], [0.016, 0.014, 0.014], 0.008); // nose tip
-  e(add, [0, -0.035, 0.094], [0.024, 0.008, 0.012], 0.006); // upper lip
-  e(add, [0, -0.047, 0.092], [0.021, 0.009, 0.012], 0.006); // lower lip
+  e(add, [0, -0.005, 0.03], [0.074 * fw, 0.085 * fl, 0.075], 0.03); // face
+  e(add, [0, -0.05 * fl, 0.03], [0.068 * jw, 0.05, 0.07], 0.025); // jaw
+  e(add, [0, -0.083 * fl, 0.068], [0.026 * jw, 0.02, 0.022], 0.015); // chin
+  e(add, [0, 0.052, 0.076 + v("browZ", 0)], [0.07, 0.017 * v("brow"), 0.025 * v("brow")], 0.015); // brow ridge
+  c(add, [0, 0.04 + bt, 0.093 + bz], [0, -0.004, 0.107 + bz * 0.5], 0.009, 0.011, 0.01); // nose bridge
+  if (F.hump) e(add, [0, 0.018, 0.103 + bz], [0.01, 0.012, 0.009], 0.008);
+  e(add, [0, -0.008, 0.106 + bz * 0.4], [0.016 * v("tipW"), 0.014, 0.014], 0.008); // nose tip
+  e(add, [0, -0.035, 0.094], [0.024, 0.008 * lips, 0.012 * (0.9 + lips * 0.1)], 0.006); // upper lip
+  e(add, [0, -0.047, 0.092], [0.021, 0.009 * lips, 0.012 * (0.9 + lips * 0.1)], 0.006); // lower lip
   for (const s of [-1, 1]) {
-    e(add, [s * 0.05, 0.0, 0.068], [0.028, 0.02, 0.024], 0.015); // cheekbones
-    e(add, [s * 0.012, -0.012, 0.099], [0.009, 0.008, 0.009], 0.006); // nostril wings
+    e(add, [s * 0.05 * v("cheekX"), 0.0, 0.068], [0.028 * v("cheekR"), 0.02 * v("cheekR"), 0.024], 0.015); // cheekbones
+    e(add, [s * 0.012 * v("wingX"), -0.012, 0.099 + bz * 0.3], [0.009 * v("wingX"), 0.008, 0.009], 0.006); // nostril wings
     e(add, [s * 0.091, 0.01, -0.008], [0.012, 0.03, 0.022], 0.008); // ears
-    e(sub, [s * 0.034, 0.03, 0.095], [0.021, 0.015, 0.014], 0.01); // eye sockets
+    e(sub, [s * 0.034, 0.03, 0.095], [0.021, 0.015, 0.014 * v("socket")], 0.01); // eye sockets
   }
   return { add, sub };
 }
 
-let headGeo = null;
-/** One shared head mesh (geometry only), detailed enough to read as a face. */
-export function buildHeadGeo() {
-  if (headGeo) return headGeo;
-  const { add, sub } = headShapes();
+const headGeos = new Map();
+/** One shared head mesh per face shape (geometry only), detailed enough to read as a face. */
+export function buildHeadGeo(face = 0) {
+  if (headGeos.has(face)) return headGeos.get(face);
+  const { add, sub } = headShapes(FACES[face] || FACES[0]);
   const f = (x, y, z) => {
     let d = 1e9;
     for (const p of add) d = smin(d, primDist(p, x, y, z), p.k);
@@ -300,6 +316,7 @@ export function buildHeadGeo() {
     }
     return d;
   };
-  headGeo = polygonize(f, new THREE.Vector3(-0.12, -0.12, -0.13), new THREE.Vector3(0.12, 0.15, 0.14), 0.005);
-  return headGeo;
+  const g = polygonize(f, new THREE.Vector3(-0.12, -0.12, -0.13), new THREE.Vector3(0.12, 0.15, 0.14), 0.005);
+  headGeos.set(face, g);
+  return g;
 }

@@ -1,7 +1,7 @@
 // Procedural 3D fighters: a jointed low-poly body built from primitives, a pose library,
 // and an animator that blends between poses so every move flows into the next.
 import * as THREE from "./vendor/three.module.min.js";
-import { ABS, BIND_POSE, BODY_TYPES, buildBody, buildHeadGeo } from "./body3d.js";
+import { ABS, BIND_POSE, BODY_TYPES, FACES, buildBody, buildHeadGeo } from "./body3d.js";
 import { TATTOO_DESIGNS, TATTOO_REGIONS, addTattoos } from "./tattoo3d.js";
 
 export const LOOK_OPTIONS = {
@@ -13,10 +13,11 @@ export const LOOK_OPTIONS = {
   body: BODY_TYPES.map((b) => b.name),
   abs: ABS.map((a) => a.name),
   ...Object.fromEntries(TATTOO_REGIONS.map((r) => [r.key, TATTOO_DESIGNS])),
+  face: FACES.map((f) => f.name),
 };
 export { TATTOO_REGIONS };
 export const SHORTS_NAMES = ["Red", "Blue", "Black", "White", "Green", "Gold", "Purple", "Orange"];
-const KEYS = ["skin", "hair", "hairColor", "beard", "shorts", "body", "abs", ...TATTOO_REGIONS.map((r) => r.key)];
+const KEYS = ["skin", "hair", "hairColor", "beard", "shorts", "body", "abs", ...TATTOO_REGIONS.map((r) => r.key), "face"];
 // looks saved before body type and abs existed are athletic and toned
 const LOOK_DEFAULTS = { body: 1, abs: 1 };
 
@@ -45,7 +46,8 @@ export function lookFromName(name) {
   };
   const pick = (k) => Math.floor(r() * LOOK_OPTIONS[k].length);
   return { skin: pick("skin"), hair: pick("hair"), hairColor: Math.floor(r() * 5), beard: pick("beard"), shorts: pick("shorts"), body: pick("body"), abs: pick("abs"),
-    ...Object.fromEntries(TATTOO_REGIONS.map((t) => [t.key, r() < 0.3 ? 1 + Math.floor(r() * (TATTOO_DESIGNS.length - 1)) : 0])) };
+    ...Object.fromEntries(TATTOO_REGIONS.map((t) => [t.key, r() < 0.3 ? 1 + Math.floor(r() * (TATTOO_DESIGNS.length - 1)) : 0])),
+    face: 1 + Math.floor(r() * (FACES.length - 1)) };
 }
 
 export function randomLook() {
@@ -874,7 +876,7 @@ export class Fighter3D {
     root.scale.setScalar(height);
 
     // the face is its own finer mesh on the head bone
-    const face = new THREE.Mesh(withColors(buildHeadGeo()), skin);
+    const face = new THREE.Mesh(withColors(buildHeadGeo(look.face || 0)), skin);
     this.faceMesh = face;
     this.bruiseBase = { width, chestY: chest.getWorldPosition(new THREE.Vector3()).y };
     face.castShadow = face.receiveShadow = true;
@@ -1087,8 +1089,10 @@ export class Fighter3D {
       mesh(geo("iris", () => new THREE.SphereGeometry(0.0062, 12, 8)), iris, head, sx * 0.034, 0.029, 0.0905).scale.z = 0.45;
       mesh(geo("pupil", () => new THREE.SphereGeometry(0.0032, 8, 6)), pupil, head, sx * 0.034, 0.029, 0.0935).scale.z = 0.4;
       const lid = mesh(geo("lid", () => withColors(new THREE.SphereGeometry(0.0128, 14, 8, 0, Math.PI * 2, 0, Math.PI * 0.42))), skin, head, sx * 0.034, 0.0305, 0.083);
-      lid.rotation.x = 0.35;
-      const brow = mesh(geo("brow", () => new THREE.CapsuleGeometry(0.0045, 0.03, 3, 6)), browM, head, sx * 0.035, 0.056, 0.0985);
+      // heavier upper lids for monolid eyes
+      const F = FACES[look.face || 0];
+      lid.rotation.x = 0.35 + (1 - (F.lid ?? 1)) * 0.7;
+      const brow = mesh(geo("brow", () => new THREE.CapsuleGeometry(0.0045, 0.03, 3, 6)), browM, head, sx * 0.035, 0.056, 0.0985 + (F.browZ || 0));
       brow.rotation.z = Math.PI / 2 - sx * 0.12;
     }
     const lips = mesh(geo("lips", () => new THREE.CapsuleGeometry(0.006, 0.03, 3, 8)), lipM, head, 0, -0.041, 0.1);

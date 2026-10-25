@@ -291,6 +291,9 @@ const POS_TEXT = {
   headlock: " snaps down into a front headlock.",
 };
 
+// the third man in the cage
+const REFEREES = ["Mario Delgado", "Keith 'The Sheriff' Morrow", "Dana Whitfield", "Hector Vargas", "Lena Kowalski", "Big Jim Callahan", "Yuki Tanaka", "Andre Baptiste"];
+
 const an = (noun) => ("aeiou".includes(noun[0].toLowerCase()) ? "an " : "a ") + noun;
 const fmt = (sec) => Math.floor(sec / 60) + ":" + String(sec % 60).padStart(2, "0");
 
@@ -342,6 +345,7 @@ export class Fight {
     this.ground = false;
     this.topTag = null;
     this.pos = null; // ground position (see POSITIONS) while on the mat
+    this.referee = pickOf(REFEREES);
     this.clock = 0;
     this.oppNext = this.aiPlan(1);
   }
@@ -726,6 +730,7 @@ export class Fight {
       round: this.round, rounds: this.rounds, title: this.title, finished: this.finished, winner: this.winner,
       methodType: this.methodType, method: this.method, endRound: this.endRound, endTime: this.endTime,
       player: this.p.toJson(), opponent: this.o.toJson(), logs: this.logs, belt: this.belt || null,
+      referee: this.referee || "Mario Delgado", touch: this.touch || null,
       cards: this.finished ? this.cards() : null,
       scout: this.coachStars >= 3 && !this.finished ? this.oppNext : null,
       oppFiredUp: this.o.bonus > 0,
@@ -1330,7 +1335,7 @@ export class Career {
   editFighter(p) {
     const me = this.me;
     if (p.look !== undefined) {
-      if (!/^\d(,\d){4,11}$/.test(String(p.look))) throw new GameError("That look isn't valid.");
+      if (!/^\d(,\d){4,12}$/.test(String(p.look))) throw new GameError("That look isn't valid.");
       me.look = String(p.look);
     }
     if (p.nickname !== undefined) {
@@ -2604,7 +2609,7 @@ export function unpackCareer(text) {
 // ------------------------------------------------------------------ the game API (formerly Main.java)
 
 const MAX_SLOTS = 5;
-const LOOK = /^\d(,\d){4,11}$/;
+const LOOK = /^\d(,\d){4,12}$/;
 
 /**
  * Runs the game against a storage backend: { kind, getProfile, setProfile, getCareer, setCareer,

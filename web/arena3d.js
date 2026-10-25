@@ -6,7 +6,7 @@ import { Fighter3D, setFighterEnv, GROUND_POSES, POSES, SEQUENCES, attack, groun
 import * as audio from "./audio.js";
 import { WorldView } from "./world3d.js";
 import { RoomEnvironment } from "./vendor/RoomEnvironment.js";
-import { finishShout, reaction, resultCall, roundCall } from "./announcer.js";
+import { cornerCall, finishShout, interviewCall, reaction, resultCall, roundCall } from "./announcer.js";
 
 const R = 4.4; // cage radius to the fence posts
 const RED = "#d62828";
@@ -1081,6 +1081,7 @@ class ArenaView {
       }
 
       case "round":
+        if (!instant && !f.finished) setTimeout(() => audio.say(cornerCall(f), true), 1800);
         this.mode = "corners";
         this.top = this.down = null;
         for (const s of [this.P, this.O]) {
@@ -1102,7 +1103,7 @@ class ArenaView {
 
     if (!instant) {
       const call = reaction(e, f);
-      if (call) audio.shout(call);
+      if (call && !audio.talking()) audio.say(call);
     }
 
     // keep the position in step with the engine
@@ -1280,6 +1281,7 @@ class ArenaView {
       else {
         audio.sfx("bell3");
         audio.say(resultCall(f, W ? W.tag : null));
+        if (W) audio.say(interviewCall(f, W.tag), true);
         this.later(1.2, go);
       }
       return 4200;
@@ -1292,6 +1294,7 @@ class ArenaView {
         audio.sfx("tap");
         audio.say([{ t: finishShout(f, W.tag, false), mood: "call", roar: 1 }]);
         audio.say(resultCall(f, W.tag), true);
+        audio.say(interviewCall(f, W.tag), true);
         this.closeUp(L, 2.0, true);
       }
       this.later(1.3, () => {
@@ -1310,6 +1313,7 @@ class ArenaView {
     if (!instant) {
       audio.say([{ t: finishShout(f, W.tag, doctor), mood: "call", roar: 1 }]);
       audio.say(resultCall(f, W.tag), true);
+      audio.say(interviewCall(f, W.tag), true);
       if (!doctor) this.closeUp(L, 1.8);
       this.refIn = true;
     }

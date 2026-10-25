@@ -530,6 +530,11 @@ const MOODS = {
   shout: { rate: 0.68, pitch: 1.1, volume: 1 },
   tense: { rate: 0.78, pitch: 0.55, volume: 0.9 },
   call: { rate: 1.12, pitch: 1.15, volume: 1 },
+  color: { rate: 1.02, pitch: 0.82, volume: 0.95 },
+  ref: { rate: 0.96, pitch: 0.7, volume: 0.9 },
+  coach: { rate: 1.08, pitch: 0.95, volume: 1 },
+  interview: { rate: 1.0, pitch: 1.05, volume: 0.95 },
+  fighter: { rate: 1.04, pitch: 0.78, volume: 1 },
 };
 let sayQueue = [];
 let sayTimer = null;
@@ -542,6 +547,9 @@ export function onSay(fn) {
 function pickVoice(kind) {
   const voices = speechSynthesis.getVoices();
   const en = voices.filter((x) => /^en/i.test(x.lang));
+  // a different voice per person where the device has enough of them
+  const nth = { call: 1, color: 2, ref: 3, coach: 4, interview: 5, fighter: 6 }[kind];
+  if (nth && en.length > nth) return en[nth];
   if (kind === "call") return en.find((x) => /GB|AU/i.test(x.lang)) || en[1] || en[0];
   return en.find((x) => /en[-_](US)/i.test(x.lang) && /male|david|daniel|alex|fred|guy/i.test(x.name)) || en.find((x) => /en[-_]US/i.test(x.lang)) || en[0];
 }
@@ -563,7 +571,7 @@ function nextLine() {
     try {
       const u = new SpeechSynthesisUtterance(seg.t);
       Object.assign(u, MOODS[seg.mood] || MOODS.calm);
-      const v = pickVoice(seg.mood === "call" ? "call" : "announcer");
+      const v = pickVoice(MOODS[seg.mood] && ["call", "color", "ref", "coach", "interview", "fighter"].includes(seg.mood) ? seg.mood : "announcer");
       if (v) u.voice = v;
       let done = false;
       const finish = () => {
