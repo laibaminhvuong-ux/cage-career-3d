@@ -403,6 +403,14 @@ input:focus, select:focus { outline: 2px solid var(--red); outline-offset: 1px; 
 @media (max-width: 640px) { .announcer-line { font-size: 14px; top: 58px; } .announcer-line.shout { font-size: 19px; } }
 .touch-row { display: flex; gap: 8px; align-items: center; justify-content: center; flex-wrap: wrap; margin: 6px 0 10px; font-size: 13px; color: var(--muted); }
 
+/* editing the fighter mid-career */
+#fighterCard { position: relative; }
+.edit-btn { position: absolute; right: 12px; bottom: 12px; }
+.edit-wrap { display: grid; grid-template-columns: minmax(200px, 300px) 1fr; gap: 14px; align-items: start; }
+.edit-stage { height: 380px; }
+.edit-wrap .look-pickers { max-height: 46vh; overflow: auto; margin-top: 8px; }
+@media (max-width: 700px) { .edit-wrap { grid-template-columns: 1fr; } .edit-stage { height: 260px; } }
+
 </style>
 </head>
 <body>
@@ -467,6 +475,7 @@ input:focus, select:focus { outline: 2px solid var(--red); outline-offset: 1px; 
         <div class="card" id="actionsCard"></div>
         <div class="card" id="rivalCard"></div>
         <div class="card" id="teamCard"></div>
+        <div class="card" id="sponsorCard"></div>
         <div class="card" id="statusCard"></div>
         <div class="card" id="rankCard"></div>
         <div class="card" id="historyCard"></div>

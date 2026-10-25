@@ -759,7 +759,9 @@ class ArenaView {
     if (ol.shorts === pl.shorts) ol.shorts = (ol.shorts + 3) % 8;
     const key = JSON.stringify([f.player.name, f.opponent.name, pl, ol, info.weightClass]);
     const shortName = (c) => String(c.realName || c.name).split(" ").pop().toUpperCase();
-    this.extras.drawScreen(shortName(f.player), shortName(f.opponent), f.belt ? f.belt.label.toUpperCase() : f.rounds === 5 ? "MAIN EVENT · 5 ROUNDS" : "3 ROUNDS");
+    const billing = f.belt ? f.belt.label.toUpperCase() : f.rounds === 5 ? "MAIN EVENT · 5 ROUNDS" : "3 ROUNDS";
+    const sp = info.sponsors && info.sponsors.length ? "  ·  PRESENTED BY " + info.sponsors.slice(0, 2).join(" & ").toUpperCase() : "";
+    this.extras.drawScreen(shortName(f.player), shortName(f.opponent), billing + sp);
     if (key !== this.key) {
       this.key = key;
       for (const s of [this.P, this.O]) if (s) { s.f.dispose(); s.ring.removeFromParent(); }

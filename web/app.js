@@ -1,6 +1,6 @@
 import { createStage } from "./arena3d.js";
 import * as audio from "./audio.js";
-import { LOOK_OPTIONS, SHORTS_NAMES, TATTOO_REGIONS, lookString, randomLook } from "./fighter3d.js";
+import { LOOK_OPTIONS, SHORTS_NAMES, TATTOO_REGIONS, lookString, parseLook, randomLook } from "./fighter3d.js";
 import { Game, GameError } from "./engine.js";
 import { openStore, onSaveError } from "./store.js";
 import { introCall } from "./announcer.js";
@@ -240,6 +240,7 @@ function render() {
   renderActions();
   renderRival();
   renderTeam();
+  renderSponsors();
   renderStatus();
   renderRankings();
   renderHistory();
@@ -255,7 +256,12 @@ function render3d() {
   syncSoundButtons();
   const fightOpen = !$("fightScreen").classList.contains("hidden");
   if (stage) {
-    if (fightOpen) stage.show($("arenaStage"), "arena");
+    if (modal && modal.kind === "edit" && $("editStage")) {
+      // the fighter editor keeps the 3D preview while it's open
+      const e = modal.draft;
+      stage.show($("editStage"), "preview");
+      stage.preview.setFighters([{ look: lookString(e.look), weightClass: state.weightClassIndex, style: e.style, ink: e.nickname || state.fighter.name.split(" ").pop() }]);
+    } else if (fightOpen) stage.show($("arenaStage"), "arena");
     else if (worldOpen() && state.exists) {
       stage.show($("worldStage"), "world");
       stage.world.setLife({ look: state.fighter.look, weightClass: state.weightClassIndex, style: state.fighter.style, life: state.life,
@@ -317,18 +323,22 @@ function renderShowcaseCaption() {
 
 // ------------------------------------------------------------------ fighter look (create screen)
 
-function renderLookPickers() {
-  const el = $("lookPickers");
+/** The look options as rows of chips and swatches; attr is the data attribute the buttons carry. */
+function lookRows(look, attr) {
   const row = (key, label, kind) => `
     <div class="look-row"><span>${label}</span><div class="chips">
       ${LOOK_OPTIONS[key].map((v, i) => kind === "swatch"
-        ? `<button type="button" class="swatch ${createLook[key] === i ? "on" : ""}" style="background:${v}" data-look="${key}:${i}" title="${key === "shorts" ? SHORTS_NAMES[i] : ""}" aria-label="${label} ${i + 1}"></button>`
-        : `<button type="button" class="btn chip ${createLook[key] === i ? "on" : ""}" data-look="${key}:${i}">${esc(v)}</button>`).join("")}
+        ? `<button type="button" class="swatch ${look[key] === i ? "on" : ""}" style="background:${v}" data-${attr}="${key}:${i}" title="${key === "shorts" ? SHORTS_NAMES[i] : ""}" aria-label="${label} ${i + 1}"></button>`
+        : `<button type="button" class="btn chip ${look[key] === i ? "on" : ""}" data-${attr}="${key}:${i}">${esc(v)}</button>`).join("")}
     </div></div>`;
-  el.innerHTML = row("skin", "Skin tone", "swatch") + row("hair", "Hair", "chip") + row("hairColor", "Hair color", "swatch")
+  return row("skin", "Skin tone", "swatch") + row("hair", "Hair", "chip") + row("hairColor", "Hair color", "swatch")
     + row("beard", "Facial hair", "chip") + row("shorts", "Fight shorts", "swatch")
     + row("body", "Body type", "chip") + row("abs", "Abs", "chip")
     + `<div class="label" style="margin-top:8px">Tattoos</div>` + TATTOO_REGIONS.map((r) => row(r.key, r.name, "chip")).join("");
+}
+
+function renderLookPickers() {
+  $("lookPickers").innerHTML = lookRows(createLook, "look");
   $("lookInput").value = lookString(createLook);
 }
 
@@ -372,6 +382,7 @@ function renderFighter() {
   if (s.titlesWon) badges.push(`<span class="badge gold">${s.titlesWon}× champ</span>`);
 
   $("fighterCard").innerHTML = `
+    ${s.retired ? "" : `<button class="btn ghost small edit-btn" data-editfighter title="Edit your fighter">✏️ Edit</button>`}
     <div class="fighter-top">
       <div>
         <div class="fighter-name">${esc(f.displayName)}</div>
@@ -613,6 +624,28 @@ function renderRival() {
     </div>`;
 }
 
+function renderSponsors() {
+  const el = $("sponsorCard");
+  if (!el) return;
+  const L = state.life;
+  if (!L) return (el.innerHTML = "");
+  const deal = (d, mine) => `
+    <div class="offer ${mine ? "title" : ""}">
+      <div class="offer-top"><div>
+        <div class="offer-meta">${esc(d.cat)}${mine ? ` · ${d.weeksLeft} week${d.weeksLeft === 1 ? "" : "s"} left` : ` · ${d.weeks} weeks`}</div>
+        <div class="offer-name">${esc(d.name)}</div>
+        <div class="offer-meta">${esc(d.clauseText)}</div>
+      </div></div>
+      <div class="offer-money">${money(d.weekly)}/week · ${money(d.winBonus)} per win${mine ? "" : ` · ${money(d.signing)} to sign`}</div>
+      ${mine ? `<button class="btn ghost small" data-life="dropSponsor" data-id="${d.id}">End deal</button>`
+        : `<button class="btn gold small" data-life="signSponsor" data-id="${d.id}" ${L.sponsors.length >= 4 ? "disabled" : ""}>Sign</button>`}
+    </div>`;
+  el.innerHTML = `
+    <h2>🤝 Sponsors <span class="muted" style="font-weight:400">· marketability ${L.marketability}</span></h2>
+    ${L.sponsors.length ? L.sponsors.map((d) => deal(d, true)).join("") : `<p class="muted">No sponsors yet. Win, build fame and grow your following and brands will call.</p>`}
+    ${L.sponsorOffers.length ? `<div class="label">Offers <span class="muted">(new offers in ${L.sponsorRefresh}w)</span></div>` + L.sponsorOffers.map((d) => deal(d, false)).join("") : ""}`;
+}
+
 function renderTeam() {
   const s = state;
   const slots = Object.values(s.team);
@@ -640,6 +673,7 @@ function openModal(kind, extra = {}) {
 function closeModal() {
   modal = null;
   renderModal();
+  if (state) render3d();
 }
 
 function renderModal() {
@@ -739,6 +773,25 @@ function renderModal() {
       <p class="muted">Champions keep their belt when they change division, so you can hold several at once, but each belt must be defended within a year and a half or it's stripped. You fight at <b style="color:var(--text)">${esc(s.weightClass)}</b>. Moving up adds power and chin but costs speed; cutting down adds speed, costs power, and the weight cut drains cardio. You start over in the new division's rankings${s.rank === 0 ? " — but as a champion, you get an immediate superfight for the other belt" : s.rank > 0 && s.rank <= 5 ? " — your reputation lands you at #10" : ""}.</p>
       ${s.divisionCooldown ? `<p class="badge red" style="display:inline-block">Your body needs ${s.divisionCooldown} more weeks before another move.</p>` : ""}
       <div class="btn-row">${opts.map((x) => `<button class="btn ${x > i ? "" : ""}" data-movediv="${x}" ${s.divisionCooldown ? "disabled" : ""}>${x > i ? "▲ Move up to" : "▼ Cut down to"} ${esc(s.weightClasses[x])}</button>`).join("")}</div>`;
+  } else if (modal.kind === "edit") {
+    const e = modal.draft;
+    body.innerHTML = `
+      <h1>✏️ Edit fighter</h1>
+      <div class="edit-wrap">
+        <div id="editStage" class="stage-host edit-stage"><div class="stage-fallback">3D preview unavailable on this device</div></div>
+        <div>
+          <div class="row2">
+            <label>Nickname<input id="editNick" maxlength="24" value="${esc(e.nickname)}" placeholder="e.g. The Storm"></label>
+            <label>Fighting style<select id="editStyle">${["Striker", "Wrestler", "Jiu-Jitsu", "Balanced"].map((x) => `<option ${x === e.style ? "selected" : ""}>${x}</option>`).join("")}</select></label>
+          </div>
+          <div class="look-pickers">${lookRows(e.look, "elook")}</div>
+        </div>
+      </div>
+      <div class="btn-row"><button class="btn primary" data-saveedit>Save changes</button><button class="btn ghost" data-closemodal>Cancel</button></div>`;
+    if (stage) {
+      stage.show($("editStage"), "preview");
+      stage.preview.setFighters([{ look: lookString(e.look), weightClass: s.weightClassIndex, style: e.style, ink: e.nickname || s.fighter.name.split(" ").pop() }]);
+    }
   } else if (modal.kind === "place") {
     renderPlace(body);
   } else if (modal.kind === "phone") {
@@ -965,7 +1018,7 @@ function renderFightScreen() {
     // fresh walkout or page reload mid-fight: show everything so far instantly
     loadArena(f);
     if (f.round === 0) {
-      audio.say(introCall(f));
+      audio.say(introCall(f, (state.life ? state.life.sponsors : []).map((d) => d.name)));
     }
     caption(null);
     $("fightLog").innerHTML = f.round === 0 ? introHtml(f) : "";
@@ -1009,7 +1062,7 @@ function scrollLog() {
 function loadArena(f) {
   if (!stage) return;
   stage.show($("arenaStage"), "arena");
-  stage.arena.load(f, { playerLook: state.fighter.look, weightClass: state.weightClassIndex });
+  stage.arena.load(f, { playerLook: state.fighter.look, weightClass: state.weightClassIndex, sponsors: (state.life ? state.life.sponsors : []).map((d) => d.name) });
 }
 
 let captionTimer;
@@ -1209,6 +1262,24 @@ document.addEventListener("click", async (ev) => {
     return;
   }
   if (d.closemodal !== undefined) return closeModal();
+  if (d.editfighter !== undefined) {
+    return openModal("edit", { draft: { look: parseLook(state.fighter.look), nickname: state.fighter.nickname || "", style: state.fighter.style } });
+  }
+  if (d.elook && modal && modal.draft) {
+    const [key, i] = d.elook.split(":");
+    modal.draft.nickname = $("editNick").value;
+    modal.draft.style = $("editStyle").value;
+    modal.draft.look[key] = Number(i);
+    return renderModal();
+  }
+  if (d.saveedit !== undefined && modal && modal.draft) {
+    const e = modal.draft;
+    if (await api("edit", { look: lookString(e.look), nickname: $("editNick").value, style: $("editStyle").value })) {
+      modal = null;
+      render();
+    }
+    return;
+  }
   if (d.touch !== undefined) {
     touchGloves = d.touch === "1";
     return renderFightControls(state.fight);

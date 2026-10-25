@@ -25,9 +25,10 @@ function introduce(c, corner, champ, belt) {
 }
 
 /** The walkout: "Ladies and gentlemen... IT'S TIME!", then both fighters, champion (or red corner) last. */
-export function introCall(f) {
+export function introCall(f, sponsors = []) {
   const belt = f.belt;
   const lines = [{ t: "Ladies and gentlemen!", mood: "build", roar: 0.35 }];
+  if (sponsors.length) lines.push({ t: `Tonight's main attraction is brought to you by ${sponsors.slice(0, 2).join(" and ")}!`, mood: "build" });
   if (belt) lines.push({ t: `This contest is scheduled for five rounds... and it is for the ${spell(belt.label)} of the world!`, mood: "build", roar: 0.5 });
   else if (f.rounds === 5) lines.push({ t: "This... is the main event of the evening! Five rounds!", mood: "build", roar: 0.5 });
   else lines.push({ t: "This contest is scheduled for three rounds!", mood: "build" });

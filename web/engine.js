@@ -795,6 +795,29 @@ export const LIFESTYLES = [
   { name: "Lavish", cost: 4000, joy: 8 },
   { name: "Baller", cost: 25000, joy: 14 },
 ];
+// sponsors: min = how big a name you need to be before they call
+export const SPONSORS = [
+  { id: "apex", name: "Apex Fightwear", cat: "Fightwear", min: 5 },
+  { id: "ironwhey", name: "IronWhey", cat: "Supplements", min: 8 },
+  { id: "volt", name: "VOLT Energy", cat: "Energy drink", min: 10 },
+  { id: "zen", name: "ZenFit App", cat: "Fitness app", min: 12 },
+  { id: "fistline", name: "Fistline Gloves", cat: "Fight gear", min: 15 },
+  { id: "burger", name: "Burger Barn", cat: "Food", min: 20 },
+  { id: "bass", name: "BassHead Audio", cat: "Headphones", min: 25 },
+  { id: "rush", name: "Rush Cola", cat: "Energy drink", min: 30 },
+  { id: "nova", name: "Nova Mobile", cat: "Phones", min: 35 },
+  { id: "ronin", name: "Ronin Apparel", cat: "Fightwear", min: 40 },
+  { id: "luxmotors", name: "Luxury Motors", cat: "Cars", min: 45 },
+  { id: "peak", name: "Peak Sportsbook", cat: "Betting", min: 50 },
+  { id: "chronos", name: "Chronos Watches", cat: "Watches", min: 58 },
+  { id: "aurum", name: "Aurum Private Bank", cat: "Finance", min: 70 },
+];
+const CLAUSES = {
+  none: "No strings attached.",
+  post: "Post on social media at least every 3 weeks.",
+  image: "Morals clause: any scandal ends the deal.",
+  finish: "Double bonus for finishes.",
+};
 const PARTNER_NAMES = ["Linh", "Sofia", "Mia", "Chloe", "Ava", "Hana", "Lucia", "Maya", "Isabella", "Emma", "Yuki", "Amara", "Daniel", "Lucas",
   "Mateo", "Noah", "Kai", "Leo", "Ethan", "Minh Anh", "Thao", "Bao", "Camila", "Zara"];
 const KID_NAMES = ["Max", "Luna", "Leo", "Mila", "Kai", "Nova", "An", "Bella", "Rocky", "Aria", "Tony", "Zoe", "Bao", "Lily"];
@@ -1086,6 +1109,26 @@ export class Career {
         L.driving = p.id || null;
         return null;
       }
+      case "signSponsor": {
+        const o = L.sponsorOffers.find((x) => x.id === p.id);
+        if (!o) throw new GameError("That offer is gone.");
+        if (L.sponsors.length >= 4) throw new GameError("Four sponsors is the max. Drop one first.");
+        if (L.sponsors.some((d) => d.cat === o.cat)) throw new GameError("You already have a " + o.cat.toLowerCase() + " sponsor.");
+        L.sponsorOffers = L.sponsorOffers.filter((x) => x !== o);
+        L.sponsors.push({ ...o, weeksLeft: o.weeks, since: this.week });
+        this.money += o.signing;
+        this.earnings += o.signing;
+        if ((SPONSORS.find((b) => b.id === o.id) || {}).min >= 40) this.fame = clamp(this.fame + 1, 0, 100);
+        this.log("Signs a sponsorship deal with " + o.name + ".");
+        this.post("flex", "Proud to join the " + o.name + " family 🤝 #ad", 1.2);
+        return "Signed with " + o.name + "! " + fmtMoney(o.signing) + " signing bonus.";
+      }
+      case "dropSponsor": {
+        const d = L.sponsors.find((x) => x.id === p.id);
+        if (!d) throw new GameError("You don't have that sponsor.");
+        this.dropSponsor(d, "Ends the deal with " + d.name + ".");
+        return "You ended the deal with " + d.name + ".";
+      }
       case "tattoo": {
         const region = ["tChest", "tBack", "tArmL", "tArmR", "tLegs"].indexOf(p.region);
         const design = Math.trunc(Number(p.design));
@@ -1210,6 +1253,7 @@ export class Career {
           L.followers = Math.round(L.followers * 0.97);
           if (L.partner) L.partner.affection = Math.max(0, L.partner.affection - 15);
           this.log("Scandal! Blurry club photos of " + me.lastName() + " go viral.");
+          for (const d of L.sponsors.filter((x) => x.clause === "image")) this.dropSponsor(d, d.name + " invokes the morals clause and ends your deal.");
           return "Big night… but the photos leaked. Scandal! (−fame" + (L.partner ? ", " + L.partner.name + " is upset" : "") + ")";
         }
         return "What a night! VIP section, the whole city knows your name. (−20 energy)";
@@ -1217,6 +1261,88 @@ export class Career {
       default:
         throw new GameError("Unknown life action.");
     }
+  }
+
+  // ---------------------------------------------------------------- sponsors
+
+  /** How marketable the fighter is: fame, audience, promotion, belts and wins. */
+  marketability() {
+    const L = this.lifeState;
+    return this.fame + Math.log10(L.followers + 1) * 6 + (this.gfc ? 15 : 0) + (this.isChamp() ? 25 : 0) + Object.keys(this.heldBelts || {}).length * 10 + this.me.wins * 0.5;
+  }
+
+  sponsorOffers() {
+    const L = this.lifeState;
+    L.sponsorAge = 0;
+    const score = this.marketability();
+    const taken = new Set(L.sponsors.map((d) => d.cat));
+    const pool = shuffle(SPONSORS.filter((b) => b.min <= score && !taken.has(b.cat) && !L.sponsors.some((d) => d.id === b.id)));
+    L.sponsorOffers = pool.slice(0, 3).map((b) => {
+      const weekly = Math.round((150 * Math.pow(1 + score / 12, 1.7) * (0.8 + b.min / 80) * (0.85 + rnd() * 0.3)) / 50) * 50;
+      return {
+        id: b.id, name: b.name, cat: b.cat, weekly, signing: weekly * 4, winBonus: weekly * 2, weeks: rnd() < 0.5 ? 26 : 52,
+        clause: pickOf(["none", "post", "image", "finish"]),
+      };
+    });
+  }
+
+  sponsorWeek() {
+    const L = this.lifeState;
+    for (const d of [...L.sponsors]) {
+      this.money += d.weekly;
+      this.earnings += d.weekly;
+      d.weeksLeft--;
+      if (d.clause === "post") {
+        const quiet = this.week - (L.done.post || d.since);
+        if (quiet === 3) this.log(d.name + " wants to see some posts. Get on your phone!");
+        if (quiet >= 5) {
+          this.dropSponsor(d, d.name + " drops you: you went quiet on social media.");
+          continue;
+        }
+      }
+      if (d.weeksLeft <= 0) this.dropSponsor(d, d.name + " deal is up. Check your offers to sign a new one.");
+    }
+    if (++L.sponsorAge >= 8 || (!L.sponsorOffers.length && L.sponsorAge >= 3)) this.sponsorOffers();
+  }
+
+  dropSponsor(d, why) {
+    const L = this.lifeState;
+    L.sponsors = L.sponsors.filter((x) => x !== d);
+    if (why) this.log(why);
+  }
+
+  /** After a fight: win bonuses, and big brands nervous about a knockout loss. */
+  sponsorsAfterFight(won, lost, method) {
+    const L = this.lifeState;
+    let paid = 0;
+    for (const d of [...L.sponsors]) {
+      if (won) paid += d.winBonus * (d.clause === "finish" && method !== "DEC" ? 2 : 1);
+      if (lost && method === "KO" && (SPONSORS.find((b) => b.id === d.id) || {}).min >= 40 && rnd() < 0.25) {
+        this.dropSponsor(d, d.name + " ends the deal after the knockout loss.");
+      }
+    }
+    this.money += paid;
+    this.earnings += paid;
+    return paid;
+  }
+
+  /** Change how the fighter looks and presents mid-career. */
+  editFighter(p) {
+    const me = this.me;
+    if (p.look !== undefined) {
+      if (!/^\d(,\d){4,11}$/.test(String(p.look))) throw new GameError("That look isn't valid.");
+      me.look = String(p.look);
+    }
+    if (p.nickname !== undefined) {
+      const nick = String(p.nickname).trim();
+      if (nick.length > 24) throw new GameError("Nickname is too long.");
+      me.nickname = nick;
+    }
+    if (p.style !== undefined) {
+      if (!STYLES.includes(p.style)) throw new GameError("Pick a fighting style.");
+      me.style = p.style;
+    }
+    return "Fighter updated: " + me.displayName() + ".";
   }
 
   lifeJson() {
@@ -1228,6 +1354,9 @@ export class Career {
       kids: L.kids.map((k) => ({ ...k, age: Math.floor((this.week - k.born) / 52) })), tryingForKids: L.tryingForKids,
       lifestyle: L.lifestyle, feed: L.feed.slice(0, 15), done: Object.fromEntries(Object.entries(L.done).map(([k, w]) => [k, w === this.week])),
       lastBills: L.lastBills || 0, lastSponsor: L.lastSponsor || 0, sponsorRate: Math.round(L.followers / 1000) * 20,
+      sponsors: L.sponsors.map((d) => ({ ...d, clauseText: CLAUSES[d.clause] })),
+      sponsorOffers: L.sponsorOffers.map((d) => ({ ...d, clauseText: CLAUSES[d.clause] })),
+      sponsorRefresh: Math.max(0, 8 - L.sponsorAge), marketability: Math.round(this.marketability()),
       catalog: { houses: HOUSES, cars: CARS, pets: PETS, lifestyles: LIFESTYLES },
       weddingCost: [20000, 60000, 250000, 1500000][L.lifestyle], dateCost: [80, 400, 2500, 15000][L.lifestyle],
     };
@@ -1240,6 +1369,11 @@ export class Career {
         happiness: 60, followers: 200 + (this.fame || 0) * (this.fame || 0) * 20, house: 0, cars: [], driving: null, pets: [], partner: null,
         candidate: null, kids: [], tryingForKids: false, lifestyle: 1, feed: [], done: {}, exes: [],
       };
+    }
+    if (!this.lifeState.sponsors) {
+      this.lifeState.sponsors = [];
+      this.lifeState.sponsorOffers = [];
+      this.lifeState.sponsorAge = 99;
     }
     if (!this.heldBelts) this.heldBelts = {};
     if (!this.lineage) this.lineage = {};
@@ -1859,6 +1993,8 @@ export class Career {
       me.add(stat, (0.5 + rnd()) * Math.max(0, 1 - me.get(stat) / 95) * 2);
     }
 
+    // sponsor win bonuses (already paid out) show in the fight's payday
+    pay += this.sponsorsAfterFight(won, lost, f.methodType);
     let careerNote = "";
     if (o.contender) {
       if (won) {
@@ -2078,6 +2214,7 @@ export class Career {
     this.npcWeek();
     this.beltWeek();
     this.lifeWeek();
+    this.sponsorWeek();
     this.rivalWeek();
     if (++this.marketAge >= 8) this.refreshMarket();
     if (this.scheduled) {
@@ -2568,6 +2705,7 @@ export class Game {
       case "staff/fire": msg = this.need(career).fire(p.role); break;
       case "division": msg = this.need(career).changeDivision(int(p.weightClass)); break;
       case "life": msg = this.need(career).lifeAction(p.type, p); break;
+      case "edit": msg = this.need(career).editFighter(p); break;
       case "save/blank":
         if (prof.slots.length >= MAX_SLOTS) throw new GameError(`All ${MAX_SLOTS} save slots are full. Delete a save first.`);
         prof.active = null;
