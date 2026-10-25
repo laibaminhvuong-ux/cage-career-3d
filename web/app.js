@@ -601,7 +601,7 @@ function renderRankings() {
     </div>` : "";
   $("rankCard").innerHTML = `
     <h2>${esc(s.orgShort)} ${esc(s.weightClass)} rankings</h2>
-    <div class="btn-row" style="margin:-4px 0 8px"><button class="btn small" data-alldivs>📊 All ${esc(s.orgShort)} divisions</button>
+    <div class="btn-row" style="margin:-4px 0 8px"><button class="btn small" data-alldivs>📊 All promotions & divisions</button>
       <span class="muted" style="font-size:12px;align-self:center">Tap any fighter to meet them</span></div>
     ${s.gfc ? "" : `<p class="muted" style="font-size:13px">You're not in a major promotion yet. These are the GFC fighters you're chasing.</p>`}
     ${beltBox}
@@ -886,11 +886,14 @@ function renderModal() {
   } else if (modal.kind === "divisions") {
     const tab = modal.dtab || s.weightClass;
     const D = s.divisions.find((x) => x.name === tab) || s.divisions[0];
+    const P = s.promotions.find((x) => x.id === s.viewOrg) || s.promotions[0];
+    const mine = s.viewOrg === s.orgKey;
     body.innerHTML = `
-      <h1>📊 ${esc(s.orgShort)} rankings</h1>
-      <p class="muted" style="font-size:13px">${s.gfc ? `Every ${esc(s.orgName)} division` : "The GFC divisions you're chasing"}. Tap a fighter to see their profile, talk to them, train together or call them out.</p>
+      <h1>📊 <span translate="no">${esc(P.short)}</span> rankings</h1>
+      <div class="tabs promo-tabs">${s.promotions.slice().reverse().map((x) => `<button class="btn small ${x.id === s.viewOrg ? "primary" : "ghost"}" data-dorg="${x.id}" translate="no">${esc(x.short)}${x.id === s.orgKey && s.gfc ? " ●" : ""}</button>`).join("")}</div>
+      <p class="muted" style="font-size:13px">${nm(P.name)}${mine ? (s.gfc ? " · your promotion" : " · the promotion you're chasing") : ""}. Tap a fighter to see their profile, talk to them or train together${mine ? ", or call them out" : ""}.</p>
       <div class="tabs">${s.divisions.map((x) => `<button class="btn small ${x.name === D.name ? "gold" : "ghost"}" data-dtab="${esc(x.name)}">${esc(x.name)}${x.current ? " ●" : ""}${x.held ? " 🏆" : ""}</button>`).join("")}</div>
-      <h2 style="margin-top:10px">${esc(D.name)}${D.current ? ` <span class="badge red">YOUR DIVISION</span>` : ""}</h2>
+      <h2 style="margin-top:10px">${esc(D.name)}${D.current ? ` <span class="badge red">YOUR DIVISION</span>` : ""}${D.list[0] ? ` <span class="muted" style="font-size:13px;font-weight:400">· champion ${nm(D.list[0].name)}</span>` : ""}</h2>
       <ul class="ranks">${D.list.map((r) => `
         <li class="${r.player ? "me" : "tap"} ${r.rank === 0 || r.interim ? "champ" : ""} ${r.rival ? "rivalrow" : ""}" ${r.player ? "" : `data-fighter="${r.id}"`}>
           <span class="rk">${r.rank === 0 ? "C" : r.interim ? "IC" : r.rank}</span>
@@ -909,7 +912,7 @@ function renderModal() {
         <div>
           <h1 style="margin:0">${nm(f.displayName)}</h1>
           <div class="fighter-meta">${f.record} (${f.koWins} KO · ${f.subWins} SUB · ${f.decWins} DEC) · ${esc(f.style)} · ${esc(f.country)} · Age ${f.age}</div>
-          <div class="fighter-meta">${esc(s.orgShort)} ${esc(f.division)} · ${f.rank === 0 ? "🏆 Champion" : f.rank > 0 ? "#" + f.rank : "Unranked"}${f.rival ? " · ⚔ Your rival" : ""}${f.booked ? " · 🥊 Your next opponent" : ""}${f.streak > 1 ? ` · 🔥 ${f.streak}-fight win streak` : ""}</div>
+          <div class="fighter-meta"><span translate="no">${esc(f.org)}</span> ${esc(f.division)} · ${f.rank === 0 ? "🏆 Champion" : f.rank > 0 ? "#" + f.rank : "Unranked"}${f.rival ? " · ⚔ Your rival" : ""}${f.booked ? " · 🥊 Your next opponent" : ""}${f.streak > 1 ? ` · 🔥 ${f.streak}-fight win streak` : ""}</div>
           ${f.h2h ? `<div class="fighter-meta">Against you: ${esc(f.h2h)}</div>` : ""}
         </div>
         <div class="ovr"><b>${f.overall}</b><span>OVR</span></div>
@@ -925,7 +928,7 @@ function renderModal() {
         <button class="btn" data-meet="trash" ${busy || f.met ? "disabled" : ""}>🔥 Trash talk online<span class="sub">Fame & hype, they start to hate you</span></button>
         <button class="btn" data-meet="hangout" ${busy || f.met || f.rel <= -40 || f.booked ? "disabled" : ""}>🍽️ Hang out<span class="sub">Dinner together: relationship +15, happiness +3</span></button>
         <button class="btn" data-meet="train" ${busy || f.rel < 30 || f.booked ? "disabled" : ""}>🏋️ Train together<span class="sub">${f.rel < 30 ? "Needs Friendly (30+)" : "Takes a week: learn their two best skills fast"}</span></button>
-        <button class="btn primary" data-meet="callout" ${busy || !f.canCallout || f.booked ? "disabled" : ""}>📣 Call them out<span class="sub">${!f.inPromo ? "Earn a GFC contract first" : !f.sameDivision ? "They fight at " + esc(f.division) : s.scheduled ? "You already have a fight booked" : "Ask for the fight. They might say no"}</span></button>
+        <button class="btn primary" data-meet="callout" ${busy || !f.canCallout || f.booked ? "disabled" : ""}>📣 Call them out<span class="sub">${f.otherOrg ? "They fight in the " + esc(f.org) : !f.inPromo ? "Earn a GFC contract first" : !f.sameDivision ? "They fight at " + esc(f.division) : s.scheduled ? "You already have a fight booked" : "Ask for the fight. They might say no"}</span></button>
         <button class="btn" data-meet="rival" ${busy || f.rival || f.met ? "disabled" : ""}>⚔ Declare a rivalry<span class="sub">Bad blood sells fights</span></button>
       </div>
       <div class="label">Stats <span style="float:right">You · Them</span></div>
@@ -1506,7 +1509,14 @@ document.addEventListener("click", async (ev) => {
     if (await api("fighter/view", { id: d.fighter })) openModal("fighter", { back: modal && modal.kind === "divisions" ? modal.dtab : null });
     return;
   }
-  if (d.alldivs !== undefined) return openModal("divisions", { dtab: state.weightClass });
+  if (d.alldivs !== undefined) {
+    await api("promo/view", { id: state.orgKey });
+    return openModal("divisions", { dtab: state.weightClass });
+  }
+  if (d.dorg) {
+    if (await api("promo/view", { id: d.dorg })) renderModal();
+    return;
+  }
   if (d.dtab) {
     modal.dtab = d.dtab;
     return renderModal();

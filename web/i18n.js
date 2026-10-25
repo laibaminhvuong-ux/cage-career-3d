@@ -189,6 +189,9 @@ const ROWS = [
   ["Sign · {x}", "Ký · {x}", "Firmar · {x}", "Contratar · {x}", "Signer · {x}"],
   ["needs {x} fame", "cần {x} danh tiếng", "requiere {x} de fama", "precisa de {x} de fama", "requiert {x} de célébrité"],
   ["{x} rankings", "Bảng xếp hạng {x}", "Ranking de {x}", "Ranking do {x}", "Classement {x}"],
+  ["All promotions & divisions", "Mọi giải đấu & hạng cân", "Todas las promotoras y divisiones", "Todas as organizações e divisões", "Toutes les organisations et catégories"],
+  ["{x} rankings", "Bảng xếp hạng {x}", "Ranking de {x}", "Ranking do {x}", "Classement {x}"],
+  ["YOUR DIVISION", "HẠNG CỦA BẠN", "TU DIVISIÓN", "SUA DIVISÃO", "TA CATÉGORIE"],
   ["All {x} divisions", "Tất cả hạng cân {x}", "Todas las divisiones de {x}", "Todas as divisões do {x}", "Toutes les catégories {x}"],
 ];
 

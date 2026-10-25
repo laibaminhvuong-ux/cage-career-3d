@@ -1509,11 +1509,21 @@ export class Career {
     if (champ) this.log("Vacates the " + this.orgShort() + " title" + (Object.keys(this.heldBelts).length ? "s" : "") + " to sign with " + p.short + ".");
     this.heldBelts = {};
     const wasRival = this.rival;
+    // the promotion you leave keeps its fighters (you're gone from its rankings); the one you join
+    // is the same world you've been watching from outside
+    this.ensureOrgs();
+    const old = this.orgKey();
+    this.orgDivs[old] = { ...this.otherDivs, [this.division()]: this.rankings.filter((f) => f !== this.me && f !== wasRival) };
+    this.orgLineage[old] = this.lineage;
+    const stored = this.orgDivs[id] || {};
+    delete this.orgDivs[id];
     this.org = id;
     this.gfc = true;
-    this.otherDivs = {};
-    this.lineage = {};
-    this.buildDivision();
+    this.lineage = this.orgLineage[id] || {};
+    delete this.orgLineage[id];
+    this.otherDivs = { ...stored };
+    delete this.otherDivs[this.division()];
+    this.buildDivision(stored[this.division()] || null);
     // your name gets you a ranking right away
     const spot = Math.max(6, Math.min(RANKED - 1, 15 - Math.floor(this.fame / 10) - (cur ? Math.round((cur.level - p.level) / -3) : 0)));
     this.rankings.splice(spot, 0, this.me);
@@ -1556,6 +1566,7 @@ export class Career {
     if (!this.lastTitleWeek) this.lastTitleWeek = this.week || 1;
     if (!this.rel) this.rel = {};
     if (!this.otherDivs && this.me) this.ensureDivs();
+    if (!this.orgDivs && this.me) this.ensureOrgs();
   }
 
   /** The divisions this fighter competes in: men's or women's. */
@@ -2063,6 +2074,56 @@ export class Career {
     });
   }
 
+  /** Which promotion's world this.rankings and this.otherDivs show (the GFC while on the regional circuit). */
+  orgKey() { return this.org || "gfc"; }
+
+  /**
+   * Every other promotion keeps full rankings too: { promotionId: { division: [fighters] } },
+   * champion first. They fight in the background, and you can meet anyone in them.
+   */
+  ensureOrgs() {
+    if (!this.orgDivs) this.orgDivs = {};
+    if (!this.orgLineage) this.orgLineage = {};
+    for (const p of PROMOTIONS) {
+      if (p.id === this.orgKey()) continue;
+      const D = (this.orgDivs[p.id] ||= {});
+      this.classes().forEach((name, wc) => {
+        if (D[name]) return;
+        const L = [];
+        for (let i = 0; i < RANKED; i++) L.push(Fighter.generate(88 - i * 1.2 + p.level, this.wcAdj(wc), this.gender || "M"));
+        if (this.npcOverall) for (const f of L) pinFighter(f, this.npcOverall);
+        D[name] = L;
+      });
+    }
+  }
+
+  /** The other promotions' fighters fight each other; their title changes make the news now and then. */
+  orgsWeek() {
+    for (const p of PROMOTIONS) {
+      const D = (this.orgDivs || {})[p.id];
+      if (!D) continue;
+      for (const [name, L] of Object.entries(D)) {
+        const wc = this.classes().indexOf(name);
+        while (L.length < RANKED) {
+          const f = Fighter.generate(70 + nextInt(6) + p.level, this.wcAdj(wc), this.gender || "M");
+          f.age = 23 + nextInt(4);
+          if (this.npcOverall) pinFighter(f, this.npcOverall);
+          L.push(f);
+        }
+        if (rnd() > 0.25) continue;
+        const i = nextInt(L.length - 1), j = Math.min(L.length - 1, i + 1 + nextInt(3));
+        const a = L[i], b = L[j];
+        if (a === this.rival || b === this.rival) continue;
+        const { w, how } = this.npcBout(a, b);
+        if (w === b) {
+          removeItem(L, b);
+          L.splice(L.indexOf(a), 0, b);
+          if (i === 0 && rnd() < 0.35) this.log(p.short + " " + name + ": NEW CHAMPION! " + b.displayName() + " beats " + a.lastName() + " by " + how + ".");
+        }
+      }
+    }
+  }
+
   /** The other divisions' fighters fight each other too; title changes make the news. */
   otherDivsWeek() {
     const lv = this.org ? this.orgLevel() : 0;
@@ -2100,7 +2161,8 @@ export class Career {
 
   /** Finds a fighter anywhere in the promotion (or your rival, opponents and offers) by id. */
   findFighter(id) {
-    const all = [...this.rankings, ...Object.values(this.otherDivs || {}).flat(), this.rival,
+    const all = [...this.rankings, ...Object.values(this.otherDivs || {}).flat(),
+      ...Object.values(this.orgDivs || {}).flatMap((D) => Object.values(D).flat()), this.rival,
       this.scheduled && this.scheduled.opp, ...this.offers.map((o) => o.opp)];
     return all.find((f) => f && f.id === id && f !== this.me) || null;
   }
@@ -2112,6 +2174,12 @@ export class Career {
     for (const [name, L] of Object.entries(this.otherDivs || {})) {
       const i = L.indexOf(f);
       if (i >= 0) return { division: name, rank: this.heldBelts[name] ? i + 1 : i, same: false };
+    }
+    for (const p of PROMOTIONS) {
+      for (const [name, L] of Object.entries((this.orgDivs || {})[p.id] || {})) {
+        const i = L.indexOf(f);
+        if (i >= 0) return { division: name, rank: i, same: false, org: p.short };
+      }
     }
     return { division: this.division(), rank: -1, same: true };
   }
@@ -2219,6 +2287,7 @@ export class Career {
       case "callout": {
         if (this.scheduled || this.fight) throw new GameError("You already have a fight booked.");
         if (this.lastCalloutWeek === this.week) throw new GameError("You've already called someone out this week.");
+        if (where.org) throw new GameError(them + " fights in the " + where.org + ". You'd have to sign there first.");
         if (!where.same) throw new GameError(them + " fights at " + where.division + ". Move divisions to fight them.");
         if (!this.gfc && where.rank >= 0) throw new GameError(them + " fights in the GFC. Earn a contract first.");
         this.lastCalloutWeek = this.week;
@@ -2288,18 +2357,21 @@ export class Career {
     const w = this.whereIs(f), v = this.relOf(f);
     const booked = !!this.scheduled && this.scheduled.opp === f;
     const met = ((this.rel || {})[f.id] || {}).met === this.week;
-    return { ...f.toJson(), id: f.id, division: w.division, rank: w.rank, sameDivision: w.same,
+    const orgShort = w.org || (this.gfc ? this.orgShort() : "GFC");
+    return { ...f.toJson(), id: f.id, division: w.division, rank: w.rank, sameDivision: w.same, org: orgShort, otherOrg: !!w.org,
       champion: w.rank === 0, rel: v, relLabel: Career.relLabel(v), rival: f === this.rival, booked, met,
       canCallout: !this.scheduled && !this.fight && this.lastCalloutWeek !== this.week && w.same && (this.gfc || w.rank < 0),
       inPromo: this.gfc || w.rank < 0,
       h2h: this.history.filter((h) => h.opponent === f.displayName()).map((h) => h.result).join(" ") };
   }
 
-  divisionsJson() {
+  divisionsJson(orgId = this.orgKey()) {
+    const away = orgId !== this.orgKey();
+    const D = away ? (this.orgDivs || {})[orgId] || {} : null;
     return this.classes().map((name, wc) => {
-      const cur = wc === this.weightClass;
-      let L = cur ? this.rankings : (this.otherDivs || {})[name] || [];
-      const held = !cur && !!this.heldBelts[name];
+      const cur = !away && wc === this.weightClass;
+      let L = away ? D[name] || [] : cur ? this.rankings : (this.otherDivs || {})[name] || [];
+      const held = !away && !cur && !!this.heldBelts[name];
       if (held) L = [this.me, ...L.slice(0, RANKED - 1)];
       return { name, current: cur, held, list: L.map((f, i) => ({ id: f.id, rank: i, name: f.displayName(), record: f.record(), overall: f.overall(),
         style: f.style, country: f.country, player: f === this.me, rival: f === this.rival, interim: cur && f === this.interim,
@@ -2675,6 +2747,7 @@ export class Career {
     if (this.retired) return;
     this.npcWeek();
     this.otherDivsWeek();
+    this.orgsWeek();
     this.beltWeek();
     this.lifeWeek();
     this.sponsorWeek();
@@ -2720,7 +2793,8 @@ export class Career {
         if (this.gfc) this.log(f.displayName() + " (" + f.record() + ") retires from the " + this.orgShort() + ".");
       }
     }
-    for (const L of Object.values(this.otherDivs || {})) {
+    const elsewhere = Object.values(this.orgDivs || {}).flatMap((D) => Object.values(D));
+    for (const L of [...Object.values(this.otherDivs || {}), ...elsewhere]) {
       for (const f of [...L]) {
         if (f === this.rival) continue;
         f.age++;
@@ -3011,7 +3085,9 @@ export class Career {
       offers: this.offers.map((o, i) => this.offerJson(o, i)),
       scheduled: this.scheduled ? this.offerJson(this.scheduled, -1) : null,
       fightNight: this.fightNight(),
-      divisions: this.divisionsJson(),
+      divisions: this.divisionsJson(PROMOTIONS.some((p) => p.id === this.viewOrg) ? this.viewOrg : this.orgKey()),
+      viewOrg: PROMOTIONS.some((p) => p.id === this.viewOrg) ? this.viewOrg : this.orgKey(),
+      orgKey: this.orgKey(),
       profile: this.profileJson(this.viewing),
       lastMeet: this.lastMeet || null,
       rankings: this.rankings.map((f, i) => ({ id: f.id, rank: i, name: f.displayName(), record: f.record(), overall: f.overall(),
@@ -3049,7 +3125,13 @@ export function packCareer(career) {
   const pool = {};
   const enc = (v) => {
     if (v instanceof Fighter) {
-      if (!pool[v.id]) pool[v.id] = { ...v, stats: { ...v.stats } };
+      if (!pool[v.id]) {
+        // compact: stats as a list in STATS order (two decimals), empty and zero fields left out
+        const o = {};
+        for (const [k, x] of Object.entries(v)) if (k !== "id" && k !== "stats" && x !== null && x !== false && x !== "" && x !== 0) o[k] = x;
+        o.s = STATS.map((k) => Math.round(v.get(k) * 100) / 100);
+        pool[v.id] = o;
+      }
       return { $f: v.id };
     }
     if (Array.isArray(v)) return v.map(enc);
@@ -3069,7 +3151,16 @@ export function packCareer(career) {
 export function unpackCareer(text) {
   const { pool, data } = JSON.parse(text);
   const fighters = {};
-  for (const id of Object.keys(pool)) fighters[id] = Object.assign(Object.create(Fighter.prototype), pool[id]);
+  const blank = { nickname: "", wins: 0, losses: 0, draws: 0, koWins: 0, subWins: 0, decWins: 0, streak: 0, player: false, look: null };
+  for (const id of Object.keys(pool)) {
+    const f = Object.assign(Object.create(Fighter.prototype), blank, pool[id], { id });
+    if (Array.isArray(f.s)) {
+      // the compact form (older saves keep a stats object)
+      f.stats = Object.fromEntries(STATS.map((k, i) => [k, f.s[i]]));
+      delete f.s;
+    }
+    fighters[id] = f;
+  }
   const dec = (v) => {
     if (Array.isArray(v)) return v.map(dec);
     if (v && typeof v === "object") {
@@ -3194,6 +3285,7 @@ export class Game {
       case "edit": msg = this.need(career).editFighter(p); break;
       case "promo": msg = this.need(career).signPromotion(p.org); break;
       case "fighter/view": this.need(career).viewing = p.id || null; break;
+      case "promo/view": this.need(career).viewOrg = p.id || null; break;
       case "fighter/meet": msg = this.need(career).meetFighter(p.id, p.type); break;
       case "save/blank":
         if (prof.slots.length >= MAX_SLOTS) throw new GameError(`All ${MAX_SLOTS} save slots are full. Delete a save first.`);
