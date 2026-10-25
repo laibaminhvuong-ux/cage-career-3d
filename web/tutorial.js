@@ -11,7 +11,7 @@ const TOURS = {
     { sel: "#fightCard", title: "Fight offers", text: "Accept a fight and you get a training camp of a few weeks. Tougher opponents pay more. Title fights are five rounds." },
     { sel: "#teamCard", title: "Your team", text: "Hire coaches to train faster, a physio to avoid injuries, and a manager for bigger purses." },
     { sel: "#sponsorCard", title: "Sponsors", text: "As your fame and following grow, brands offer deals: signing bonuses, weekly pay and win bonuses. Mind the clauses!" },
-    { sel: "#rankCard", title: "Rankings & the belt", text: "Climb the GFC rankings to earn a title shot. Champions must defend within 78 weeks or get stripped, and can hold belts in several divisions." },
+    { sel: "#rankCard", title: "Rankings & the belt", text: "Climb your promotion's rankings to earn a title shot. Champions must defend within 78 weeks or get stripped, and can hold belts in several divisions." },
     { sel: "#lifeBtn", title: "🌆 Life", text: "Step out into the 3D city: buy a house and cars, adopt pets, date, start a family, get tattoos and post on social media. Happiness makes you train better." },
     { sel: "[data-saves]", title: "Saves", text: "Every action saves automatically. Keep several fighters, export them, or load a career from a file or code." },
     { title: "You're ready!", text: "Win fights, chase the belt, and build a legend. Tap ❓ any time to see this again. Good luck, champ!" },
@@ -26,7 +26,7 @@ const TOURS = {
     { sel: "#worldStage", title: "The city", text: "Tap the ground (or use WASD) to walk there. Hold Shift to run. Drag to look around." },
     { sel: "#worldHud", title: "Your life", text: "Cash, happiness, followers and energy. Happy fighters train up to 15% faster." },
     { sel: "[data-phone]", title: "📱 Phone", text: "Post once a week: training clips, flexes, family pics or a call-out. Followers bring fame and sponsor money." },
-    { sel: "#worldBottom", title: "Places", text: "Walk up to a door and tap Enter: home, realtor, car dealer, pet shop, café, nightclub, Ink Studio, gym and the GFC Arena. Own a car? Drive it!" },
+    { sel: "#worldBottom", title: "Places", text: "Walk up to a door and tap Enter: home, realtor, car dealer, pet shop, café, nightclub, Ink Studio, gym and the Arena. Own a car? Drive it!" },
     { sel: "[data-closeworld]", title: "Back to your career", text: "Tap 🥊 Career to return to training and fights." },
   ],
 };

@@ -245,6 +245,7 @@ function render() {
   renderRival();
   renderTeam();
   renderSponsors();
+  renderPromotions();
   renderStatus();
   renderRankings();
   renderHistory();
@@ -264,13 +265,14 @@ function render3d() {
       // the fighter editor keeps the 3D preview while it's open
       const e = modal.draft;
       stage.show($("editStage"), "preview");
-      stage.preview.setFighters([{ look: lookString(e.look), weightClass: state.weightClassIndex, style: e.style, name: state.fighter.name, ink: e.nickname || state.fighter.name.split(" ").pop() }]);
+      stage.preview.setFighters([{ look: lookString(e.look), weightClass: state.weightClassIndex, style: e.style, female: state.gender === "F", name: state.fighter.name, ink: e.nickname || state.fighter.name.split(" ").pop() }]);
     } else if (fightOpen) stage.show($("arenaStage"), "arena");
     else if (worldOpen() && state.exists) {
       stage.show($("worldStage"), "world");
       stage.world.setLife({ look: state.fighter.look, weightClass: state.weightClassIndex, style: state.fighter.style, life: state.life,
         ink: state.fighter.nickname || state.fighter.name.split(" ").pop(),
         seed: state.fighter.name,
+        female: state.gender === "F",
         carCatalog: state.life.catalog.cars, injured: state.injuryWeeks > 0 });
     }
     else if (!state.exists) {
@@ -311,11 +313,11 @@ function syncSoundButtons() {
 function showcaseFighters() {
   const s = state;
   const champ = s.rank === 0 || (s.belt && (s.belt.interimIsMe || s.belt.held.length > 0));
-  const me = { look: s.fighter.look, name: s.fighter.name, weightClass: s.weightClassIndex, style: s.fighter.style, belt: champ && !s.retired ? "waist" : null, injured: s.injuryWeeks > 0,
+  const me = { look: s.fighter.look, name: s.fighter.name, weightClass: s.weightClassIndex, style: s.fighter.style, female: s.gender === "F", belt: champ && !s.retired ? "waist" : null, injured: s.injuryWeeks > 0,
     ink: s.fighter.nickname || s.fighter.name.split(" ").pop() };
   const o = s.scheduled && !s.retired ? s.scheduled : null;
   const opp = o ? o.opponent : null;
-  return opp ? [me, { look: opp.look, name: opp.name, weightClass: s.weightClassIndex, style: opp.style, belt: o.oppRank === 0 ? "shoulder" : null }] : [me];
+  return opp ? [me, { look: opp.look, name: opp.name, weightClass: s.weightClassIndex, style: opp.style, female: opp.gender === "F", belt: o.oppRank === 0 ? "shoulder" : null }] : [me];
 }
 
 function renderShowcaseCaption() {
@@ -329,18 +331,23 @@ function renderShowcaseCaption() {
 // ------------------------------------------------------------------ fighter look (create screen)
 
 /** The look options as rows of chips and swatches; attr is the data attribute the buttons carry. */
-function lookRows(look, attr) {
+function lookRows(look, attr, section = "all") {
   const row = (key, label, kind) => `
     <div class="look-row"><span>${label}</span><div class="chips">
       ${LOOK_OPTIONS[key].map((v, i) => kind === "swatch"
         ? `<button type="button" class="swatch ${look[key] === i ? "on" : ""}" style="background:${v}" data-${attr}="${key}:${i}" title="${key === "shorts" ? SHORTS_NAMES[i] : ""}" aria-label="${label} ${i + 1}"></button>`
         : `<button type="button" class="btn chip ${look[key] === i ? "on" : ""}" data-${attr}="${key}:${i}">${esc(v)}</button>`).join("")}
     </div></div>`;
-  return row("skin", "Skin tone", "swatch") + row("face", "Face", "chip") + row("hair", "Hair", "chip") + row("hairColor", "Hair color", "swatch")
-    + row("beard", "Facial hair", "chip") + row("shorts", "Fight shorts", "swatch")
-    + row("body", "Body type", "chip") + row("abs", "Abs", "chip")
-    + `<div class="label" style="margin-top:8px">Accessories</div>` + row("headband", "Headband", "chip") + row("wraps", "Feet", "chip") + row("knees", "Knees", "chip")
-    + `<div class="label" style="margin-top:8px">Tattoos</div>` + TATTOO_REGIONS.map((r) => row(r.key, r.name, "chip")).join("");
+  const parts = {
+    face: () => row("skin", "Skin tone", "swatch") + row("face", "Face", "chip") + row("hair", "Hair", "chip") + row("hairColor", "Hair color", "swatch") + row("beard", "Facial hair", "chip"),
+    body: () => row("body", "Body type", "chip") + row("abs", "Abs", "chip") + row("shorts", "Fight shorts", "swatch"),
+    gear: () => row("headband", "Headband", "chip") + row("wraps", "Feet", "chip") + row("knees", "Knees", "chip"),
+    ink: () => TATTOO_REGIONS.map((r) => row(r.key, r.name, "chip")).join(""),
+  };
+  if (section !== "all") return parts[section]();
+  return parts.face() + parts.body()
+    + `<div class="label" style="margin-top:8px">Accessories</div>` + parts.gear()
+    + `<div class="label" style="margin-top:8px">Tattoos</div>` + parts.ink();
 }
 
 function renderLookPickers() {
@@ -352,13 +359,20 @@ function updateCreatePreview() {
   if (!stage) return;
   const form = $("createForm");
   const style = (form.querySelector("input[name=style]:checked") || {}).value || "Striker";
-  stage.preview.setFighters([{ look: lookString(createLook), weightClass: Number($("wcSelect").value || 3), style }]);
+  stage.preview.setFighters([{ look: lookString(createLook), weightClass: Number($("wcSelect").value || 3), style, female: $("genderSelect").value === "F" }]);
+}
+
+/** The weight classes for the chosen division (men's or women's). */
+function fillWeightClasses() {
+  const female = $("genderSelect").value === "F";
+  const list = female ? state.womenClasses : state.weightClasses;
+  $("wcSelect").innerHTML = list.map((w, i) => `<option value="${i}" ${i === (female ? 1 : 3) ? "selected" : ""}>${esc(w)}${female ? " (women's)" : ""}</option>`).join("");
 }
 
 function fillCreateForm() {
   const wc = $("wcSelect");
   if (wc.options.length) return;
-  wc.innerHTML = state.weightClasses.map((w, i) => `<option value="${i}" ${i === 3 ? "selected" : ""}>${esc(w)}</option>`).join("");
+  fillWeightClasses();
   $("countrySelect").innerHTML = state.countries.map((c) => `<option>${esc(c)}</option>`).join("");
 }
 
@@ -377,9 +391,9 @@ function renderFighter() {
   const badges = [];
   const belts = s.belt ? (s.rank === 0 ? 1 : 0) + s.belt.held.length : 0;
   if (belts > 1) badges.push(`<span class="badge gold">🏆 ${["", "", "CHAMP-CHAMP", "TRIPLE CHAMP", "QUADRUPLE CHAMP"][belts] || belts + "-BELT CHAMP"}</span>`);
-  if (s.rank === 0) badges.push(`<span class="badge gold">🏆 GFC ${esc(s.weightClass).toUpperCase()} CHAMPION</span>`);
+  if (s.rank === 0) badges.push(`<span class="badge gold">🏆 ${esc(s.orgShort)} ${esc(s.weightClass).toUpperCase()} CHAMPION</span>`);
   else if (s.belt && s.belt.interimIsMe) badges.push(`<span class="badge gold">INTERIM CHAMPION</span>`);
-  else if (s.rank > 0) badges.push(`<span class="badge red">GFC #${s.rank}</span>`);
+  else if (s.rank > 0) badges.push(`<span class="badge red">${esc(s.orgShort)} #${s.rank}</span>`);
   if (s.belt) for (const d of s.belt.held) badges.push(`<span class="badge gold">🏆 ${esc(d)} champion</span>`);
   badges.push(`<span class="badge">${esc(s.org)}</span>`);
   if (f.streak >= 2) badges.push(`<span class="badge green">${f.streak}-fight win streak</span>`);
@@ -464,7 +478,7 @@ function renderFightCard() {
       <h2>Next fight</h2>
       <div class="fight-night">
         <h3>FIGHT NIGHT</h3>
-        <p>${o.title ? (o.kind === "interim" ? "🏆 For the interim GFC title — " : o.kind === "unify" ? "🏆 To unify the GFC belts — " : "🏆 For the GFC title — ") : o.kind === "eliminator" ? "🎯 Title eliminator — " : o.kind === "main" ? "★ Main event — " : ""}vs <b>${esc(o.opponent.displayName)}</b></p>
+        <p>${o.title ? (o.kind === "interim" ? `🏆 For the interim ${esc(state.orgShort)} title — ` : o.kind === "unify" ? `🏆 To unify the ${esc(state.orgShort)} belts — ` : `🏆 For the ${esc(state.orgShort)} title — `) : o.kind === "eliminator" ? "🎯 Title eliminator — " : o.kind === "main" ? "★ Main event — " : ""}vs <b>${esc(o.opponent.displayName)}</b></p>
       </div>
       <button class="btn primary big" data-startfight>Walk out to the cage</button>`;
     return;
@@ -551,7 +565,7 @@ function renderRankings() {
   const b = s.belt;
   const beltBox = b ? `
     <div class="belt-box">
-      <div class="belt-title">🏆 GFC ${esc(b.division)} Championship</div>
+      <div class="belt-title">🏆 ${esc(s.orgShort)} ${esc(b.division)} Championship</div>
       <div class="kv">
         <span>Champion</span><b>${esc(b.champion || "Vacant")}${s.rank === 0 ? " (you)" : ""}</b>
         ${b.interim ? `<span>Interim champion</span><b>${esc(b.interim)}${b.interimIsMe ? " (you)" : ""}</b>` : ""}
@@ -565,8 +579,8 @@ function renderRankings() {
           <div class="muted">${esc(l.how)} · ${esc(l.date)}${l.defenses ? ` · ${l.defenses} defense${l.defenses === 1 ? "" : "s"}` : ""}</div></li>`).join("")}</ol></details>` : ""}
     </div>` : "";
   $("rankCard").innerHTML = `
-    <h2>GFC ${esc(s.weightClass)} rankings</h2>
-    ${s.gfc ? "" : `<p class="muted" style="font-size:13px">You're not in the GFC yet. These are the fighters you're chasing.</p>`}
+    <h2>${esc(s.orgShort)} ${esc(s.weightClass)} rankings</h2>
+    ${s.gfc ? "" : `<p class="muted" style="font-size:13px">You're not in a major promotion yet. These are the GFC fighters you're chasing.</p>`}
     ${beltBox}
     <ul class="ranks scroll">
       ${s.rankings.map((r) => `
@@ -628,6 +642,32 @@ function renderRival() {
     <div class="btn-row">
       <button class="btn small" data-talk="rival" ${s.canTalk && !s.retired ? "" : "disabled"}>🎤 Call them out${s.canTalk ? "" : " (done this week)"}</button>
     </div>`;
+}
+
+function renderPromotions() {
+  const el = $("promoCard");
+  if (!el || !state.promotions) return;
+  const s = state, P = s.progress;
+  const need = (n) => `<span style="color:${P.fame >= n.fame ? "var(--green)" : "var(--muted)"}">Fame ${P.fame}/${n.fame}</span> ·
+    <span style="color:${P.wins >= n.wins ? "var(--green)" : "var(--muted)"}">Wins ${P.wins}/${n.wins}</span> ·
+    <span style="color:${P.ovr >= n.ovr ? "var(--green)" : "var(--muted)"}">OVR ${P.ovr}/${n.ovr}</span>`;
+  el.innerHTML = `
+    <h2>🏢 Promotions</h2>
+    <p class="muted" style="font-size:13px">Now fighting in <b style="color:var(--text)">${esc(s.orgName)}</b>${s.gfc ? ` · ${s.contractFights ? s.contractFights + " fight" + (s.contractFights === 1 ? "" : "s") + " left on your contract" : "free agent"}` : ""}.
+      Promotions call once you've earned it.</p>
+    ${s.promotions.slice().reverse().map((p) => {
+      const offer = s.promoOffers.find((o) => o.org === p.id);
+      return `<div class="offer ${p.current ? "title" : offer ? "contender" : ""}">
+        <div class="offer-top"><div>
+          <div class="offer-meta">${esc(p.short)} · ${esc(p.about)}</div>
+          <div class="offer-name">${esc(p.name)}</div>
+          <div class="offer-meta">${p.current ? "✅ Your promotion" : need(p.need)}</div>
+        </div></div>
+        ${offer ? `<div class="offer-money">Contract: ${offer.fights} fights · ${money(offer.bonus)} to sign · purses ×${offer.pay}</div>
+          <button class="btn gold small" data-promo="${p.id}" ${s.scheduled ? "disabled" : ""}>${p.current ? "Re-sign" : "Sign contract"}</button>
+          ${!p.current && s.gfc && s.contractFights ? `<span class="muted" style="font-size:12px"> · buying out your current deal costs ${money(Math.round(offer.bonus * 0.4))}</span>` : ""}` : ""}
+      </div>`;
+    }).join("")}`;
 }
 
 function renderSponsors() {
@@ -773,12 +813,12 @@ function renderModal() {
       <button class="btn primary big" data-closemodal style="margin-top:12px">Done</button>`;
   } else if (modal.kind === "division") {
     const i = s.weightClassIndex;
-    const opts = [i - 1, i + 1].filter((x) => x >= 0 && x < s.weightClasses.length);
+    const opts = [i - 1, i + 1].filter((x) => x >= 0 && x < s.classes.length);
     body.innerHTML = `
       <h1>Change division</h1>
       <p class="muted">Champions keep their belt when they change division, so you can hold several at once, but each belt must be defended within a year and a half or it's stripped. You fight at <b style="color:var(--text)">${esc(s.weightClass)}</b>. Moving up adds power and chin but costs speed; cutting down adds speed, costs power, and the weight cut drains cardio. You start over in the new division's rankings${s.rank === 0 ? " — but as a champion, you get an immediate superfight for the other belt" : s.rank > 0 && s.rank <= 5 ? " — your reputation lands you at #10" : ""}.</p>
       ${s.divisionCooldown ? `<p class="badge red" style="display:inline-block">Your body needs ${s.divisionCooldown} more weeks before another move.</p>` : ""}
-      <div class="btn-row">${opts.map((x) => `<button class="btn ${x > i ? "" : ""}" data-movediv="${x}" ${s.divisionCooldown ? "disabled" : ""}>${x > i ? "▲ Move up to" : "▼ Cut down to"} ${esc(s.weightClasses[x])}</button>`).join("")}</div>`;
+      <div class="btn-row">${opts.map((x) => `<button class="btn ${x > i ? "" : ""}" data-movediv="${x}" ${s.divisionCooldown ? "disabled" : ""}>${x > i ? "▲ Move up to" : "▼ Cut down to"} ${esc(s.classes[x])}</button>`).join("")}</div>`;
   } else if (modal.kind === "start") {
     body.innerHTML = `
       <div class="start-menu">
@@ -799,13 +839,15 @@ function renderModal() {
             <label>Nickname<input id="editNick" maxlength="24" value="${esc(e.nickname)}" placeholder="e.g. The Storm"></label>
             <label>Fighting style<select id="editStyle">${["Striker", "Wrestler", "Jiu-Jitsu", "Balanced"].map((x) => `<option ${x === e.style ? "selected" : ""}>${x}</option>`).join("")}</select></label>
           </div>
-          <div class="look-pickers">${lookRows(e.look, "elook")}</div>
+          <div class="tabs">${[["face", "🙂 Face & hair"], ["body", "💪 Body"], ["gear", "🧢 Gear"], ["ink", "🖋️ Tattoos"]].map(([k, t]) =>
+            `<button class="btn small ${(modal.tab || "face") === k ? "gold" : "ghost"}" data-etab="${k}">${t}</button>`).join("")}</div>
+          <div class="look-pickers">${lookRows(e.look, "elook", modal.tab || "face")}</div>
         </div>
       </div>
       <div class="btn-row"><button class="btn primary" data-saveedit>Save changes</button><button class="btn ghost" data-closemodal>Cancel</button></div>`;
     if (stage) {
       stage.show($("editStage"), "preview");
-      stage.preview.setFighters([{ look: lookString(e.look), weightClass: s.weightClassIndex, style: e.style, name: state.fighter.name, ink: e.nickname || s.fighter.name.split(" ").pop() }]);
+      stage.preview.setFighters([{ look: lookString(e.look), weightClass: s.weightClassIndex, style: e.style, female: state.gender === "F", name: state.fighter.name, ink: e.nickname || s.fighter.name.split(" ").pop() }]);
     }
   } else if (modal.kind === "place") {
     renderPlace(body);
@@ -961,7 +1003,7 @@ function renderPlace(body) {
   } else if (id === "arena") {
     const o = s.scheduled;
     body.innerHTML = `
-      ${head("🏆", "GFC Arena", o ? `Next fight: vs ${esc(o.opponent.displayName)} in ${o.weeks} week(s)` : `${s.offers.length} fight offer(s) waiting`)}
+      ${head("🏆", "The Arena", o ? `Next fight: vs ${esc(o.opponent.displayName)} in ${o.weeks} week(s)` : `${s.offers.length} fight offer(s) waiting`)}
       ${s.fightNight ? `<button class="btn primary big" data-startfight>Walk out to the cage</button>` : `<button class="btn primary" data-closeworld>See fight offers & schedule</button>`}`;
   } else if (id === "cars") {
     body.innerHTML = `
@@ -1061,7 +1103,7 @@ function introHtml(f) {
         <span>${esc(f.player.style)}</span><span class="muted">style</span><span>${esc(f.opponent.style)}</span>
       </div>
     </div>
-    <div class="ev round">${f.belt ? `This one is for the ${esc(f.belt.label)}. Five rounds.` : f.title ? "This one is for the GFC championship. Five rounds." : `${f.rounds} rounds.`} Pick your game plan.</div>`;
+    <div class="ev round">${f.belt ? `This one is for the ${esc(f.belt.label)}. Five rounds.` : f.title ? "This one is for the championship. Five rounds." : `${f.rounds} rounds.`} Pick your game plan.</div>`;
 }
 
 function eventEl(e, animate) {
@@ -1281,12 +1323,22 @@ document.addEventListener("click", async (ev) => {
   }
   if (d.closemodal !== undefined) return closeModal();
   if (d.skiptalk !== undefined) return audio.say([]);
+  if (d.promo) {
+    if (await ask(`Sign with ${d.promo.toUpperCase()}? A new promotion means new rankings, and any belts you hold now are vacated.`, "Sign")) act("promo", { org: d.promo });
+    return;
+  }
   if (d.help !== undefined) {
     const fightOpen = !$("fightScreen").classList.contains("hidden");
     return startTour(fightOpen ? "fight" : worldOpen() ? "world" : "career", true);
   }
   if (d.editfighter !== undefined) {
     return openModal("edit", { draft: { look: parseLook(state.fighter.look), nickname: state.fighter.nickname || "", style: state.fighter.style } });
+  }
+  if (d.etab && modal && modal.draft) {
+    modal.draft.nickname = $("editNick").value;
+    modal.draft.style = $("editStyle").value;
+    modal.tab = d.etab;
+    return renderModal();
   }
   if (d.elook && modal && modal.draft) {
     const [key, i] = d.elook.split(":");
@@ -1355,7 +1407,10 @@ $("modal").addEventListener("click", (ev) => {
   if (ev.target.id === "modal") closeModal();
 });
 
-$("createForm").addEventListener("change", updateCreatePreview);
+$("createForm").addEventListener("change", (ev) => {
+  if (ev.target.id === "genderSelect") fillWeightClasses();
+  updateCreatePreview();
+});
 
 $("createForm").addEventListener("submit", (ev) => {
   ev.preventDefault();

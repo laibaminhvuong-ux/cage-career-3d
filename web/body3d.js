@@ -31,20 +31,23 @@ function smin(a, b, k) {
  */
 function bodyShapes(w, opts) {
   const B = BODY_TYPES[opts.body ?? 1], A = ABS[opts.abs ?? 1];
-  const g = w * B.girth, m = B.muscle, fat = B.fat * (0.4 + A.belly);
+  const F = !!opts.female;
+  // women: a lighter frame and less muscle mass, a narrower waist, wider hips, a chest instead of pecs
+  const g = w * B.girth * (F ? 0.9 : 1), m = B.muscle * (F ? 0.82 : 1), fat = B.fat * (0.4 + A.belly) * (F ? 1.15 : 1);
   const P = [];
   // e = ellipsoid [bone, center, radii, blend], c = capsule [bone, a, b, ra, rb, blend]; tag marks parts clothes use
   const e = (bone, c, r, k = 0.05, tag) => P.push({ t: "e", bone, c: new THREE.Vector3(...c), r: new THREE.Vector3(...r), k, tag });
   const c = (bone, a, b, ra, rb, k = 0.05, tag) => P.push({ t: "c", bone, a: new THREE.Vector3(...a), b: new THREE.Vector3(...b), ra, rb, k, tag });
   // torso
-  e("hips", [0, 0.0, 0], [0.155 * g, 0.105, 0.1 * (1 + fat * 0.15)], 0.06);
-  e("spine", [0, 0.09, 0.008 + fat * 0.02], [0.13 * g * (1 + fat * 0.08), 0.13, 0.09 * (1 + fat * 0.3)], 0.07);
-  e("chest", [0, 0.12, 0], [0.16 * g, 0.155, 0.1], 0.07);
-  e("chest", [0, 0.25, -0.025], [0.105 * g * m, 0.055, 0.055], 0.06); // traps
+  e("hips", [0, 0.0, 0], [0.155 * g * (F ? 1.16 : 1), 0.105, 0.1 * (1 + fat * 0.15)], 0.06);
+  e("spine", [0, 0.09, 0.008 + fat * 0.02], [0.13 * g * (1 + fat * 0.08) * (F ? 0.9 : 1), 0.13, 0.09 * (1 + fat * 0.3)], 0.07);
+  e("chest", [0, 0.12, 0], [0.16 * g * (F ? 0.95 : 1), 0.155, 0.1], 0.07);
+  e("chest", [0, 0.25, -0.025], [0.105 * g * m * (F ? 0.8 : 1), 0.055, 0.055], 0.06); // traps
+  if (F) for (const s of [-1, 1]) e("chest", [s * 0.058 * g, 0.13, 0.07], [0.056, 0.054, 0.05], 0.035, "breast");
   for (const s of [-1, 1]) {
-    e("chest", [s * 0.068 * g, 0.165, 0.058], [0.072 * g * m, 0.052 * m, 0.038 * m], 0.03); // pecs
+    if (!F) e("chest", [s * 0.068 * g, 0.165, 0.058], [0.072 * g * m, 0.052 * m, 0.038 * m], 0.03); // pecs
     e("chest", [s * 0.12 * g, 0.07, -0.015], [0.05 * g * m, 0.12, 0.055], 0.05); // lats
-    e("hips", [s * 0.058 * g, -0.045, -0.055], [0.07 * g, 0.078, 0.062 * (1 + fat * 0.2)], 0.04); // glutes
+    e("hips", [s * 0.058 * g * (F ? 1.12 : 1), -0.045, -0.055], [0.07 * g * (F ? 1.15 : 1), 0.078, 0.062 * (1 + fat * 0.2) * (F ? 1.15 : 1)], 0.04); // glutes
     // obliques show on lean, defined fighters
     if (A.show > 0) e("spine", [s * 0.1 * g, 0.06, 0.04], [0.035, 0.075, 0.03 * A.show], 0.02);
   }
@@ -230,7 +233,7 @@ const cache = new Map();
  * Returns { skin, shorts?, shirt?, pants? } geometries (shared between fighters with the same build).
  */
 export function buildBody(bones, order, w, kind, opts = {}) {
-  const key = [w.toFixed(3), kind, opts.body ?? 1, opts.abs ?? 1, opts.step || 0].join("|");
+  const key = [w.toFixed(3), kind, opts.body ?? 1, opts.abs ?? 1, opts.step || 0, opts.female ? "F" : "M"].join("|");
   if (cache.has(key)) return cache.get(key);
   const civ = kind !== "fighter";
   const shapes = prepare(bodyShapes(w, { ...opts, feet: !civ, hands: civ }), bones);
@@ -251,6 +254,11 @@ export function buildBody(bones, order, w, kind, opts = {}) {
   if (!civ) {
     // loose fight shorts: from the waist to mid-thigh
     out.shorts = clothes(sub((p) => p.bone === "hips" || p.bone === "spine" || p.tag === "leg"), 0.016, kneeY + (hipY - kneeY) * 0.42, hipY + 0.14);
+    if (opts.female) {
+      // a sports bra over the chest
+      const chestY = bones.chest.getWorldPosition(L).y;
+      out.top = clothes(sub((p) => p.bone === "chest" && p.r && p.c.y < 0.2), 0.008, chestY + 0.05, chestY + 0.215);
+    }
   } else {
     out.shirt = clothes(sub((p) => torsoBones.has(p.bone) || p.tag === "arm" || (p.bone === "neck" && p.t === "c")), 0.012, hipY + 0.02, 2);
     out.pants = clothes(sub((p) => p.bone === "hips" || p.bone === "spine" || p.tag === "leg" || p.tag === "shin"), 0.013, 0.1, hipY + 0.12);
@@ -294,10 +302,16 @@ function jitter(seed) {
 }
 
 /** The head, in the head bone's own space: skull, cheekbones, brow, nose, lips, chin and ears, with eye sockets. */
-function headShapes(F = FACES[0], seed = "") {
+function headShapes(F = FACES[0], seed = "", female = false) {
   const add = [], sub = [];
   const J = jitter(seed);
-  const v = (k, d = 1) => (F[k] === undefined ? d : F[k]);
+  // women: a softer jaw and brow, a slightly smaller nose and fuller lips, on top of the face shape
+  const soft = female ? { jawW: 0.86, brow: 0.55, tipW: 0.88, lips: 1.25, faceL: 0.96, chinZ: -0.004, cheekR: 1.06 } : {};
+  const v = (k, d = 1) => {
+    const base = F[k] === undefined ? d : F[k];
+    if (soft[k] === undefined) return base;
+    return k === "chinZ" ? base + soft[k] : base * soft[k];
+  };
   const e = (list, c, r, k) => list.push({ t: "e", c: new THREE.Vector3(...c), r: new THREE.Vector3(...r), k, inv: new THREE.Matrix4().elements, center: new THREE.Vector3(...c), bound: 9 });
   const c = (list, a, b, ra, rb, k) => list.push({ t: "c", a: new THREE.Vector3(...a), b: new THREE.Vector3(...b), ra, rb, k, inv: new THREE.Matrix4().elements, center: new THREE.Vector3(...a), bound: 9 });
   const fw = v("faceW") * J(0.06), fl = v("faceL") * J(0.05), jw = v("jawW") * J(0.1), lips = v("lips") * J(0.18);
@@ -325,10 +339,10 @@ function headShapes(F = FACES[0], seed = "") {
 
 const headGeos = new Map();
 /** The head mesh for a face shape and a personal seed (shared between fighters with the same pair). */
-export function buildHeadGeo(face = 0, seed = "") {
-  const key = face + "|" + seed;
+export function buildHeadGeo(face = 0, seed = "", female = false) {
+  const key = face + "|" + seed + "|" + female;
   if (headGeos.has(key)) return headGeos.get(key);
-  const { add, sub } = headShapes(FACES[face] || FACES[0], seed);
+  const { add, sub } = headShapes(FACES[face] || FACES[0], seed, female);
   const f = (x, y, z) => {
     let d = 1e9;
     for (const p of add) d = smin(d, primDist(p, x, y, z), p.k);

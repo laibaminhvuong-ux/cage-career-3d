@@ -531,7 +531,7 @@ export const PLACES = [
   { id: "cars", name: "Car Dealer", icon: "🚗", color: "#60a5fa", door: [-34, 9] },
   { id: "realty", name: "Realtor", icon: "🏡", color: "#34d399", door: [-12, 9] },
   { id: "pets", name: "Pet Shop", icon: "🐾", color: "#fbbf24", door: [8, 9] },
-  { id: "arena", name: "GFC Arena", icon: "🏆", color: "#f4b942", door: [30, 9] },
+  { id: "arena", name: "The Arena", icon: "🏆", color: "#f4b942", door: [30, 9] },
 ];
 
 export class WorldView {
@@ -714,14 +714,14 @@ export class WorldView {
     dome.scale.y = 0.45;
     dome.castShadow = true;
     arena.add(dome);
-    const gfc = sign("GFC ARENA", 10, 2, { bg: "#111", fg: "#f4b942", font: "bold 80px Arial", border: "#d62828" });
+    const gfc = sign("FIGHT ARENA", 10, 2, { bg: "#111", fg: "#f4b942", font: "bold 80px Arial", border: "#d62828" });
     gfc.position.set(0, 4.4, -11.05);
     gfc.rotation.y = Math.PI;
     arena.add(gfc);
     at(box(3, 3, 0.4, "#111"), 0, 1.5, -10.9, arena);
     this.scene.add(arena);
     this.solid(19, 11, 41, 33);
-    const al = label("🏆 GFC Arena", "#f4b942");
+    const al = label("🏆 The Arena", "#f4b942");
     al.position.set(30, 13, 22);
     S.add(al);
 
@@ -778,14 +778,14 @@ export class WorldView {
     const L = info.life;
     this.injured = !!info.injured;
     if (this.player) this.player.setInjured(this.injured);
-    const key = JSON.stringify([info.look, info.weightClass, L.house, L.cars, L.driving, L.pets.map((p) => p.kind + p.name), L.partner && [L.partner.look, L.partner.stage], L.kids.map((k) => k.look + k.age)]);
+    const key = JSON.stringify([info.look, !!info.female, info.weightClass, L.house, L.cars, L.driving, L.pets.map((p) => p.kind + p.name), L.partner && [L.partner.look, L.partner.stage], L.kids.map((k) => k.look + k.age)]);
     if (key === this.key) return;
     this.key = key;
     const S = this.scene;
-    if (!this.player || this.playerLook !== info.look) {
+    if (!this.player || this.playerLook !== info.look + !!info.female) {
       if (this.player) this.player.dispose();
-      this.player = new Fighter3D({ casual: true, look: parseLook(info.look), weightClass: info.weightClass, style: info.style, shirt: "#111111", pants: "#2b3a55", tattooText: info.ink, faceSeed: info.seed || "" });
-      this.playerLook = info.look;
+      this.player = new Fighter3D({ casual: true, look: parseLook(info.look), weightClass: info.weightClass, style: info.style, shirt: "#111111", pants: "#2b3a55", tattooText: info.ink, faceSeed: info.seed || "", female: !!info.female });
+      this.playerLook = info.look + !!info.female;
       this.player.setInjured(this.injured);
       S.add(this.player.root);
     }
@@ -833,7 +833,7 @@ export class WorldView {
     const famX = L.house === 4 ? -35.5 : -30.5;
     if (L.partner) {
       const look = parseLook(L.partner.look);
-      const f = new Fighter3D({ casual: true, look, shirt: shirts[look.shorts % 8], pants: "#1f2937", weightClass: 1, detail: "low", faceSeed: L.partner.name });
+      const f = new Fighter3D({ casual: true, look, shirt: shirts[look.shorts % 8], pants: "#1f2937", weightClass: 1, detail: "low", faceSeed: L.partner.name, female: (L.partner.gender || "F") === "F" });
       f.root.position.set(famX, 0, doorZ + 2.4);
       f.root.rotation.y = -0.5;
       S.add(f.root);
@@ -841,7 +841,7 @@ export class WorldView {
     }
     L.kids.forEach((k, i) => {
       const look = parseLook(k.look);
-      const f = new Fighter3D({ casual: true, look: { ...look, beard: 0, body: 0, abs: 0 }, shirt: shirts[(look.shorts + i + 2) % 8], pants: "#334155", weightClass: 0, detail: "low" });
+      const f = new Fighter3D({ casual: true, look: { ...look, beard: 0, body: 0, abs: 0 }, shirt: shirts[(look.shorts + i + 2) % 8], pants: "#334155", weightClass: 0, detail: "low", female: k.gender === "F" });
       const s = Math.min(0.85, 0.42 + k.age * 0.035);
       f.root.scale.multiplyScalar(s);
       f.root.position.set(famX + 1.4 + i * 1.0, 0, doorZ + 3.2 + (i % 2) * 0.6);

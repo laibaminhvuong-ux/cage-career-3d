@@ -5,7 +5,8 @@
 // nights sound the same.
 
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
-const spell = (label) => label.replace(/^GFC /i, "G F C ").replace(/ GFC /i, " G F C ");
+// spell out initials so the voice says "G F C", "D F C", "P F L"
+const spell = (label) => String(label).replace(/\b([A-Z]{2,4})\b/g, (m) => m.split("").join(" "));
 const first = (c) => String(c.realName || c.name).split(" ")[0];
 const last = (c) => {
   const n = String(c.realName || c.name).split(" ");
@@ -49,11 +50,11 @@ function refereeCall(f) {
 /** The walkout: "Ladies and gentlemen... IT'S TIME!", both fighters (champion last), then the referee. */
 export function introCall(f, sponsors = []) {
   const belt = f.belt;
-  const lines = [{ t: pick(["Ladies and gentlemen!", "Ladies and gentlemen... and fight fans all around the world!", "Live... from the GFC Arena!"]), mood: "build", roar: 0.35 }];
+  const lines = [{ t: pick(["Ladies and gentlemen!", "Ladies and gentlemen... and fight fans all around the world!", `Live... from the ${spell(f.org || "GFC")} Arena!`]), mood: "build", roar: 0.35 }];
   if (sponsors.length) lines.push({ t: `Tonight's main attraction is brought to you by ${sponsors.slice(0, 2).join(" and ")}!`, mood: "build" });
   if (belt) lines.push({ t: `This contest is scheduled for five rounds... and it is for the ${spell(belt.label)} of the world!`, mood: "build", roar: 0.5 });
   else if (f.rounds === 5) lines.push({ t: pick(["This... is the main event of the evening! Five rounds!", "The moment you have all been waiting for... our five-round main event!"]), mood: "build", roar: 0.5 });
-  else lines.push({ t: pick(["This contest is scheduled for three rounds!", "Three rounds... in the GFC octagon!"]), mood: "build" });
+  else lines.push({ t: pick(["This contest is scheduled for three rounds!", `Three rounds... in the ${spell(f.org || "GFC")} octagon!`]), mood: "build" });
   lines.push({ t: "It's...", mood: "tense", gap: 400 }, { t: "TIME!!!", mood: "shout", gap: 300, roar: 1 });
   const pChamp = belt && belt.champ === "p", oChamp = belt && belt.champ === "o";
   const order = pChamp ? [["o", "blue"], ["p", "red"]] : oChamp ? [["p", "red"], ["o", "blue"]] : [["o", "blue"], ["p", "red"]];
@@ -141,7 +142,7 @@ export function interviewCall(f, winner) {
   if (f.touch === "o" && winner === "p") lines.push({ t: "And about the glove touch? I don't touch gloves with people who talk trash. Simple.", mood: "fighter" });
   if (belt && winner === belt.champ) lines.push({ t: pick(["Who's next? Line them up! Nobody's taking this belt!", "This belt stays with me. Anyone who wants it, come and get it!"]), mood: "fighter", roar: 0.8 });
   else if (belt) lines.push({ t: pick(["I've dreamed about this since I was a kid. This belt is MINE now!", "Mom, I did it! I'm the champion of the WORLD!"]), mood: "fighter", roar: 1 });
-  else lines.push({ t: pick(["GFC, give me a title shot! I'm ready!", "I want the best in the division next. Book it!", "Thank you to my team, my family, and all the fans. Let's GO!"]), mood: "fighter", roar: 0.6 });
+  else lines.push({ t: pick([`${spell(f.org || "GFC")}, give me a title shot! I'm ready!`, "I want the best in the division next. Book it!", "Thank you to my team, my family, and all the fans. Let's GO!"]), mood: "fighter", roar: 0.6 });
   return lines;
 }
 

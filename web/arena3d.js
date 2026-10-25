@@ -200,7 +200,7 @@ class PreviewView {
     const looks = list.map((d) => (d.look ? parseLook(d.look) : lookFromName(d.name || "x")));
     if (looks.length === 2 && looks[0].shorts === looks[1].shorts) looks[1].shorts = (looks[1].shorts + 3) % 8;
     this.fighters = list.map((d, i) => {
-      const f = new Fighter3D({ look: looks[i], weightClass: d.weightClass, style: d.style, glove: i ? BLUE : RED, tattooText: d.ink, faceSeed: d.name || "" });
+      const f = new Fighter3D({ look: looks[i], weightClass: d.weightClass, style: d.style, glove: i ? BLUE : RED, tattooText: d.ink, faceSeed: d.name || "", female: !!d.female });
       f.setBelt(d.belt || null);
       f.setInjured(!!d.injured);
       this.scene.add(f.root);
@@ -390,7 +390,7 @@ function buildCage(scene) {
       g.font = "italic 900 150px system-ui, sans-serif";
       g.textAlign = "center";
       g.textBaseline = "middle";
-      g.fillText("GFC", 0, 0);
+      g.fillText("MMA", 0, 0);
       g.restore();
     });
     const post = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, H + 0.3, 20), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.42 }));
@@ -425,7 +425,7 @@ function buildCage(scene) {
     g.textBaseline = "middle";
     for (let x = 30, i = 0; x < w; x += 520, i++) {
       g.fillStyle = i % 2 ? "#f4b942" : "#ffffff";
-      g.fillText(i % 2 ? "CAGE CAREER" : "GFC FIGHT NIGHT", x, h / 2 + 4);
+      g.fillText(i % 2 ? "CAGE CAREER" : "FIGHT NIGHT", x, h / 2 + 4);
     }
   });
   const skirt = new THREE.Mesh(new THREE.CylinderGeometry(R + 0.505, R + 0.625, 0.88, 8, 1, true), new THREE.MeshStandardMaterial({ map: apron, roughness: 0.6 }));
@@ -544,7 +544,7 @@ function buildExtras(scene, cornerSpots) {
     tron.add(sc);
   }
   scene.add(tron);
-  const drawScreen = (red, blue, line) => {
+  const drawScreen = (red, blue, line, org = "GFC") => {
     const g = screenCanvas.getContext("2d");
     const w = 1024, h = 512;
     const bg = g.createLinearGradient(0, 0, w, 0);
@@ -557,7 +557,7 @@ function buildExtras(scene, cornerSpots) {
     g.textBaseline = "middle";
     g.fillStyle = "#f4b942";
     g.font = "italic 900 70px system-ui, sans-serif";
-    g.fillText("GFC", w / 2, 70);
+    g.fillText(org, w / 2, 70);
     g.font = "800 54px system-ui, sans-serif";
     g.fillStyle = "#fff";
     g.fillText(red, w * 0.27, h * 0.48, w * 0.45);
@@ -761,14 +761,15 @@ class ArenaView {
     const shortName = (c) => String(c.realName || c.name).split(" ").pop().toUpperCase();
     const billing = f.belt ? f.belt.label.toUpperCase() : f.rounds === 5 ? "MAIN EVENT · 5 ROUNDS" : "3 ROUNDS";
     const sp = info.sponsors && info.sponsors.length ? "  ·  PRESENTED BY " + info.sponsors.slice(0, 2).join(" & ").toUpperCase() : "";
-    this.extras.drawScreen(shortName(f.player), shortName(f.opponent), billing + sp);
+    this.extras.drawScreen(shortName(f.player), shortName(f.opponent), billing + sp, String(f.org || "GFC").toUpperCase());
+    this.drawCenterLogo(String(f.org || "GFC").toUpperCase());
     if (key !== this.key) {
       this.key = key;
       for (const s of [this.P, this.O]) if (s) { s.f.dispose(); s.ring.removeFromParent(); }
       if (this.ref) this.ref.f.dispose();
       const ink = (c) => c.nickname || String(c.realName || c.name).split(" ").pop();
-      this.P = new Side("p", new Fighter3D({ look: pl, weightClass: info.weightClass, style: f.player.style, glove: RED, tattooText: ink(f.player), faceSeed: f.player.realName || f.player.name }));
-      this.O = new Side("o", new Fighter3D({ look: ol, weightClass: info.weightClass, style: f.opponent.style, glove: BLUE, tattooText: ink(f.opponent), faceSeed: f.opponent.realName || f.opponent.name }));
+      this.P = new Side("p", new Fighter3D({ look: pl, weightClass: info.weightClass, style: f.player.style, glove: RED, tattooText: ink(f.player), faceSeed: f.player.realName || f.player.name, female: f.player.gender === "F" }));
+      this.O = new Side("o", new Fighter3D({ look: ol, weightClass: info.weightClass, style: f.opponent.style, glove: BLUE, tattooText: ink(f.opponent), faceSeed: f.opponent.realName || f.opponent.name, female: f.opponent.gender === "F" }));
       this.ref = new Side("r", new Fighter3D({ ref: true, look: { skin: 1, hair: 0, hairColor: 5, beard: 0, shorts: 2 } }));
       this.ref.f.setBase("ref");
       for (const s of [this.P, this.O]) {
@@ -784,6 +785,45 @@ class ArenaView {
       for (const s of [this.P, this.O, this.ref]) this.scene.add(s.f.root);
     }
     this.restore(f);
+  }
+
+  /** The promotion's logo painted in the middle of the canvas. */
+  drawCenterLogo(org) {
+    if (this.logoOrg === org) return;
+    this.logoOrg = org;
+    if (!this.logo) {
+      this.logoCanvas = document.createElement("canvas");
+      this.logoCanvas.width = this.logoCanvas.height = 512;
+      this.logoTex = new THREE.CanvasTexture(this.logoCanvas);
+      this.logoTex.colorSpace = THREE.SRGBColorSpace;
+      this.logo = new THREE.Mesh(new THREE.CircleGeometry(1.42, 48), new THREE.MeshStandardMaterial({ map: this.logoTex, transparent: true, roughness: 0.82, polygonOffset: true, polygonOffsetFactor: -2 }));
+      this.logo.rotation.x = -Math.PI / 2;
+      this.logo.position.y = 0.008;
+      this.logo.receiveShadow = true;
+      this.scene.add(this.logo);
+    }
+    const g = this.logoCanvas.getContext("2d");
+    g.clearRect(0, 0, 512, 512);
+    g.fillStyle = "#c9c4b8";
+    g.beginPath();
+    g.arc(256, 256, 255, 0, TAU);
+    g.fill();
+    g.strokeStyle = "rgba(20,20,24,.18)";
+    g.lineWidth = 10;
+    g.beginPath();
+    g.arc(256, 256, 240, 0, TAU);
+    g.stroke();
+    g.fillStyle = "#c8102e";
+    g.beginPath();
+    g.arc(256, 256, 214, 0, TAU);
+    g.fill();
+    g.fillStyle = "#fff";
+    g.textAlign = "center";
+    g.textBaseline = "middle";
+    const size = org.length <= 3 ? 150 : org.length <= 5 ? 110 : 66;
+    g.font = `italic 900 ${size}px system-ui, sans-serif`;
+    g.fillText(org, 256, 262, 400);
+    this.logoTex.needsUpdate = true;
   }
 
   stain(x, z, size) {

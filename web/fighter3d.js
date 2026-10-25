@@ -6,7 +6,8 @@ import { TATTOO_DESIGNS, TATTOO_REGIONS, addTattoos } from "./tattoo3d.js";
 
 export const LOOK_OPTIONS = {
   skin: ["#f2d2b6", "#e3b48e", "#c98e64", "#a96c45", "#7c4b2c", "#4f301d"],
-  hair: ["Bald", "Buzz", "Short", "Mohawk", "Man bun", "Long", "Afro", "Braids", "Dreadlocks"],
+  hair: ["Bald", "Buzz", "Short", "Mohawk", "Man bun", "Long", "Afro", "Braids", "Dreadlocks",
+    "Ponytail", "Top bun", "Fade", "Undercut", "Spiky", "Curly", "Pompadour", "Bob", "Double braids", "Box braids"],
   hairColor: ["#15120f", "#3b2416", "#6e4524", "#c9a25a", "#9c3a1a", "#9b9b9b",
     "#ece6d6", "#e2c46a", "#c2561e", "#2d4fd6", "#e0559a", "#7c3aed", "#1f9d55", "#f4f4f4"],
   beard: ["None", "Stubble", "Goatee", "Full"],
@@ -803,7 +804,9 @@ export class Fighter3D {
     // referees and people around town wear clothes instead of fight shorts and gloves
     const civ = opts.ref || opts.casual;
     const width = opts.ref ? 0.98 : 0.9 + wc * 0.035 + styleW;
-    const height = opts.ref ? 1.0 : 0.95 + wc * 0.016;
+    const female = !!opts.female && !opts.ref;
+    this.female = female;
+    const height = opts.ref ? 1.0 : (0.95 + wc * 0.016) * (female ? 0.95 : 1);
     this.width = width;
 
     const skin = skinMat(LOOK_OPTIONS.skin[look.skin]);
@@ -835,11 +838,11 @@ export class Fighter3D {
     const arms = {}, legs = {};
     for (const side of ["L", "R"]) {
       const sx = side === "L" ? 1 : -1;
-      const sh = bone(chest, sx * 0.19 * width, 0.2, -0.01);
+      const sh = bone(chest, sx * (female ? 0.172 : 0.19) * width, 0.2, -0.01);
       arms["sh" + side] = sh;
       arms["el" + side] = bone(sh, 0, -0.27, 0);
       arms["hand" + side] = arms["el" + side];
-      const hp = bone(hips, sx * 0.085 * width, -0.06, 0);
+      const hp = bone(hips, sx * (female ? 0.092 : 0.085) * width, -0.06, 0);
       legs["hip" + side] = hp;
       legs["kn" + side] = bone(hp, 0, -0.42, 0);
     }
@@ -851,7 +854,7 @@ export class Fighter3D {
     for (const [k, r] of Object.entries(BIND_POSE)) bones[k].rotation.set(...r);
     root.updateMatrixWorld(true);
     const kind = opts.ref ? "ref" : opts.casual ? "casual" : "fighter";
-    const body = buildBody(bones, order, width, kind, { body: look.body, abs: look.abs, step: opts.detail === "low" ? 0.022 : undefined });
+    const body = buildBody(bones, order, width, kind, { body: look.body, abs: look.abs, female, step: opts.detail === "low" ? 0.022 : undefined });
     const skeleton = new THREE.Skeleton(order.map((n) => bones[n]));
     const skinned = (g, m) => {
       const sm = new THREE.SkinnedMesh(g, m);
@@ -867,6 +870,7 @@ export class Fighter3D {
       shortsM.side = THREE.DoubleSide;
       skinned(body.shorts, shortsM);
     }
+    if (body.top) skinned(body.top, shortsM);
     if (body.shirt) skinned(body.shirt, shirtM);
     if (body.pants) skinned(body.pants, shortsM);
     // tattoos are cut from the skin while the skeleton is still in the bind pose
@@ -883,7 +887,7 @@ export class Fighter3D {
     root.scale.setScalar(height);
 
     // the face is its own finer mesh on the head bone
-    const face = new THREE.Mesh(withColors(buildHeadGeo(look.face || 0, opts.faceSeed || "")), skin);
+    const face = new THREE.Mesh(withColors(buildHeadGeo(look.face || 0, opts.faceSeed || "", female)), skin);
     this.faceMesh = face;
     this.bruiseBase = { width, chestY: chest.getWorldPosition(new THREE.Vector3()).y };
     face.castShadow = face.receiveShadow = true;
@@ -1159,8 +1163,106 @@ export class Fighter3D {
       cap.scale.set(0.95, 1.12, 1.05);
       return;
     }
-    const h = LOOK_OPTIONS.hair[look.hair];
     const capGeo = (cover) => new THREE.SphereGeometry(0.105, 18, 12, 0, Math.PI * 2, 0, Math.PI * cover);
+    let h = LOOK_OPTIONS.hair[look.hair];
+    // women opponents rarely shave their heads: a bald look becomes a ponytail
+    if (this.female && h === "Bald" && !ref) h = "Ponytail";
+    const shaved = () => {
+      // short shaved sides, the scalp showing through
+      const sides = mesh(capGeo(0.46), mat(LOOK_OPTIONS.hairColor[look.hairColor], { transparent: true, opacity: 0.42, roughness: 1 }), head, 0, 0.03, -0.006);
+      sides.scale.set(0.95, 1.12, 1.05);
+      sides.rotation.x = -0.25;
+    };
+    const fullCap = (cover = 0.5) => {
+      const cap = mesh(capGeo(cover), hairM, head, 0, 0.03, -0.006);
+      cap.scale.set(0.99, 1.2, 1.1);
+      cap.rotation.x = -0.25;
+      return cap;
+    };
+    const strandGeo = (r, len) => geo("strand" + r + len, () => {
+      const g = new THREE.CylinderGeometry(r, r * 0.8, len, 6, 1);
+      g.translate(0, -len / 2, 0);
+      return g;
+    });
+    if (h === "Ponytail") {
+      fullCap(0.5);
+      mesh(geo("tie", () => new THREE.SphereGeometry(0.02, 8, 6)), hairM, head, 0, 0.05, -0.105);
+      const tail = new THREE.Group();
+      tail.position.set(0, 0.05, -0.11);
+      tail.rotation.x = 0.35;
+      head.add(tail);
+      mesh(geo("ponytail", () => {
+        const g = new THREE.CylinderGeometry(0.024, 0.008, 0.24, 10, 1);
+        g.translate(0, -0.12, 0);
+        return g;
+      }), hairM, tail);
+    }
+    if (h === "Top bun") {
+      fullCap(0.5);
+      mesh(geo("topbun", () => new THREE.SphereGeometry(0.046, 12, 10)), hairM, head, 0, 0.135, -0.045);
+    }
+    if (h === "Fade") {
+      shaved();
+      const top = mesh(capGeo(0.3), hairM, head, 0, 0.04, -0.006);
+      top.scale.set(0.98, 1.25, 1.08);
+      top.rotation.x = -0.2;
+    }
+    if (h === "Undercut") {
+      shaved();
+      // long on top, swept back
+      const top = mesh(geo("undercutTop", () => new THREE.SphereGeometry(0.07, 14, 10)), hairM, head, 0, 0.1, -0.02);
+      top.scale.set(1.15, 0.6, 1.5);
+      top.rotation.x = 0.15;
+    }
+    if (h === "Spiky") {
+      fullCap(0.45);
+      const spike = geo("spike", () => new THREE.ConeGeometry(0.022, 0.085, 5));
+      mesh(spike, hairM, head, 0, 0.14, 0.0);
+      for (let i = 0; i < 16; i++) {
+        const a = (i / 16) * Math.PI * 2, rr = i % 2 ? 0.045 : 0.07;
+        const sp = mesh(spike, hairM, head, Math.sin(a) * rr, 0.125 - rr * 0.35, Math.cos(a) * rr - 0.01);
+        sp.rotation.set(Math.cos(a) * 0.6 - 0.2, 0, -Math.sin(a) * 0.6);
+      }
+    }
+    if (h === "Curly") {
+      fullCap(0.5);
+      const curl = geo("curl", () => new THREE.SphereGeometry(0.024, 8, 6));
+      for (let i = 0; i < 26; i++) {
+        const a = (i / 26) * Math.PI * 2 * 2.3, lat = 0.25 + (i / 26) * 0.9;
+        mesh(curl, hairM, head, Math.sin(a) * 0.09 * Math.sin(lat + 0.6), 0.04 + Math.cos(lat) * 0.085, Math.cos(a) * 0.095 * Math.sin(lat + 0.6) - 0.01);
+      }
+    }
+    if (h === "Pompadour") {
+      shaved();
+      const pomp = mesh(geo("pomp", () => new THREE.SphereGeometry(0.07, 14, 10)), hairM, head, 0, 0.115, 0.01);
+      pomp.scale.set(0.95, 0.65, 1.35);
+      pomp.rotation.x = -0.3;
+    }
+    if (h === "Bob") {
+      fullCap(0.5);
+      const bob = mesh(geo("bob", () => new THREE.CylinderGeometry(0.104, 0.112, 0.13, 20, 1, true, Math.PI * 0.32, Math.PI * 1.36)), hairM, head, 0, -0.01, -0.006);
+      bob.material = hairM;
+      bob.scale.set(1, 1, 1.08);
+    }
+    if (h === "Double braids") {
+      fullCap(0.5);
+      const bead = geo("braidbead", () => new THREE.SphereGeometry(0.017, 8, 6));
+      for (const sx of [-1, 1]) {
+        for (let k = 0; k < 9; k++) mesh(bead, hairM, head, sx * (0.07 - k * 0.002), 0.0 - k * 0.028, -0.085 - k * 0.006);
+      }
+    }
+    if (h === "Box braids") {
+      fullCap(0.5);
+      for (let i = 0; i < 26; i++) {
+        const a = 1.0 + (i / 25) * (Math.PI * 2 - 2.0);
+        const g = new THREE.Group();
+        g.position.set(Math.sin(a) * 0.094, 0.06, Math.cos(a) * 0.1 - 0.006);
+        g.rotation.y = a;
+        head.add(g);
+        const strand = mesh(strandGeo(0.0075, 0.3), hairM, g);
+        strand.rotation.x = -0.15;
+      }
+    }
     if (h === "Buzz" || h === "Short" || h === "Man bun" || h === "Long") {
       const cap = mesh(capGeo(h === "Buzz" ? 0.42 : 0.48), hairM, head, 0, 0.03, -0.006);
       cap.scale.set(h === "Buzz" ? 0.94 : 0.99, h === "Buzz" ? 1.12 : 1.2, h === "Buzz" ? 1.05 : 1.1);
@@ -1238,7 +1340,7 @@ export class Fighter3D {
       for (const a of [-0.45, -0.15, 0.2, 0.5]) loc(a, 0.115, 0.075, 0.085, 0.75);
     }
     // facial hair is painted into the skin (see beardShade)
-    this.beardType = LOOK_OPTIONS.beard[look.beard];
+    this.beardType = this.female ? "None" : LOOK_OPTIONS.beard[look.beard];
     this.beardColor = new THREE.Color(LOOK_OPTIONS.hairColor[look.hairColor]);
   }
 
@@ -1248,9 +1350,12 @@ export class Fighter3D {
     if (!t || t === "None" || z < -0.01) return 0;
     const fade = (v, a, b) => Math.max(0, Math.min(1, (v - a) / (b - a)));
     // soft-edged zones so the hair blends into the skin
-    const lips = fade(0.03 - Math.abs(x), 0, 0.006) * fade(y, -0.056, -0.05) * fade(-y, 0.028, 0.034);
-    const moustache = fade(0.036 - Math.abs(x), 0, 0.01) * fade(y, -0.034, -0.028) * fade(-y, 0.012, 0.018);
-    const chin = fade(0.036 - Math.abs(x), 0, 0.012) * fade(-y, 0.048, 0.06);
+    const le = (x / 0.026) ** 2 + ((y + 0.041) / 0.013) ** 2;
+    const lips = z > 0.08 ? Math.max(0, Math.min(1, (1 - le) * 3)) : 0;
+    const me = (x / 0.034) ** 2 + ((y + 0.024) / 0.009) ** 2;
+    const moustache = z > 0.085 ? Math.max(0, Math.min(1, (1 - me) * 2)) : 0;
+    const ce = (x / 0.032) ** 2 + ((y + 0.078) / 0.03) ** 2;
+    const chin = Math.max(0, Math.min(1, (1 - ce) * 2.5));
     const jaw = fade(-y, 0.008, 0.04) * fade(z, -0.01, 0.03) * (1 - lips);
     if (lips > 0.9) return 0;
     if (t === "Goatee") return Math.max(moustache, chin) * 0.85;
