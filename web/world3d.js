@@ -2,7 +2,7 @@
 // with the house they own, their cars sit in the driveway, pets follow them around, and their
 // partner and kids wait at home. Every place in town opens a screen in the app.
 import * as THREE from "./vendor/three.module.min.js";
-import { Fighter3D, LOOK_OPTIONS, parseLook, lookFromName } from "./fighter3d.js";
+import { Fighter3D, LOOK_OPTIONS, attack, parseLook, lookFromName } from "./fighter3d.js";
 
 const TAU = Math.PI * 2;
 const damp = (rate, dt) => 1 - Math.exp(-rate * dt);
@@ -255,7 +255,7 @@ export function makeCar(id, color) {
   const s = CAR_SHAPES[id] || CAR_SHAPES.sedan;
   const g = new THREE.Group();
   const paint = new THREE.MeshPhysicalMaterial({ color, roughness: 0.28, metalness: 0.55, clearcoat: 1, clearcoatRoughness: 0.08 });
-  const glass = new THREE.MeshPhysicalMaterial({ color: "#16202c", roughness: 0.05, metalness: 0.3, clearcoat: 1 });
+  const glass = new THREE.MeshPhysicalMaterial({ color: "#1c2a3a", roughness: 0.05, metalness: 0.2, clearcoat: 1, transparent: true, opacity: 0.38, depthWrite: false });
   const black = mat("#121212", { roughness: 0.8 });
   const clear = s.wheel + 0.08, L = s.L, W = s.W, belt = clear + s.H;
   const [cl, ch, cz] = s.cab;
@@ -334,8 +334,26 @@ export function makeCar(id, color) {
     at(new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.1, 0.05), lights), x * (W / 2 - 0.3), clear + s.H * 0.62, front - 0.02, g);
     at(new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.09, 0.05), tail), x * (W / 2 - 0.3), belt - s.H * 0.3, rear - 0.01, g);
   }
+  // a seat and a steering wheel behind the glass (the driver sits on the left)
+  const seatX = W * 0.22, seatZ = cz - 0.25;
+  at(box(0.5, 0.12, 0.5, "#1d1d1f"), seatX, clear + 0.28, seatZ, g);
+  at(box(0.5, 0.6, 0.12, "#1d1d1f"), seatX, clear + 0.48, seatZ - 0.27, g).rotation.x = -0.15;
+  const wheelRing = new THREE.Mesh(new THREE.TorusGeometry(0.17, 0.025, 8, 20), black);
+  wheelRing.position.set(seatX, belt + 0.12, seatZ + 0.55);
+  wheelRing.rotation.x = -0.45;
+  g.add(wheelRing);
+  at(box(W * 0.9, 0.18, 0.4, "#202124"), 0, belt - 0.02, seatZ + 0.85, g); // dashboard
+  // everything but the wheels leans in corners and dips under braking
+  const shell = new THREE.Group();
+  for (const c of [...g.children]) if (!wheels.includes(c)) shell.add(c);
+  g.add(shell);
   g.userData.wheels = wheels;
+  g.userData.front = wheels.filter((w) => w.position.z > 0);
+  g.userData.shell = shell;
+  g.userData.wheelRing = wheelRing;
   g.userData.radius = s.wheel;
+  g.userData.seat = new THREE.Vector3(seatX, clear + 0.34, seatZ);
+  g.userData.wheelBase = L * 0.64;
   return g;
 }
 
@@ -534,6 +552,510 @@ export const PLACES = [
   { id: "arena", name: "The Arena", icon: "🏆", color: "#f4b942", door: [30, 9] },
 ];
 
+// ------------------------------------------------------------------ interiors
+// Every door in town opens into a furnished room you walk around in: built the first time you go
+// in, far away from the town (so it never shows through a window), with its own lights and people.
+
+/** An empty room facing -z from its door at +z: floor, walls, ceiling, skirting, ceiling lights. */
+function room(w, d, h, { floor = "#9a7b58", floorTex = null, wall = "#e9e2d4", ceiling = "#f4f1ea", light = "#fff1dc", lights = 2, power = 14 } = {}) {
+  const g = new THREE.Group();
+  const fl = new THREE.Mesh(new THREE.PlaneGeometry(w, d), floorTex ? new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.55 }) : mat(floor, { roughness: 0.5 }));
+  fl.rotation.x = -Math.PI / 2;
+  fl.receiveShadow = true;
+  g.add(fl);
+  const ce = new THREE.Mesh(new THREE.PlaneGeometry(w, d), mat(ceiling));
+  ce.rotation.x = Math.PI / 2;
+  ce.position.y = h;
+  g.add(ce);
+  const wallM = mat(wall, { roughness: 0.9 });
+  const wallAt = (ww, x, z, ry) => {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(ww, h), wallM);
+    m.position.set(x, h / 2, z);
+    m.rotation.y = ry;
+    m.receiveShadow = true;
+    g.add(m);
+    const sk = box(ww, 0.12, 0.03, "#3b332b");
+    sk.position.set(x, 0.06, z);
+    sk.rotation.y = ry;
+    g.add(sk);
+  };
+  wallAt(w, 0, -d / 2, 0);
+  wallAt(d, -w / 2, 0, Math.PI / 2);
+  wallAt(d, w / 2, 0, -Math.PI / 2);
+  // the front wall has the door you came in through
+  const side = (w - 1.6) / 2;
+  wallAt(side, -w / 2 + side / 2, d / 2, Math.PI);
+  wallAt(side, w / 2 - side / 2, d / 2, Math.PI);
+  const lintel = new THREE.Mesh(new THREE.PlaneGeometry(1.6, h - 2.3), wallM);
+  lintel.position.set(0, 2.3 + (h - 2.3) / 2, d / 2);
+  lintel.rotation.y = Math.PI;
+  g.add(lintel);
+  const door = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 2.3), new THREE.MeshBasicMaterial({ color: "#cfe6ff", toneMapped: false }));
+  door.position.set(0, 1.15, d / 2 + 0.02);
+  door.rotation.y = Math.PI;
+  g.add(door);
+  for (const x of [-0.85, 0.85]) at(box(0.1, 2.35, 0.14, "#4a3b2c"), x, 1.17, d / 2 - 0.05, g);
+  at(box(1.8, 0.1, 0.14, "#4a3b2c"), 0, 2.33, d / 2 - 0.05, g);
+  // soft light from above, plus fittings you can see
+  g.add(new THREE.HemisphereLight("#fff6ea", "#5d5045", 0.55));
+  for (let i = 0; i < lights; i++) {
+    const x = lights === 1 ? 0 : -w / 4 + (i * w) / 2 / Math.max(1, lights - 1);
+    const p = new THREE.PointLight(light, power, Math.max(w, d) * 1.4, 1.6);
+    p.position.set(x, h - 0.4, 0);
+    if (i === 0) {
+      p.castShadow = true;
+      p.shadow.mapSize.set(512, 512);
+    }
+    g.add(p);
+    at(new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.05, 16), new THREE.MeshBasicMaterial({ color: light, toneMapped: false })), x, h - 0.03, 0, g);
+  }
+  return g;
+}
+
+/** A framed picture: a canvas drawing on the wall. draw(g, w, h) paints it. */
+function picture(w, h, draw) {
+  const c = document.createElement("canvas");
+  c.width = 256;
+  c.height = Math.round((256 * h) / w);
+  draw(c.getContext("2d"), c.width, c.height);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  const grp = new THREE.Group();
+  at(box(w + 0.1, h + 0.1, 0.04, "#2b2118"), 0, 0, -0.02, grp);
+  grp.add(at(new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial({ map: t, roughness: 0.6 })), 0, 0, 0.005));
+  return grp;
+}
+const poster = (title, sub, bg, fg = "#fff") => (g, w, h) => {
+  g.fillStyle = bg;
+  g.fillRect(0, 0, w, h);
+  g.fillStyle = fg;
+  g.textAlign = "center";
+  g.font = `900 ${Math.round(w / 6)}px Arial`;
+  g.fillText(title, w / 2, h * 0.45);
+  g.font = `bold ${Math.round(w / 14)}px Arial`;
+  g.fillText(sub, w / 2, h * 0.62);
+};
+const emojiArt = (emoji, bg) => (g, w, h) => {
+  g.fillStyle = bg;
+  g.fillRect(0, 0, w, h);
+  g.font = `${Math.round(Math.min(w, h) * 0.6)}px serif`;
+  g.textAlign = "center";
+  g.textBaseline = "middle";
+  g.fillText(emoji, w / 2, h / 2 + 6);
+};
+
+function plant(s = 1) {
+  const g = new THREE.Group();
+  at(cyl(0.2 * s, 0.15 * s, 0.4 * s, "#8b5a3c", 10), 0, 0.2 * s, 0, g);
+  for (let i = 0; i < 5; i++) at(sphere(0.22 * s, "#2f7d3c"), Math.sin(i) * 0.12 * s, (0.55 + i * 0.08) * s, Math.cos(i * 2) * 0.12 * s, g);
+  return g;
+}
+function chair(color = "#5b4636") {
+  const g = new THREE.Group();
+  at(box(0.45, 0.06, 0.45, color), 0, 0.46, 0, g);
+  at(box(0.45, 0.5, 0.06, color), 0, 0.72, -0.2, g);
+  for (const x of [-0.19, 0.19]) for (const z of [-0.19, 0.19]) at(box(0.05, 0.46, 0.05, "#2a221c"), x, 0.23, z, g);
+  return g;
+}
+function table(w, d, h = 0.75, top = "#7b5a3e") {
+  const g = new THREE.Group();
+  at(box(w, 0.06, d, top), 0, h, 0, g);
+  for (const x of [-1, 1]) for (const z of [-1, 1]) at(box(0.06, h, 0.06, "#2a221c"), x * (w / 2 - 0.08), h / 2, z * (d / 2 - 0.08), g);
+  return g;
+}
+function roundTable(r = 0.45) {
+  const g = new THREE.Group();
+  at(cyl(r, r, 0.05, "#d9d2c5", 20), 0, 0.74, 0, g);
+  at(cyl(0.05, 0.05, 0.72, "#2b2b2b"), 0, 0.37, 0, g);
+  at(cyl(0.28, 0.28, 0.03, "#2b2b2b", 16), 0, 0.015, 0, g);
+  return g;
+}
+function sofa(w, color) {
+  const g = new THREE.Group();
+  at(box(w, 0.42, 0.9, color), 0, 0.21, 0, g);
+  at(box(w, 0.55, 0.22, color), 0, 0.62, -0.34, g);
+  for (const x of [-1, 1]) at(box(0.22, 0.6, 0.9, color), x * (w / 2 - 0.11), 0.3, 0, g);
+  for (let i = 0; i < Math.round(w / 0.8); i++) at(box(w / Math.round(w / 0.8) - 0.06, 0.12, 0.62, color), -w / 2 + (i + 0.5) * (w / Math.round(w / 0.8)), 0.48, 0.06, g);
+  return g;
+}
+function counter(w, color = "#3b3f46", top = "#d8d4cc") {
+  const g = new THREE.Group();
+  at(box(w, 1.0, 0.7, color), 0, 0.5, 0, g);
+  at(box(w + 0.06, 0.05, 0.76, top), 0, 1.02, 0, g);
+  return g;
+}
+function npc(look, opts = {}) {
+  const f = new Fighter3D({ casual: true, look, shirt: opts.shirt || "#1f2937", pants: opts.pants || "#334155", weightClass: 2, detail: "low", faceSeed: opts.seed || "", female: !!opts.female });
+  if (opts.base) f.setBase(opts.base);
+  if (opts.sit) f.setBase("sit");
+  return f;
+}
+const randomPerson = (seed) => {
+  const f = lookFromName(seed);
+  return { look: f, female: seed.length % 2 === 0 };
+};
+
+/** Builds the inside of a place. Returns { group, w, d, h, solids, npcs, tick(dt, t) }. */
+function buildInterior(id, ctx) {
+  const people = [];
+  const solids = [];
+  const block = (x0, z0, x1, z1) => solids.push([Math.min(x0, x1), Math.min(z0, z1), Math.max(x0, x1), Math.max(z0, z1)]);
+  const person = (x, z, ry, opts = {}) => {
+    const p = randomPerson(opts.seed || id + x + z);
+    const f = npc(p.look, { ...opts, female: opts.female ?? p.female });
+    f.root.position.set(x, 0, z);
+    f.root.rotation.y = ry;
+    g.add(f.root);
+    people.push({ f, ...opts, x, z, ry, t: Math.random() * 10 });
+    block(x - 0.3, z - 0.3, x + 0.3, z + 0.3);
+    return f;
+  };
+  const ticks = [];
+  let g, w, d, h;
+
+  if (id === "home") {
+    const tier = ctx.house || 0;
+    w = [10, 12, 14, 16, 20][tier];
+    d = [8, 9, 10, 11, 14][tier];
+    h = tier >= 3 ? 4 : 3;
+    const lux = tier >= 3;
+    g = room(w, d, h, {
+      floorTex: lux ? noiseTexture("#e8e4dc", "#cfc8bb", "#f7f5f0", 6) : noiseTexture("#9a6f47", "#7c5534", "#b48558", 5),
+      wall: lux ? "#f2efe8" : tier === 1 ? "#d9cdb8" : "#e8dfcf", lights: lux ? 3 : 2,
+    });
+    // living area: sofa facing the TV, a rug, a coffee table
+    const rug = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 2.4), mat(lux ? "#7a1f2b" : "#4b5b73"));
+    rug.rotation.x = -Math.PI / 2;
+    at(rug, -w / 4, 0.01, 0.2, g);
+    at(sofa(2.6, lux ? "#ece6da" : "#55606e"), -w / 4, 0, 1.5, g).rotation.y = Math.PI;
+    block(-w / 4 - 1.3, 1.0, -w / 4 + 1.3, 2.0);
+    at(table(1.2, 0.6, 0.42, "#3a2c20"), -w / 4, 0, 0.2, g);
+    block(-w / 4 - 0.6, -0.1, -w / 4 + 0.6, 0.5);
+    at(box(2.2, 0.5, 0.45, "#2a2420"), -w / 4, 0.25, -d / 2 + 0.3, g);
+    const tv = at(box(2.0, 1.15, 0.06, "#0b0b0d"), -w / 4, 1.25, -d / 2 + 0.12, g);
+    tv.add(at(new THREE.Mesh(new THREE.PlaneGeometry(1.9, 1.05), new THREE.MeshBasicMaterial({ map: textTexture("🥊 FIGHT NIGHT LIVE", { w: 512, h: 288, bg: "#0e1a33", fg: "#f4b942", font: "bold 44px Arial" }), toneMapped: false })), 0, 0, 0.035));
+    block(-w / 4 - 1.1, -d / 2, -w / 4 + 1.1, -d / 2 + 0.55);
+    // kitchen along the back wall on the other side, a dining table
+    at(counter(3.2, lux ? "#f5f5f5" : "#6b4e37", lux ? "#222" : "#d8d4cc"), w / 4 + 0.4, 0, -d / 2 + 0.4, g);
+    at(box(0.8, 1.9, 0.7, "#d9dde2", { metalness: 0.6, roughness: 0.3 }), w / 4 + 2.4, 0.95, -d / 2 + 0.4, g);
+    block(w / 4 - 1.3, -d / 2, w / 4 + 2.9, -d / 2 + 0.8);
+    at(table(1.6, 0.9), w / 4 + 0.6, 0, 0.6, g);
+    for (const [x, z, r] of [[-0.45, -0.6, 0], [0.45, -0.6, 0], [-0.45, 0.6, Math.PI], [0.45, 0.6, Math.PI]]) at(chair(), w / 4 + 0.6 + x, 0, 0.6 + z, g).rotation.y = r;
+    block(w / 4 - 0.4, -0.2, w / 4 + 1.6, 1.4);
+    // pictures: a fight poster, family art
+    at(picture(1.0, 1.4, poster("CAGE", "CAREER 3D", "#7f1d1d")), -w / 2 + 0.03, 1.7, -1, g).rotation.y = Math.PI / 2;
+    at(picture(1.4, 1.0, emojiArt("🏔️", "#bfdbfe")), w / 2 - 0.03, 1.7, 0.8, g).rotation.y = -Math.PI / 2;
+    at(plant(), -w / 2 + 0.6, 0, d / 2 - 0.8, g);
+    at(plant(1.2), w / 2 - 0.6, 0, d / 2 - 0.8, g);
+    if (lux) {
+      // a chandelier and a trophy cabinet
+      const ch = new THREE.Group();
+      at(cyl(0.6, 0.3, 0.4, "#d4af37", 12, { metalness: 0.9, roughness: 0.25 }), 0, 0, 0, ch);
+      for (let i = 0; i < 8; i++) at(new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), new THREE.MeshBasicMaterial({ color: "#fff3c4", toneMapped: false })), Math.cos(i) * 0.6, -0.22, Math.sin(i) * 0.6, ch);
+      at(ch, 0, h - 0.6, 0, g);
+      const cab = at(box(1.6, 2.0, 0.45, "#2a1d14"), w / 2 - 0.3, 1.0, -1.8, g);
+      cab.rotation.y = -Math.PI / 2;
+      for (let i = 0; i < 3; i++) at(cyl(0.08, 0.12, 0.35, "#d4af37", 10, { metalness: 0.9, roughness: 0.2 }), w / 2 - 0.35, 1.35, -2.4 + i * 0.6, g);
+      block(w / 2 - 0.6, -2.7, w / 2, -0.9);
+    }
+    if (ctx.partner) person(-w / 4 + 0.4, 1.6, Math.PI, { seed: ctx.partner.name, female: (ctx.partner.gender || "F") === "F", shirt: "#e11d48", sit: true });
+  } else if (id === "club") {
+    w = 16; d = 12; h = 4.2;
+    g = room(w, d, h, { floor: "#141017", wall: "#1d1626", ceiling: "#0c0a10", light: "#b46cff", lights: 2, power: 9 });
+    // the dance floor: tiles that pulse with the beat
+    const tiles = [];
+    for (let i = 0; i < 5; i++) for (let j = 0; j < 4; j++) {
+      const m = new THREE.MeshBasicMaterial({ color: "#ff3cac", toneMapped: false });
+      const t = new THREE.Mesh(new THREE.PlaneGeometry(0.95, 0.95), m);
+      t.rotation.x = -Math.PI / 2;
+      at(t, -2.4 + i * 1.0, 0.012, -2.2 + j * 1.0, g);
+      tiles.push({ m, i, j });
+    }
+    const cols = ["#ff3cac", "#784ba0", "#2b86c5", "#00f5d4", "#fee440"];
+    ticks.push((dt, t) => tiles.forEach((x) => x.m.color.set(cols[Math.floor(t * 2 + x.i + x.j * 2) % cols.length]).multiplyScalar(0.55 + 0.45 * Math.sin(t * 6 + x.i))));
+    // a disco ball and sweeping colored lights
+    const ball = at(new THREE.Mesh(new THREE.SphereGeometry(0.35, 16, 12), new THREE.MeshStandardMaterial({ color: "#ddd", metalness: 1, roughness: 0.15, flatShading: true })), 0, h - 0.7, -0.8, g);
+    const spots = ["#ff3cac", "#2b86c5", "#00f5d4"].map((c, i) => {
+      const s = new THREE.SpotLight(c, 30, 14, 0.35, 0.5, 1.2);
+      s.position.set(-4 + i * 4, h - 0.2, -d / 2 + 1);
+      g.add(s, s.target);
+      return s;
+    });
+    ticks.push((dt, t) => {
+      ball.rotation.y += dt * 0.8;
+      spots.forEach((s, i) => s.target.position.set(Math.sin(t * 0.9 + i * 2) * 4, 0, Math.cos(t * 0.7 + i) * 3 - 1));
+    });
+    // DJ booth with the DJ, a bar with stools and bottles
+    at(box(2.6, 1.1, 0.9, "#2a2135"), 0, 0.55, -d / 2 + 0.8, g);
+    for (const x of [-0.7, 0.7]) at(cyl(0.25, 0.25, 0.06, "#111", 18), x, 1.13, -d / 2 + 0.8, g);
+    at(sign("DJ NOVA", 2.4, 0.5, { bg: "#0b0710", fg: "#ff3cac", font: "bold 80px Arial" }), 0, 2.2, -d / 2 + 0.05, g);
+    block(-1.4, -d / 2, 1.4, -d / 2 + 1.3);
+    person(0, -d / 2 + 0.2, 0, { seed: "DJ Nova", shirt: "#111", dance: 0.5 });
+    const bar = at(counter(4.2, "#3a1f47", "#111"), w / 2 - 1.2, 0, 1.2, g);
+    bar.rotation.y = -Math.PI / 2;
+    block(w / 2 - 1.6, -0.9, w / 2 - 0.8, 3.3);
+    for (let i = 0; i < 12; i++) at(cyl(0.04, 0.05, 0.3, ["#3fa34d", "#c2410c", "#2563eb", "#facc15"][i % 4], 8, { roughness: 0.15 }), w / 2 - 0.15, 1.45 + (i % 2) * 0.45, -0.6 + Math.floor(i / 2) * 0.7, g);
+    at(box(0.3, 0.05, 4.4, "#2a2135"), w / 2 - 0.15, 1.3, 1.2, g);
+    at(box(0.3, 0.05, 4.4, "#2a2135"), w / 2 - 0.15, 1.75, 1.2, g);
+    for (let i = 0; i < 4; i++) at(cyl(0.2, 0.2, 0.75, "#888", 12, { metalness: 0.8, roughness: 0.3 }), w / 2 - 2.2, 0.38, -0.3 + i * 1.0, g);
+    person(w / 2 - 0.5, 1.2, -Math.PI / 2, { seed: "Bartender", shirt: "#000" });
+    // people dancing
+    for (const [x, z] of [[-1.5, -1], [0.6, -1.6], [1.4, -0.4], [-0.6, 0.2], [-2, -2.2]]) person(x, z, Math.random() * TAU, { seed: "dancer" + x, shirt: cols[Math.floor(Math.abs(x * 3)) % 5], dance: 1 });
+  } else if (id === "ink") {
+    w = 10; d = 8; h = 3.2;
+    g = room(w, d, h, { floor: "#2b2b2e", wall: "#3a3a40", ceiling: "#222226", light: "#ffe2c0", lights: 2, power: 12 });
+    // the tattoo chair, the artist's stool and a work lamp
+    const ch = new THREE.Group();
+    at(box(0.7, 0.5, 1.9, "#111"), 0, 0.5, 0, ch);
+    const back = at(box(0.7, 0.9, 0.12, "#111"), 0, 1.05, -0.85, ch);
+    back.rotation.x = -0.5;
+    at(cyl(0.2, 0.3, 0.3, "#888", 12, { metalness: 0.8 }), 0, 0.15, 0, ch);
+    at(ch, -1.2, 0, -1.2, g);
+    block(-1.6, -2.2, -0.8, -0.2);
+    const arm = at(cyl(0.02, 0.02, 1.6, "#999", 6, { metalness: 0.9 }), -0.2, 0.8, -1.8, g);
+    at(cyl(0.16, 0.05, 0.12, "#e5e5e5", 12), -0.2, 1.62, -1.4, g);
+    void arm;
+    person(-0.1, -0.9, -Math.PI / 2, { seed: "Rook the artist", shirt: "#0f0f0f", base: "relaxed" });
+    // walls covered in flash art, a neon sign, a counter with a portfolio
+    const flash = ["🐉", "💀", "🌹", "🦅", "⚔️", "🐍", "☯️", "🔥", "🌙"];
+    flash.forEach((e, i) => at(picture(0.7, 0.7, emojiArt(e, "#f1e9d8")), -3.6 + (i % 5) * 1.0 + (i >= 5 ? 0.5 : 0), 2.3 - Math.floor(i / 5) * 0.85, -d / 2 + 0.04, g));
+    at(sign("INK", 1.6, 0.6, { bg: "#000", fg: "#3cf7ff", font: "bold 90px Arial" }), w / 2 - 0.05, 2.2, 0.5, g).rotation.y = -Math.PI / 2;
+    const c = at(counter(2.2, "#1f1f22", "#6b4e37"), w / 2 - 1.2, 0, 2, g);
+    c.rotation.y = -Math.PI / 2;
+    block(w / 2 - 1.6, 0.8, w / 2 - 0.8, 3.2);
+    at(plant(), -w / 2 + 0.6, 0, d / 2 - 0.7, g);
+  } else if (id === "cafe") {
+    w = 12; d = 9; h = 3.2;
+    g = room(w, d, h, { floorTex: noiseTexture("#c9a27a", "#b08560", "#dcbb98", 5), wall: "#f3e2c7", light: "#ffd9a0", lights: 3, power: 10 });
+    const bar = at(counter(5, "#5b3a24", "#e9e2d6"), 0, 0, -d / 2 + 1.3, g);
+    void bar;
+    block(-2.6, -d / 2 + 0.8, 2.6, -d / 2 + 1.7);
+    at(box(0.8, 0.6, 0.5, "#c0c0c0", { metalness: 0.9, roughness: 0.25 }), -1.6, 1.35, -d / 2 + 1.3, g); // espresso machine
+    at(box(1.4, 0.45, 0.6, "#cfe8f5", { transparent: true, opacity: 0.35, roughness: 0.05 }), 1.2, 1.27, -d / 2 + 1.3, g); // pastry case
+    for (let i = 0; i < 6; i++) at(sphere(0.08, ["#c47a2c", "#f0c27b", "#7b3f1d"][i % 3]), 0.7 + i * 0.2, 1.12, -d / 2 + 1.3, g);
+    at(sign("MENU  ·  Espresso $3  ·  Latte $4  ·  Protein shake $6", 6, 0.6, { w: 1024, bg: "#1c1c1c", fg: "#f5f5f5", font: "bold 44px Arial" }), 0, 2.4, -d / 2 + 0.03, g);
+    person(0, -d / 2 + 0.5, 0, { seed: "Barista Mai", shirt: "#6b3e26" });
+    for (const [x, z] of [[-3.5, 0.5], [-1.8, 1.9], [1.8, 0.4], [3.8, 1.8], [-3.6, 2.9]]) {
+      at(roundTable(), x, 0, z, g);
+      at(chair("#4a3626"), x - 0.7, 0, z, g).rotation.y = Math.PI / 2;
+      at(chair("#4a3626"), x + 0.7, 0, z, g).rotation.y = -Math.PI / 2;
+      at(cyl(0.05, 0.04, 0.1, "#fff", 10), x, 0.82, z, g);
+      block(x - 1, z - 0.5, x + 1, z + 0.5);
+    }
+    person(-2.5, 1.9, Math.PI / 2, { seed: "Cafe guest", shirt: "#2563eb", sit: true });
+    for (let i = 0; i < 3; i++) {
+      const l = at(new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.25, 14, 1, true), mat("#2b2b2b", { side: THREE.DoubleSide })), -2 + i * 2, h - 0.8, 0.8, g);
+      at(cyl(0.005, 0.005, 0.7, "#111"), 0, 0.45, 0, l);
+    }
+    at(plant(), w / 2 - 0.6, 0, d / 2 - 0.7, g);
+  } else if (id === "gym") {
+    w = 18; d = 14; h = 5;
+    g = room(w, d, h, { floor: "#1d2a44", wall: "#d8d8d8", light: "#ffffff", lights: 3, power: 16 });
+    // puzzle mats, the ring, heavy bags, a weights rack, a mirror wall
+    const mats1 = new THREE.Mesh(new THREE.PlaneGeometry(7, 6), mat("#b91c1c", { roughness: 0.8 }));
+    mats1.rotation.x = -Math.PI / 2;
+    at(mats1, 4.5, 0.01, 1.5, g);
+    const ring = new THREE.Group();
+    at(box(5, 0.6, 5, "#20242c"), 0, 0.3, 0, ring);
+    at(box(4.8, 0.05, 4.8, "#e9e3d5"), 0, 0.62, 0, ring);
+    for (const x of [-2.4, 2.4]) for (const z of [-2.4, 2.4]) at(cyl(0.08, 0.08, 1.6, "#c8102e", 10), x, 1.4, z, ring);
+    for (let r = 0; r < 3; r++) {
+      const y = 1.05 + r * 0.35;
+      for (const [x, z, len, ry] of [[0, -2.4, 4.8, 0], [0, 2.4, 4.8, 0], [-2.4, 0, 4.8, Math.PI / 2], [2.4, 0, 4.8, Math.PI / 2]]) {
+        const rope = at(cyl(0.025, 0.025, len, "#f2f2f2", 6), x, y, z, ring);
+        rope.rotation.set(0, ry, Math.PI / 2);
+      }
+    }
+    at(ring, -4.5, 0, -2.5, g);
+    block(-7.1, -5.1, -1.9, 0.1);
+    for (const [x, z] of [[3, -4.2], [5, -4.2], [7, -4.2]]) {
+      at(cyl(0.005, 0.005, 1.4, "#555"), x, h - 0.7, z, g);
+      const bag = at(cyl(0.2, 0.2, 1.2, "#7f1d1d", 14), x, h - 2.0, z, g);
+      ticks.push((dt, t) => { bag.rotation.z = Math.sin(t * 2 + x) * 0.05; });
+      block(x - 0.3, z - 0.3, x + 0.3, z + 0.3);
+    }
+    const rack = new THREE.Group();
+    at(box(2.8, 0.06, 0.5, "#333"), 0, 0.5, 0, rack);
+    at(box(2.8, 0.06, 0.5, "#333"), 0, 0.95, 0, rack);
+    for (let i = 0; i < 8; i++) {
+      const db = at(cyl(0.07, 0.07, 0.35, "#1a1a1a", 10), -1.2 + (i % 4) * 0.8, i < 4 ? 0.6 : 1.05, 0, rack);
+      db.rotation.z = Math.PI / 2;
+    }
+    at(rack, -w / 2 + 0.4, 0, 3.5, g).rotation.y = Math.PI / 2;
+    block(-w / 2, 2, -w / 2 + 0.8, 5);
+    const mirror = at(new THREE.Mesh(new THREE.PlaneGeometry(8, 2.4), new THREE.MeshStandardMaterial({ color: "#cfd8e3", metalness: 1, roughness: 0.05 })), 4.5, 1.6, -d / 2 + 0.03, g);
+    void mirror;
+    at(picture(1.2, 1.6, poster("TRAIN", "HARD", "#111", "#f4b942")), w / 2 - 0.03, 2.4, -2, g).rotation.y = -Math.PI / 2;
+    // fighters training: shadowboxing on the mats, sparring in the ring
+    person(3.5, 1.2, Math.PI * 0.8, { seed: "gym rat", shirt: "#111", base: "stance", shadowbox: true });
+    person(5.8, 2.2, -Math.PI * 0.6, { seed: "coach", shirt: "#c8102e" });
+    for (const [x, ry] of [[-5.3, Math.PI / 2], [-3.7, -Math.PI / 2]]) {
+      const f = person(x, -2.5, ry, { seed: "sparring" + x, shirt: x < -4 ? "#1d4ed8" : "#b91c1c", base: "stance", shadowbox: true });
+      f.root.position.y = 0.62;
+    }
+  } else if (id === "cars") {
+    w = 20; d = 14; h = 5;
+    g = room(w, d, h, { floor: "#d6d9de", wall: "#eef1f5", light: "#ffffff", lights: 3, power: 16 });
+    // a showroom floor that reflects the cars, three on slowly turning stands
+    g.children[0].material = new THREE.MeshStandardMaterial({ color: "#e4e7eb", roughness: 0.12, metalness: 0.3 });
+    const cars = (ctx.cars || []).slice(-3);
+    cars.forEach((c, i) => {
+      const disc = at(cyl(2.8, 2.8, 0.1, "#2b2f36", 32, { metalness: 0.6, roughness: 0.3 }), -6 + i * 6, 0.05, -1.5, g);
+      const car = makeCar(c.id, c.color);
+      car.position.set(0, 0.05, 0);
+      disc.add(car);
+      ticks.push((dt) => { disc.rotation.y += dt * 0.25; });
+      block(-6 + i * 6 - 2.8, -4.3, -6 + i * 6 + 2.8, 1.3);
+      at(sign(c.name, 3, 0.5, { bg: "#111", fg: "#f4b942", font: "bold 56px Arial" }), -6 + i * 6, 3.5, -d / 2 + 0.03, g);
+    });
+    at(sign("SALE  ·  0% FINANCE", 6, 0.8, { w: 1024, bg: "#c8102e", fg: "#fff", font: "bold 72px Arial" }), 0, 4.2, -d / 2 + 0.03, g);
+    at(table(2, 0.9, 0.78, "#f5f5f5"), w / 2 - 3, 0, 4, g);
+    block(w / 2 - 4.1, 3.4, w / 2 - 1.9, 4.6);
+    person(w / 2 - 3, 3.2, Math.PI, { seed: "Sales Rep", shirt: "#1e3a8a" });
+    at(plant(1.3), -w / 2 + 0.8, 0, d / 2 - 0.8, g);
+    at(plant(1.3), w / 2 - 0.8, 0, d / 2 - 0.8, g);
+  } else if (id === "realty") {
+    w = 12; d = 9; h = 3.2;
+    g = room(w, d, h, { floorTex: noiseTexture("#8f8a80", "#7d786e", "#a19c92", 6), wall: "#eef2ee", light: "#fffaf0", lights: 2, power: 12 });
+    at(table(2.4, 1.1, 0.76, "#3d2b1f"), 0, 0, -1.5, g);
+    block(-1.3, -2.1, 1.3, -0.9);
+    at(chair("#222"), 0, 0, -2.5, g);
+    for (const x of [-0.6, 0.6]) at(chair("#7a7a7a"), x, 0, -0.5, g).rotation.y = Math.PI;
+    person(0, -2.5, 0, { seed: "Agent Lane", shirt: "#0f766e", sit: true });
+    at(box(0.5, 0.3, 0.03, "#111"), 0.6, 0.95, -1.7, g); // laptop
+    // houses for sale on the walls, a little model house on a stand
+    const homes = ["🏚️", "🏠", "🏡", "🏘️", "🏰"];
+    homes.forEach((e, i) => at(picture(1.1, 0.8, emojiArt(e, "#dbeafe")), -4.4 + i * 2.2, 1.8, -d / 2 + 0.04, g));
+    const model = makeHouse(Math.min(4, (ctx.house || 0) + 1));
+    model.scale.setScalar(0.07);
+    at(table(1, 1, 0.9, "#fff"), w / 2 - 1.5, 0, 1.5, g);
+    at(model, w / 2 - 1.5, 0.95, 1.5, g);
+    block(w / 2 - 2.1, 0.9, w / 2 - 0.9, 2.1);
+    at(plant(1.2), -w / 2 + 0.6, 0, -d / 2 + 0.7, g);
+    at(sofa(2, "#1f4e5f"), -w / 2 + 1.6, 0, 2.6, g).rotation.y = Math.PI / 2;
+    block(-w / 2 + 1.1, 1.6, -w / 2 + 2.1, 3.6);
+  } else if (id === "pets") {
+    w = 12; d = 9; h = 3.2;
+    g = room(w, d, h, { floor: "#d9cbb5", wall: "#fff3d6", light: "#fff4e0", lights: 2, power: 12 });
+    // shelves of food and toys, cages, a fish tank, animals wandering around
+    for (let s = 0; s < 3; s++) {
+      at(box(4, 0.05, 0.5, "#8b5a3c"), -2, 0.6 + s * 0.7, -d / 2 + 0.3, g);
+      for (let i = 0; i < 8; i++) at(box(0.35, 0.4, 0.3, ["#ef4444", "#22c55e", "#3b82f6", "#f59e0b"][(i + s) % 4]), -3.7 + i * 0.48, 0.83 + s * 0.7, -d / 2 + 0.3, g);
+    }
+    block(-4.1, -d / 2, 0.1, -d / 2 + 0.6);
+    const wire = new THREE.MeshStandardMaterial({ color: "#9ca3af", wireframe: true });
+    for (let i = 0; i < 3; i++) {
+      at(new THREE.Mesh(new THREE.BoxGeometry(1, 0.8, 0.8, 6, 5, 5), wire), 2 + i * 1.2, 0.4, -d / 2 + 0.5, g);
+    }
+    block(1.4, -d / 2, 5.4, -d / 2 + 1);
+    const tank = at(box(2, 1, 0.6, "#38bdf8", { transparent: true, opacity: 0.35, roughness: 0.05 }), -w / 2 + 0.5, 1.3, 0, g);
+    tank.rotation.y = Math.PI / 2;
+    at(box(0.6, 0.8, 2.1, "#3f3f46"), -w / 2 + 0.5, 0.4, 0, g);
+    const fish = [];
+    for (let i = 0; i < 6; i++) {
+      const f = at(sphere(0.05, ["#f97316", "#facc15", "#ec4899"][i % 3]), -w / 2 + 0.5, 1.1 + (i % 3) * 0.2, -0.8 + i * 0.3, g);
+      f.scale.set(0.6, 0.8, 1.4);
+      fish.push(f);
+    }
+    ticks.push((dt, t) => fish.forEach((f, i) => { f.position.z = Math.sin(t * 0.8 + i) * 0.8; f.rotation.y = Math.cos(t * 0.8 + i) > 0 ? 0 : Math.PI; }));
+    block(-w / 2, -1.2, -w / 2 + 1, 1.2);
+    const c = at(counter(2.4, "#7c5a3a"), w / 2 - 1.3, 0, 2.2, g);
+    c.rotation.y = -Math.PI / 2;
+    block(w / 2 - 1.7, 1, w / 2 - 0.9, 3.4);
+    person(w / 2 - 0.5, 2.2, -Math.PI / 2, { seed: "Pet shop Pia", shirt: "#16a34a" });
+    for (const [kind, x, z] of [["dog", -1, 1], ["cat", 1.5, 0.5], ["dog", 0, -1.5], ["parrot", 2.5, 2.5]]) {
+      const p = makePet(kind);
+      p.root.position.set(x, kind === "parrot" ? 1.6 : 0, z);
+      g.add(p.root);
+      const home = new THREE.Vector3(x, 0, z);
+      let tgt = home.clone(), wait = 0;
+      ticks.push((dt) => {
+        if (kind === "parrot") return p.step(dt, 0);
+        const r = p.root;
+        if ((wait -= dt) < 0 && r.position.distanceTo(tgt) < 0.2) {
+          tgt = home.clone().add(new THREE.Vector3((Math.random() - 0.5) * 3, 0, (Math.random() - 0.5) * 2.5));
+          wait = 1 + Math.random() * 3;
+        }
+        const dv = tgt.clone().sub(r.position).setY(0);
+        const v = dv.length() > 0.1 && wait < 0 ? 1.2 : 0;
+        if (v) {
+          r.position.addScaledVector(dv.normalize(), v * dt);
+          r.rotation.y = angleLerp(r.rotation.y, Math.atan2(dv.x, dv.z), damp(6, dt));
+        }
+        p.step(dt, v);
+      });
+    }
+  } else {
+    // the arena: an empty hall with the cage in the middle, stands all around and the big screen
+    w = 26; d = 22; h = 9;
+    g = room(w, d, h, { floor: "#141519", wall: "#191b22", ceiling: "#08090c", light: "#ffffff", lights: 3, power: 26 });
+    const R = 4.2;
+    const mat0 = new THREE.Mesh(new THREE.CircleGeometry(R, 8), new THREE.MeshStandardMaterial({ map: textTexture(ctx.org || "GFC", { w: 512, h: 512, bg: "#e7e2d6", fg: "#c8102e", font: "italic 900 150px Arial" }), roughness: 0.8 }));
+    mat0.rotation.set(-Math.PI / 2, 0, Math.PI / 8);
+    at(box(2 * R + 0.6, 0.8, 2 * R + 0.6, "#0e0f12"), 0, 0.4, -1, g);
+    at(mat0, 0, 0.81, -1, g);
+    const fenceTex = (() => {
+      const c = document.createElement("canvas");
+      c.width = c.height = 64;
+      const x = c.getContext("2d");
+      x.strokeStyle = "#9aa0a8";
+      x.lineWidth = 3;
+      x.beginPath();
+      x.moveTo(0, 0); x.lineTo(64, 64); x.moveTo(64, 0); x.lineTo(0, 64);
+      x.stroke();
+      const t = new THREE.CanvasTexture(c);
+      t.wrapS = t.wrapT = THREE.RepeatWrapping;
+      t.repeat.set(6, 3);
+      return t;
+    })();
+    const fenceM = new THREE.MeshStandardMaterial({ map: fenceTex, transparent: true, alphaTest: 0.3, side: THREE.DoubleSide, metalness: 0.6, roughness: 0.4 });
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * TAU, a2 = ((i + 1) / 8) * TAU;
+      const x1 = Math.cos(a) * R, z1 = Math.sin(a) * R, x2 = Math.cos(a2) * R, z2 = Math.sin(a2) * R;
+      at(cyl(0.08, 0.08, 1.9, "#111", 8), x1, 1.75, z1 - 1, g);
+      const panel = at(new THREE.Mesh(new THREE.PlaneGeometry(Math.hypot(x2 - x1, z2 - z1), 1.8), fenceM), (x1 + x2) / 2, 1.7, (z1 + z2) / 2 - 1, g);
+      panel.rotation.y = -Math.atan2(z2 - z1, x2 - x1);
+      at(cyl(0.1, 0.1, Math.hypot(x2 - x1, z2 - z1), "#222", 8), (x1 + x2) / 2, 2.65, (z1 + z2) / 2 - 1, g).rotation.set(0, -Math.atan2(z2 - z1, x2 - x1), Math.PI / 2);
+    }
+    block(-R - 0.4, -R - 1.4, R + 0.4, R - 0.6);
+    // stands: rising rows of seats on three sides
+    for (let r = 0; r < 5; r++) {
+      at(box(w - 2, 0.5, 0.9, r % 2 ? "#7f1d1d" : "#991b1b"), 0, 0.25 + r * 0.5, -d / 2 + 1 + r * -0.0 + (4 - r) * 0.9, g).position.y = 0.25 + (4 - r) * 0.0 + r * 0.5;
+    }
+    for (const sx of [-1, 1]) for (let r = 0; r < 5; r++) {
+      const s = at(box(0.9, 0.5, d - 6, r % 2 ? "#1e3a8a" : "#1d4ed8"), sx * (w / 2 - 1 - r * 0.9), 0.25 + r * 0.5, -1, g);
+      void s;
+    }
+    block(-w / 2, -d / 2, w / 2, -d / 2 + 5.4);
+    for (const sx of [-1, 1]) block(sx > 0 ? w / 2 - 5.4 : -w / 2, -d / 2, sx > 0 ? w / 2 : -w / 2 + 5.4, d / 2 - 3);
+    const screen = at(sign((ctx.org || "GFC") + "  ·  FIGHT NIGHT", 8, 2.2, { w: 1024, h: 280, bg: "#0b0c12", fg: "#f4b942", font: "italic 900 110px Arial" }), 0, h - 2.4, -1, g);
+    screen.rotation.x = 0.0;
+    const spot = new THREE.SpotLight("#fff7e8", 60, 20, 0.5, 0.5, 1.2);
+    spot.position.set(0, h - 0.5, -1);
+    spot.target.position.set(0, 0.8, -1);
+    g.add(spot, spot.target);
+    person(2, 3.4, Math.PI, { seed: "Matchmaker", shirt: "#111", pants: "#111" });
+  }
+
+  const tick = (dt, t) => {
+    for (const fn of ticks) fn(dt, t);
+    for (const p of people) {
+      p.t += dt;
+      const f = p.f;
+      if (p.dance) {
+        f.root.position.y = Math.abs(Math.sin(p.t * 4)) * 0.06 * p.dance;
+        f.root.rotation.y = p.ry + Math.sin(p.t * 1.3) * 0.6 * p.dance;
+      }
+      if (p.shadowbox && !f.queue && Math.random() < dt * 0.8) f.play(attack(["jab", "jab-cross", "left hook", "body kick", "uppercut"][Math.floor(Math.random() * 5)]).frames, "stance");
+      f.update(dt);
+    }
+  };
+  return { group: g, w, d, h, solids, people, tick };
+}
+
+/** The way back out, while indoors. */
+const EXIT = { id: "exit", name: "outside", icon: "🚪" };
+
 export class WorldView {
   constructor() {
     const scene = (this.scene = new THREE.Scene());
@@ -575,6 +1097,8 @@ export class WorldView {
     this.home = null;
     this.family = [];
     this.garage = [];
+    this.interiors = {}; // built rooms, by place and what's in them
+    this.inside = null;  // { id, I } while indoors
 
     addEventListener("keydown", (e) => {
       if (!this.active || /INPUT|TEXTAREA|SELECT/.test((e.target && e.target.tagName) || "")) return;
@@ -856,7 +1380,80 @@ export class WorldView {
   }
 
   canDrive() {
-    return !!this.drivingId;
+    return !!this.drivingId && !this.inside;
+  }
+
+  /** Walk in through a door. ctx: what the room shows ({ house, partner, cars, org }). */
+  enterPlace(id, ctx = {}) {
+    if (this.inside && this.inside.id === id) return;
+    if (this.inside) this.leavePlace();
+    if (this.driving) this.stopDriving();
+    const key = id + "|" + JSON.stringify(ctx);
+    let I = this.interiors[key];
+    if (!I) {
+      // a room built for an older life (smaller house, other cars) is replaced
+      for (const k of Object.keys(this.interiors)) {
+        if (!k.startsWith(id + "|")) continue;
+        this.scene.remove(this.interiors[k].group);
+        for (const p of this.interiors[k].people) p.f.dispose();
+        delete this.interiors[k];
+      }
+      I = buildInterior(id, ctx);
+      I.origin = new THREE.Vector3(1000 + PLACES.findIndex((p) => p.id === id) * 80, 0, 0);
+      I.group.position.copy(I.origin);
+      this.scene.add(I.group);
+      this.interiors[key] = I;
+    }
+    for (const x of Object.values(this.interiors)) x.group.visible = x === I;
+    const place = PLACES.find((p) => p.id === id);
+    this.inside = { id, I, door: place.door, name: place.name, icon: place.icon };
+    // a few steps in from the door, so the camera behind you has room
+    this.pos.set(I.origin.x, 0, I.origin.z + I.d / 2 - 3.1);
+    this.heading = Math.PI;
+    this.camYaw = 0;
+    this.camPitch = 0.26;
+    this.camera.fov = 64;
+    this.camera.updateProjectionMatrix();
+    this.moveTarget = null;
+    this.snapCam = true;
+    // indoor light: no sun or sky
+    this.outdoor ||= { bg: this.scene.background, fog: this.scene.fog, sun: this.sun.intensity, exposure: this.exposure };
+    this.sun.intensity = 0;
+    this.scene.fog = null;
+    this.scene.background = new THREE.Color("#050506");
+    this.exposure = 0.95;
+    this.bringPets();
+    this.near = null;
+    if (this.onNear) this.onNear(null);
+  }
+
+  /** Step back out onto the street in front of the door. */
+  leavePlace() {
+    if (!this.inside) return;
+    const [dx, dz] = this.inside.door;
+    this.inside.I.group.visible = false;
+    this.inside = null;
+    const out = dz < 0 ? 1 : -1; // toward the street
+    this.pos.set(dx, 0, dz + out * 2.2);
+    this.heading = out > 0 ? 0 : Math.PI;
+    this.camYaw = this.heading + Math.PI;
+    this.camPitch = 0.42;
+    this.camera.fov = 55;
+    this.camera.updateProjectionMatrix();
+    this.moveTarget = null;
+    this.snapCam = true;
+    if (this.outdoor) {
+      this.scene.background = this.outdoor.bg;
+      this.scene.fog = this.outdoor.fog;
+      this.sun.intensity = this.outdoor.sun;
+      this.exposure = this.outdoor.exposure;
+    }
+    this.bringPets();
+  }
+
+  /** Pets come along through doors. */
+  bringPets() {
+    this.pets.forEach((p, i) => p.root.position.set(this.pos.x + 0.8 + i * 0.5, 0, this.pos.z + 0.8));
   }
 
   isDriving() {
@@ -870,7 +1467,8 @@ export class WorldView {
     this.driving = makeCar(this.drivingId, spec.color);
     this.driving.userData.id = this.drivingId;
     this.scene.add(this.driving);
-    this.player.root.visible = false;
+    this.player.setBase("drive");
+    this.steer = 0;
     this.speedNow = 0;
     return true;
   }
@@ -879,7 +1477,7 @@ export class WorldView {
     if (!this.driving) return false;
     this.scene.remove(this.driving);
     this.driving = null;
-    this.player.root.visible = true;
+    this.player.setBase("relaxed");
     // step out beside the car
     this.pos.x += Math.cos(this.heading) * 1.6;
     this.pos.z -= Math.sin(this.heading) * 1.6;
@@ -889,6 +1487,7 @@ export class WorldView {
 
   /** Teleport home (opening the world). */
   goHome() {
+    if (this.inside) this.leavePlace();
     this.pos.set(-38, 0, -6);
     this.heading = Math.PI;
     this.camYaw = 0;
@@ -897,6 +1496,12 @@ export class WorldView {
   }
 
   blocked(x, z, r) {
+    if (this.inside) {
+      const I = this.inside.I, lx = x - I.origin.x, lz = z - I.origin.z;
+      if (Math.abs(lx) > I.w / 2 - 0.35 || Math.abs(lz) > I.d / 2 - 0.35) return true;
+      for (const s of I.solids) if (lx > s[0] - r && lx < s[2] + r && lz > s[1] - r && lz < s[3] + r) return true;
+      return false;
+    }
     if (Math.abs(x) > 64 || Math.abs(z) > 40) return true;
     for (const s of this.solids) if (x > s[0] - r && x < s[2] + r && z > s[1] - r && z < s[3] + r) return true;
     return false;
@@ -951,11 +1556,25 @@ export class WorldView {
       else dir = d.normalize();
     }
     const maxV = this.driving ? 16 : (k.has("shift") ? 7 : 4.2) * (this.injured ? 0.55 : 1);
-    const want = dir ? maxV : 0;
-    this.speedNow += (want - this.speedNow) * damp(this.driving ? 2.2 : 10, dt);
-    if (dir) {
-      const h = Math.atan2(dir.x, dir.z);
-      this.heading = angleLerp(this.heading, h, damp(this.driving ? 3.5 : 12, dt));
+    let want = dir ? maxV : 0;
+    if (this.driving) {
+      // a car turns by steering its front wheels while it rolls: it can't spin on the spot
+      let diff = 0;
+      if (dir) {
+        diff = Math.atan2(dir.x, dir.z) - this.heading;
+        diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+        // slow down for tight turns
+        want *= Math.max(0.3, Math.min(1, Math.cos(diff) * 1.2));
+      }
+      const steerTo = Math.max(-0.6, Math.min(0.6, diff * 1.4));
+      this.steer += (steerTo - this.steer) * damp(6, dt);
+      const before = this.speedNow;
+      this.speedNow += (want - this.speedNow) * damp(want > this.speedNow ? 1.6 : 2.6, dt);
+      this.accel = (this.speedNow - before) / Math.max(dt, 1e-3);
+      this.heading += (this.speedNow / this.driving.userData.wheelBase) * Math.tan(this.steer) * dt;
+    } else {
+      this.speedNow += (want - this.speedNow) * damp(10, dt);
+      if (dir) this.heading = angleLerp(this.heading, Math.atan2(dir.x, dir.z), damp(12, dt));
     }
     if (this.speedNow > 0.01) {
       const step = this.speedNow * dt;
@@ -967,13 +1586,28 @@ export class WorldView {
       else if (this.driving) this.speedNow *= 0.5;
     }
     if (this.driving) {
-      this.driving.position.copy(P);
-      this.driving.rotation.y = this.heading;
-      for (const w of this.driving.userData.wheels) w.children.forEach((c) => (c.rotation.x += (this.speedNow * dt) / this.driving.userData.radius));
+      const car = this.driving, U = car.userData;
+      car.position.copy(P);
+      car.rotation.y = this.heading;
+      for (const w of U.wheels) w.children.forEach((c) => (c.rotation.x += (this.speedNow * dt) / U.radius));
+      for (const w of U.front) w.rotation.y = this.steer;
+      U.wheelRing.rotation.z = -this.steer * 2.2;
+      // body roll in corners, dip under braking, squat under power
+      const roll = Math.max(-0.07, Math.min(0.07, -Math.tan(this.steer) * this.speedNow * this.speedNow * 0.0016));
+      const pitch = Math.max(-0.04, Math.min(0.04, -(this.accel || 0) * 0.006));
+      U.shell.rotation.z += (roll - U.shell.rotation.z) * damp(5, dt);
+      U.shell.rotation.x += (pitch - U.shell.rotation.x) * damp(5, dt);
+      // the driver sits in the seat and leans with the car
+      car.updateMatrixWorld(true);
+      const seat = U.shell.localToWorld(U.seat.clone());
+      this.player.root.position.set(seat.x, seat.y - 0.46 * this.player.root.scale.y, seat.z);
+      this.player.root.rotation.set(0, this.heading, 0);
+      this.player.update(dt);
+    } else {
+      this.player.root.position.copy(P);
+      this.player.root.rotation.y = this.heading;
+      this.player.update(dt);
     }
-    this.player.root.position.copy(P);
-    this.player.root.rotation.y = this.heading;
-    this.player.update(dt);
 
     // pets trot behind
     this.pets.forEach((pet, i) => {
@@ -1011,9 +1645,15 @@ export class WorldView {
       for (const w of t.car.userData.wheels) w.children.forEach((c) => (c.rotation.x += (t.v * dt) / t.car.userData.radius));
     }
 
-    // closest door in reach
+    // closest door in reach (indoors: the way out)
     let near = null, best = 3.6;
-    for (const p of PLACES) {
+    if (this.inside) {
+      const I = this.inside.I;
+      I.tick(dt, performance.now() / 1000);
+      best = 0;
+      if (Math.hypot(P.x - I.origin.x, P.z - (I.origin.z + I.d / 2 - 0.5)) < 1.4) near = EXIT;
+    }
+    for (const p of best ? PLACES : []) {
       const d = Math.hypot(P.x - p.door[0], P.z - p.door[1]);
       if (d < best) {
         best = d;
@@ -1032,12 +1672,19 @@ export class WorldView {
     // behind the wheel the camera swings round behind the car
     if (this.driving && this.speedNow > 2 && !this.drag) this.camYaw = angleLerp(this.camYaw, this.heading + Math.PI, damp(2.5, dt));
     // third-person camera
-    const dist = this.driving ? 11 : 7.5;
+    const dist = this.driving ? 11 : this.inside ? 3.4 : 7.5;
     const c = this.camera;
     const tgt = new THREE.Vector3(P.x, this.driving ? 1.2 : 1.5, P.z);
-    const cx = tgt.x + Math.sin(this.camYaw) * Math.cos(this.camPitch) * dist;
-    const cz = tgt.z + Math.cos(this.camYaw) * Math.cos(this.camPitch) * dist;
-    const cyp = tgt.y + Math.sin(this.camPitch) * dist;
+    let cx = tgt.x + Math.sin(this.camYaw) * Math.cos(this.camPitch) * dist;
+    let cz = tgt.z + Math.cos(this.camYaw) * Math.cos(this.camPitch) * dist;
+    let cyp = tgt.y + Math.sin(this.camPitch) * dist;
+    if (this.inside) {
+      // keep the camera inside the walls
+      const I = this.inside.I, m = 0.25;
+      cx = Math.max(I.origin.x - I.w / 2 + m, Math.min(I.origin.x + I.w / 2 - m, cx));
+      cz = Math.max(I.origin.z - I.d / 2 + m, Math.min(I.origin.z + I.d / 2 - m, cz));
+      cyp = Math.min(I.h - 0.3, cyp);
+    }
     c.position.lerp(new THREE.Vector3(cx, cyp, cz), this.snapCam ? 1 : damp(8, dt));
     this.snapCam = false;
     c.lookAt(tgt);

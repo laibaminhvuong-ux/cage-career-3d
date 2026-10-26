@@ -338,6 +338,29 @@ const SUB_POS = {
 };
 const SUBS_TOP = Object.keys(SUB_POS);
 const SUBS_BOTTOM = ["triangle choke", "armbar", "guillotine choke", "kimura", "heel hook", "omoplata"];
+// hands-on fighting: what each choice does. kind: attack | takedown | move | dodge. acc = base
+// accuracy, dmg = damage, ko = knockdown power, punch/kick/low = how it's defended, cost = stamina
+const STAND_ACTIONS = {
+  jab: { kind: "attack", punch: true, acc: 0.6, dmg: 2.5, ko: 0, cost: 1.5, names: ["jab", "stiff jab"] },
+  cross: { kind: "attack", punch: true, acc: 0.48, dmg: 4.5, ko: 0.15, cost: 2.5, names: ["jab-cross", "straight right", "counter right hand"] },
+  hook: { kind: "attack", punch: true, acc: 0.42, dmg: 6, ko: 0.3, cost: 3.5, names: ["left hook", "1-2-hook combination", "overhand right"] },
+  uppercut: { kind: "attack", punch: true, acc: 0.4, dmg: 6, ko: 0.3, cost: 3.5, names: ["uppercut", "short uppercut"] },
+  body: { kind: "attack", kick: true, acc: 0.5, dmg: 4.5, ko: 0, cost: 4, drain: 7, names: ["body kick", "switch kick to the body", "teep to the body"] },
+  leg: { kind: "attack", kick: true, low: true, acc: 0.58, dmg: 3.5, ko: 0, cost: 3, slow: true, names: ["leg kick", "calf kick", "oblique kick"] },
+  head: { kind: "attack", kick: true, acc: 0.3, dmg: 9, ko: 0.6, cost: 6, names: ["head kick"] },
+  flashy: { kind: "attack", kick: true, acc: 0.24, dmg: 10, ko: 0.65, cost: 7.5, names: FLASHY },
+  takedown: { kind: "takedown", cost: 6 },
+  slip: { kind: "dodge", cost: 1 },
+  block: { kind: "dodge", cost: 0.5 },
+  check: { kind: "dodge", cost: 1 },
+  sprawl: { kind: "dodge", cost: 1.5 },
+  in: { kind: "move", cost: 1 },
+  out: { kind: "move", cost: -3 },
+  circle: { kind: "move", cost: -1 },
+};
+const TOP_ACTIONS = { gnp: { cost: 3 }, pass: { cost: 3 }, sub: { cost: 4 }, standup: { cost: 0 } };
+const BOTTOM_ACTIONS = { sweep: { cost: 4 }, getup: { cost: 5 }, guardsub: { cost: 4 }, tieup: { cost: 1 } };
+
 // ground positions, worst to best for the fighter on top
 const POSITIONS = ["guard", "half", "side", "mount", "back"];
 const POS_TEXT = {
@@ -363,7 +386,7 @@ export class Corner {
     this.dealt = 0;
     this.totSig = this.totTd = this.totKd = 0;
   }
-  s(stat) { return Math.min(99, this.f.get(stat) + this.bonus); }
+  s(stat) { return Math.min(99, this.f.get(stat) + this.bonus - (stat === "speed" ? (this.legHits || 0) * 1.5 : 0)); }
   /** Stamina factor: gassed fighters are less effective. */
   sf() { return 0.45 + this.stamina / 180; }
   n() { return this.f.lastName(); }
@@ -409,39 +432,14 @@ export class Fight {
   playerDamage() { return this.p.damage; }
 
   simulateRound(plan, touch = true) {
-    if (this.finished) throw new GameError("The fight is over.");
-    this.round++;
-    let opening = "Round " + this.round + " — touch gloves and let's go!", gloves = this.round === this.rounds && this.rounds > 1 ? "both" : null;
-    if (this.round === 1) {
-      // the first glove touch: respect, or a statement
-      const theyRefuse = rnd() < 0.12 + (this.o.bonus > 0 ? 0.4 : 0);
-      const p = this.p.n(), o = this.o.n();
-      if (!touch) {
-        gloves = "o";
-        this.o.bonus += 1;
-        opening = "Round 1 — " + p + " refuses to touch gloves! The crowd boos and " + o + " looks furious.";
-      } else if (theyRefuse) {
-        gloves = "p";
-        this.p.stamina = Math.min(100, this.p.stamina + 3);
-        opening = "Round 1 — " + o + " leaves " + p + " hanging! No glove touch. This is personal.";
-      } else {
-        gloves = "both";
-        opening = "Round 1 — they touch gloves, a sign of respect, and we're underway!";
-      }
-      this.touch = gloves;
+    if (this.manual) {
+      // hands-on round: let the game plan play out the rest of it
+      this.manual = null;
+      this.p.plan = PLANS[plan] ? plan : "BALANCED";
+    } else {
+      this.simulateOpening(touch);
+      this.p.plan = plan;
     }
-    this.p.plan = plan;
-    this.o.plan = this.oppNext;
-    this.p.newRound();
-    this.o.newRound();
-    this.ground = false;
-    this.top = null;
-    this.pos = null;
-    this.clock = 0;
-    this.current = [];
-    this.logs.push(this.current);
-    this.ev("info", null, opening);
-    if (gloves) this.current[this.current.length - 1].touch = gloves;
     while (!this.finished) {
       const step = 10 + nextInt(16);
       if (this.clock + step >= ROUND_SECONDS) {
@@ -458,6 +456,270 @@ export class Fight {
       }
     }
     if (!this.finished) this.closeRound();
+  }
+
+  // ---------------------------------------------------------------- hands-on mode
+  // The player picks every exchange: move, attack or dodge (on the ground: strike, pass, submit,
+  // escape...). The opponent picks too, and the two choices are resolved against each other like
+  // reads in a real fight: a slip beats a punch, a check beats a kick, a sprawl beats a shot.
+
+  /** Opens a round in hands-on mode: the bell, the glove touch, then it waits for the player's moves. */
+  startManualRound(touch = true) {
+    if (this.manual) throw new GameError("The round is already on.");
+    this.simulateOpening(touch);
+    this.manual = { turn: 0 };
+    this.range = "out";
+    this.edge = null; // a read that paid off: the next attack lands more often
+  }
+
+  /** The opening of a round, shared by both modes. */
+  simulateOpening(touch) {
+    if (this.finished) throw new GameError("The fight is over.");
+    this.round++;
+    let opening = "Round " + this.round + " — touch gloves and let's go!", gloves = this.round === this.rounds && this.rounds > 1 ? "both" : null;
+    if (this.round === 1) {
+      const theyRefuse = rnd() < 0.12 + (this.o.bonus > 0 ? 0.4 : 0);
+      const p = this.p.n(), o = this.o.n();
+      if (!touch) {
+        gloves = "o";
+        this.o.bonus += 1;
+        opening = "Round 1 — " + p + " refuses to touch gloves! The crowd boos and " + o + " looks furious.";
+      } else if (theyRefuse) {
+        gloves = "p";
+        this.p.stamina = Math.min(100, this.p.stamina + 3);
+        opening = "Round 1 — " + o + " leaves " + p + " hanging! No glove touch. This is personal.";
+      } else {
+        gloves = "both";
+        opening = "Round 1 — they touch gloves, a sign of respect, and we're underway!";
+      }
+      this.touch = gloves;
+    }
+    this.p.plan = "BALANCED";
+    this.o.plan = this.oppNext;
+    this.p.newRound();
+    this.o.newRound();
+    this.ground = false;
+    this.top = null;
+    this.pos = null;
+    this.clock = 0;
+    this.current = [];
+    this.logs.push(this.current);
+    this.ev("info", null, opening);
+    if (gloves) this.current[this.current.length - 1].touch = gloves;
+  }
+
+  /** What the player can do right now. */
+  manualOptions() {
+    if (!this.manual || this.finished) return null;
+    if (!this.ground) return { where: "stand", range: this.range, actions: Object.keys(STAND_ACTIONS) };
+    return { where: this.topTag === "p" ? "top" : "bottom", pos: this.pos || "guard", actions: Object.keys(this.topTag === "p" ? TOP_ACTIONS : BOTTOM_ACTIONS) };
+  }
+
+  /** The opponent's choice, from their style, the range, the score and how they feel. */
+  aiAction() {
+    const o = this.o, st = o.f.style, low = o.stamina < 30, hurt = o.damage > 60;
+    const w = {};
+    const add = (k, v) => { w[k] = (w[k] || 0) + Math.max(0, v); };
+    if (!this.ground) {
+      const striker = st === "Striker" ? 1.6 : 1, grappler = st === "Wrestler" || st === "Jiu-Jitsu" ? 2 : 0.7;
+      add("jab", 3 * striker); add("cross", 2.5 * striker); add("hook", 2 * striker); add("uppercut", this.range === "in" ? 1.5 : 0.4);
+      add("leg", 1.6 * striker); add("body", 1.3 * striker); add("head", 0.7 * striker); add("flashy", 0.25 + (o.s("striking") + o.s("speed") - 120) / 80);
+      add("takedown", 2 * grappler + (this.range === "in" ? 1 : 0));
+      add("slip", 1.4); add("block", 1.4 + (hurt ? 2 : 0)); add("check", 0.8); add("sprawl", st === "Striker" ? 1.2 : 0.6);
+      add("in", this.range === "out" ? 1.5 : 0.2); add("out", (this.range === "in" ? 1 : 0.3) + (low ? 2.5 : 0) + (hurt ? 1.5 : 0)); add("circle", 0.7);
+      if (low) for (const k of ["head", "flashy", "takedown"]) w[k] *= 0.4;
+    } else if (this.topTag === "o") {
+      add("gnp", 3 + (st === "Wrestler" ? 2 : 0)); add("pass", this.position() < 3 ? 2.2 : 0.6);
+      add("sub", st === "Jiu-Jitsu" ? 3 : 1); add("standup", st === "Striker" ? 1.5 : 0.3);
+    } else {
+      add("sweep", 2 + (st === "Jiu-Jitsu" ? 1.5 : 0)); add("getup", st === "Striker" ? 3.5 : 2);
+      add("guardsub", st === "Jiu-Jitsu" ? 2.5 : 0.6); add("tieup", 1.5 + (hurt ? 2 : 0));
+    }
+    let r = rnd() * Object.values(w).reduce((a, b) => a + b, 0);
+    for (const [k, v] of Object.entries(w)) if ((r -= v) <= 0) return k;
+    return Object.keys(w)[0];
+  }
+
+  /** One exchange in hands-on mode. Returns nothing; events go to the round's log. */
+  manualTurn(action) {
+    if (!this.manual || this.finished) throw new GameError("The round isn't on.");
+    const opts = this.manualOptions();
+    if (!opts.actions.includes(action)) throw new GameError("You can't do that right now.");
+    this.manual.turn++;
+    const step = 18 + nextInt(12);
+    if (this.ground) this.top.control += step;
+    this.clock = Math.min(ROUND_SECONDS, this.clock + step);
+    const mine = action, theirs = this.aiAction();
+    if (!this.ground) this.standTurn(mine, theirs);
+    else if (this.topTag === "p") this.groundTurn(this.p, mine, this.o, theirs);
+    else this.groundTurn(this.o, theirs, this.p, mine);
+    // a breather while moving around: stamina comes back a little every exchange
+    for (const c of [this.p, this.o]) c.stamina = Math.min(100, c.stamina + 1.2 + c.s("cardio") / 60);
+    if (!this.finished && this.clock >= ROUND_SECONDS) {
+      this.manual = null;
+      this.closeRound();
+    }
+  }
+
+  standTurn(pa, oa) {
+    const p = this.p, o = this.o;
+    const acts = [[p, pa, o, oa], [o, oa, p, pa]];
+    // movement first: it changes the range for everyone
+    for (const [c, a] of acts) {
+      if (a === "in") this.range = "in";
+      if (a === "out") this.range = "out";
+      const cost = STAND_ACTIONS[a].cost;
+      c.stamina = Math.max(0, Math.min(100, c.stamina - cost));
+    }
+    const moves = acts.filter(([, a]) => STAND_ACTIONS[a].kind === "move");
+    const attacks = acts.filter(([, a]) => STAND_ACTIONS[a].kind === "attack" || STAND_ACTIONS[a].kind === "takedown");
+    if (!attacks.length) {
+      // nobody committed: feints, footwork, a read for whoever dodged into nothing
+      const [c, a] = moves[0] || acts[0];
+      const text = a === "in" ? c.n() + " walks " + this.other(c).n() + " down and cuts off the cage."
+        : a === "out" ? c.n() + " backs off to the outside and breathes."
+        : a === "circle" ? c.n() + " circles away from the fence, feinting."
+        : "Both fighters wait for the other to commit. Lots of feints.";
+      this.ev("info", c, text);
+      this.current[this.current.length - 1].mv = a;
+      return;
+    }
+    // the faster fighter's attack goes first when both commit
+    attacks.sort(([a], [b]) => (b.s("speed") + rnd() * 30) - (a.s("speed") + rnd() * 30));
+    for (const [a, act, d, dact] of attacks) {
+      if (this.finished || this.ground) break;
+      this.resolveAttack(a, act, d, dact, attacks.length === 2);
+    }
+  }
+
+  resolveAttack(a, act, d, dact, trading) {
+    const A = STAND_ACTIONS[act], D = STAND_ACTIONS[dact];
+    if (A.kind === "takedown") {
+      let ch = 0.3 + (a.s("wrestling") - d.s("wrestling")) * 0.008 + (this.range === "in" ? 0.1 : -0.05);
+      if (dact === "sprawl") ch -= 0.35;
+      if (D.kind === "attack") ch += 0.12; // shot under a strike
+      if (dact === "out") ch -= 0.12;
+      if (this.edge === a.tag) ch += 0.12;
+      this.edge = null;
+      ch = clamp(ch * a.sf() + (d.stamina < 35 ? 0.1 : 0), 0.03, 0.85);
+      if (rnd() < ch) {
+        a.td++;
+        a.totTd++;
+        const [verb, tech] = pickOf(TAKEDOWNS);
+        this.ground = true;
+        this.top = a;
+        this.pos = rnd() < 0.15 ? "side" : rnd() < 0.4 ? "half" : "guard";
+        this.ev("td", a, /SLAMS|on$/.test(verb) ? a.n() + " " + verb + " " + d.n() + "!" : a.n() + " " + verb + " and takes " + d.n() + " down.", tech, 0);
+      } else {
+        this.ev("stuff", d, dact === "sprawl" ? d.n() + " reads it and sprawls hard on the shot! " + a.n() + " is spent." : d.n() + " stuffs the takedown from " + a.n() + ".");
+        if (dact === "sprawl") {
+          a.stamina = Math.max(0, a.stamina - 6);
+          this.edge = d.tag;
+        }
+      }
+      return;
+    }
+    let acc = A.acc + (a.s("striking") - d.s("striking")) * 0.004 + (a.s("speed") - d.s("speed")) * 0.002 + d.damage / 500;
+    if (A.punch && this.range === "out") acc -= 0.1;
+    if (A.kick && this.range === "in") acc -= 0.12;
+    if (A.punch && this.range === "in") acc += 0.05;
+    if (trading && D.kind === "attack") acc += 0.08; // both open
+    if (this.edge === a.tag) acc += 0.15;
+    this.edge = null;
+    // the right read takes the shot away; the wrong one leaves you open
+    const read = (dact === "slip" && A.punch) || (dact === "check" && A.kick && A.low) || (dact === "block" && !A.low) || (dact === "out" && A.punch);
+    if (dact === "slip" || dact === "check" || dact === "sprawl") acc += read ? 0 : 0.1;
+    if (read) acc -= dact === "block" ? 0.05 : 0.3;
+    acc = clamp(acc * a.sf(), 0.05, 0.9);
+    const name = A.names ? pickOf(A.names) : act;
+    if (rnd() >= acc) {
+      if (dact === "slip" && read) {
+        this.edge = d.tag;
+        this.ev("miss", a, d.n() + " slips the " + name + " — and " + a.n() + " is open for the counter!", name, 0);
+      } else if (dact === "check" && read) {
+        a.damage += 2;
+        this.ev("miss", a, d.n() + " checks the " + name + "! That hurt " + a.n() + "'s shin.", name, 0);
+      } else if (dact === "block") {
+        this.ev("miss", a, d.n() + " eats the " + name + " on the gloves.", name, 0);
+      } else {
+        this.ev("miss", a, a.n() + " throws " + an(name) + " but misses.", name, 0);
+      }
+      return;
+    }
+    let dmg = A.dmg * (0.6 + a.s("power") / 70) * (0.75 + rnd() * 0.5);
+    if (dact === "block" && !A.low) dmg *= 0.45;
+    if (A.drain) d.stamina = Math.max(0, d.stamina - A.drain);
+    if (A.slow) d.legHits = (d.legHits || 0) + 1;
+    const landed = A.hits || 1;
+    a.sig += landed;
+    a.totSig += landed;
+    this.hit(a, d, dmg);
+    const kdChance = A.ko ? A.ko * (a.s("power") / 100) * (1.25 - d.s("chin") / 100) + d.damage / 300 - (dact === "block" ? 0.15 : 0) : 0;
+    if (rnd() < kdChance) {
+      a.kd++;
+      a.totKd++;
+      this.ev("kd", a, "DOWN GOES " + d.n().toUpperCase() + "! " + a.n() + " lands " + an(name) + " flush!", name, landed);
+      if (rnd() < 0.25 + d.damage / 160 - d.s("chin") / 400) {
+        this.finish(a, "KO", "KO (" + name + ")");
+        return;
+      }
+      d.damage += 4;
+      this.ev("info", d, d.n() + " survives and gets back up!");
+    } else if (dmg > 9) {
+      this.ev("big", a, a.n() + " lands " + an(name) + "! " + d.n() + " is hurt.", name, landed);
+    } else {
+      this.ev("strike", a, a.n() + " lands " + an(name) + (dact === "block" ? " through the guard." : "."), name, landed);
+    }
+    this.checkStoppage(a, d, "punches");
+  }
+
+  /** A ground exchange: t is on top with action ta, b underneath with ba. */
+  groundTurn(t, ta, b, ba) {
+    t.stamina = Math.max(0, t.stamina - (TOP_ACTIONS[ta] || {}).cost);
+    b.stamina = Math.max(0, b.stamina - (BOTTOM_ACTIONS[ba] || {}).cost);
+    const tie = ba === "tieup";
+    // escapes first: if the bottom fighter gets out, the top fighter's plan is gone
+    if (ba === "sweep" || ba === "getup") {
+      let ch = 0.25 + (b.s(ba === "sweep" ? "grappling" : "wrestling") - t.s(ba === "sweep" ? "grappling" : "wrestling")) * 0.007 - this.position() * 0.04;
+      if (ta === "gnp" || ta === "sub") ch += 0.08; // they gave up a little control to attack
+      ch = clamp(ch * b.sf(), 0.04, 0.7);
+      if (rnd() < ch) {
+        if (ba === "sweep") {
+          this.top = b;
+          this.pos = rnd() < 0.3 ? "mount" : "guard";
+          this.ev("sweep", b, b.n() + " hits a slick sweep and ends up " + (this.pos === "mount" ? "in full mount!" : "on top!"));
+        } else {
+          this.ground = false;
+          this.top = null;
+          this.pos = null;
+          this.range = "in";
+          this.ev("info", b, b.n() + " scrambles back to the feet.");
+        }
+        return;
+      }
+      this.ev("ground", t, t.n() + " shuts down the " + (ba === "sweep" ? "sweep" : "stand-up") + " and keeps " + b.n() + " pinned.");
+    }
+    if (ba === "guardsub" && ta !== "standup") {
+      this.submission(b, t, true);
+      if (this.finished || !this.ground) return;
+    }
+    if (ta === "gnp") {
+      if (tie && rnd() < 0.55) this.ev("ground", b, b.n() + " ties up the arms — nothing gets through.");
+      else this.groundAndPound(t, b);
+    } else if (ta === "pass") {
+      const ch = clamp(0.3 + (t.s("grappling") - b.s("grappling")) * 0.007 - (tie ? 0.05 : 0) - (ba === "guardsub" ? 0.1 : 0), 0.05, 0.7);
+      if (this.position() < 4 && rnd() < ch * t.sf()) this.advance(t);
+      else this.ev("ground", b, b.n() + " keeps the guard closed.");
+    } else if (ta === "sub") {
+      if (tie && rnd() < 0.4) this.ev("ground", b, b.n() + " hides the arms and defends the submission.");
+      else this.submission(t, b, false);
+    } else if (ta === "standup") {
+      this.ground = false;
+      this.top = null;
+      this.pos = null;
+      this.range = "out";
+      this.ev("info", t, t.n() + " lets " + b.n() + " up and wants to strike.");
+    }
   }
 
   aiPlan(forRound) {
@@ -776,6 +1038,7 @@ export class Fight {
     e.sg = [this.p.totSig, this.o.totSig];
     if (move != null) e.move = move;
     if (landed > 0) e.n = landed;
+    if (this.manual && !this.ground) e.r = this.range; // hands-on: how far apart they stand
     this.current.push(e);
   }
 
@@ -788,6 +1051,7 @@ export class Fight {
       cards: this.finished ? this.cards() : null,
       scout: this.coachStars >= 3 && !this.finished ? this.oppNext : null,
       oppFiredUp: this.o.bonus > 0,
+      manual: this.manualOptions(), clock: this.clock,
     };
   }
 }
@@ -2466,6 +2730,18 @@ export class Career {
     if (this.fight.finished) this.resolveFight();
   }
 
+  /** Hands-on mode: start the round, then one exchange at a time. */
+  fightManualStart(touch = true) {
+    if (!this.fight || this.fight.finished) throw new GameError("No fight in progress.");
+    this.fight.startManualRound(touch);
+  }
+
+  fightManualTurn(action) {
+    if (!this.fight || this.fight.finished) throw new GameError("No fight in progress.");
+    this.fight.manualTurn(action);
+    if (this.fight.finished) this.resolveFight();
+  }
+
   closeFight() {
     if (this.fight && this.fight.finished) this.fight = null;
   }
@@ -3276,6 +3552,8 @@ export class Game {
       case "fight/start": msg = this.need(career).startFight(); break;
       case "fight/round": this.need(career).fightRound(p.plan, p.touch !== false && p.touch !== "false"); break;
       case "fight/close": this.need(career).closeFight(); break;
+      case "fight/manual": this.need(career).fightManualStart(p.touch !== false && p.touch !== "false"); break;
+      case "fight/turn": this.need(career).fightManualTurn(p.action); break;
       case "retire": msg = this.need(career).retire(); break;
       case "talk": msg = this.need(career).talk(p.target, p.tone); break;
       case "staff/hire": msg = this.need(career).hire(int(p.index)); break;

@@ -77,7 +77,7 @@ audio.onSay((text, mood) => {
 });
 if (stage) {
   stage.world.onNear = () => renderWorldBottom();
-  stage.world.onEnter = (id) => openModal("place", { place: id });
+  stage.world.onEnter = (id) => (id === "exit" ? leavePlace() : enterPlace(id));
 }
 
 // ------------------------------------------------------------------ helpers
@@ -759,6 +759,8 @@ function renderModal() {
     return;
   }
   el.classList.remove("hidden");
+  // inside a place its menu is a side panel, so the room stays in view
+  el.classList.toggle("side", modal.kind === "place" && !!(stage && stage.world.inside));
   const body = $("modalBody");
   const s = state;
   if (modal.kind === "saves") {
@@ -1004,6 +1006,7 @@ function openWorld() {
 }
 
 function closeWorld() {
+  if (stage) stage.world.leavePlace();
   $("worldScreen").classList.add("hidden");
   if (stage && stage.world.isDriving()) stage.world.toggleDrive();
   render();
@@ -1037,8 +1040,36 @@ function renderWorld() {
   renderWorldBottom();
 }
 
+/** Walk into a place: the 3D room, with its menu in a side panel. */
+function enterPlace(id) {
+  if (stage) {
+    const L = state.life;
+    stage.world.enterPlace(id, {
+      house: L.house,
+      partner: id === "home" && L.partner ? { name: L.partner.name, gender: L.partner.gender } : null,
+      cars: id === "cars" ? L.catalog.cars.map((c) => ({ id: c.id, color: c.color, name: c.name })) : null,
+      org: id === "arena" ? (state.gfc ? state.orgShort : "Iron Cage") : null,
+    });
+  }
+  openModal("place", { place: id });
+  renderWorldBottom();
+}
+
+function leavePlace() {
+  if (stage) stage.world.leavePlace();
+  if (modal && modal.kind === "place") closeModal();
+  renderWorldBottom();
+}
+
 function renderWorldBottom() {
   if (!worldOpen() || !state) return;
+  const inside = stage && stage.world.inside;
+  if (inside) {
+    $("worldBottom").innerHTML = `
+      <button class="btn gold" data-placemenu>${inside.icon} ${esc(inside.name)} menu</button>
+      <button class="btn" data-leave>🚪 Leave <span class="sub">${stage.world.near ? "E" : "walk to the door"}</span></button>`;
+    return;
+  }
   const near = stage ? stage.world.near : null;
   const L = state.life;
   const car = L.driving && L.catalog.cars.find((c) => c.id === L.driving);
@@ -1321,23 +1352,62 @@ function renderFightHead(f) {
     ${corner(f.opponent, "o")}`;
 }
 
+// hands-on fighting: every choice, grouped as the controls show them
+const MOVE_ACTIONS = [["in", "⬆️", "Step in"], ["out", "⬇️", "Back off"], ["circle", "🔄", "Circle"]];
+const ATTACK_ACTIONS = [["jab", "👊", "Jab"], ["cross", "🥊", "Cross"], ["hook", "🪝", "Hook"], ["uppercut", "⤴️", "Uppercut"],
+  ["leg", "🦵", "Leg kick"], ["body", "🦶", "Body kick"], ["head", "💥", "Head kick"], ["flashy", "🌀", "Spinning attack"], ["takedown", "🤼", "Takedown"]];
+const DODGE_ACTIONS = [["slip", "↪️", "Slip"], ["block", "🛡️", "Block"], ["check", "🦿", "Check kick"], ["sprawl", "🧱", "Sprawl"]];
+const TOP_ACTIONS = [["gnp", "👊", "Ground & pound"], ["pass", "➡️", "Pass guard"], ["sub", "🔒", "Submission"], ["standup", "🧍", "Stand up"]];
+const BOTTOM_ACTIONS = [["sweep", "🔃", "Sweep"], ["getup", "🧍", "Get up"], ["guardsub", "🔒", "Submission"], ["tieup", "🛡️", "Tie up"]];
+const ACTION_TIPS = {
+  in: "Close the distance: punches land more, kicks less", out: "Get out of range and catch your breath", circle: "Reset off the fence, recover a little",
+  jab: "Fast and safe", cross: "Solid power", hook: "Big damage, knockdown power", uppercut: "Best up close",
+  leg: "Slows them down over time", body: "Drains their stamina", head: "Huge if it lands, easy to see coming", flashy: "Highlight reel or air",
+  takedown: "Take it to the mat", slip: "Beats punches, sets up a counter", block: "Halves damage from strikes", check: "Beats leg kicks, hurts them",
+  sprawl: "Beats takedowns, tires them out", gnp: "Strikes from on top", pass: "Improve your position", sub: "Go for the finish",
+  standup: "Let them up to strike", sweep: "Reverse the position", getup: "Back to the feet", guardsub: "Choke or armbar from your back",
+  tieup: "Smother their strikes and subs",
+};
+let fightMode = "manual";
+try { fightMode = localStorage.getItem("cc3d_fightmode") || "manual"; } catch { /* default */ }
+
+function manualPanel(f) {
+  const m = f.manual;
+  const left = Math.max(0, 300 - (f.clock || 0));
+  const btn = ([id, icon, label]) => `<button class="btn act-btn" data-turn="${id}" title="${esc(ACTION_TIPS[id] || "")}">${icon} ${label}<span class="sub">${esc(ACTION_TIPS[id] || "")}</span></button>`;
+  const group = (title, list) => `<div class="act-group"><div class="label">${title}</div><div class="act-grid">${list.map(btn).join("")}</div></div>`;
+  const where = m.where === "stand" ? (m.range === "in" ? "Inside, in punching range" : "Outside, at kicking range")
+    : (m.where === "top" ? "You're on top" : "You're on your back") + " · " + ({ guard: "guard", half: "half guard", side: "side control", mount: "full mount", back: "back control", legs: "leg lock", headlock: "headlock" }[m.pos] || m.pos);
+  return `
+    <div class="prompt">Round ${f.round} · <b>${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}</b> left · ${where}</div>
+    ${m.where === "stand" ? group("Attack", ATTACK_ACTIONS) + group("Dodge", DODGE_ACTIONS) + group("Move", MOVE_ACTIONS)
+      : group(m.where === "top" ? "On top" : "On your back", m.where === "top" ? TOP_ACTIONS : BOTTOM_ACTIONS)}
+    <div class="btn-row" style="justify-content:center;margin-top:8px"><button class="btn small ghost" data-plan="BALANCED">⏩ Let the game plan finish this round</button></div>`;
+}
+
 function renderFightControls(f) {
   const el = $("fightControls");
   if (playing) {
     el.innerHTML = `<button class="btn big" data-skip>Skip ▶▶</button>`;
     return;
   }
+  if (!f.finished && f.manual) {
+    el.innerHTML = manualPanel(f);
+    return;
+  }
   if (!f.finished) {
     el.innerHTML = `
-      <div class="prompt">${f.round === 0 ? "Choose your game plan for round 1" : `Corner advice between rounds — game plan for round ${f.round + 1}?`}
+      <div class="mode-row"><button class="btn small ${fightMode === "manual" ? "gold" : "ghost"}" data-fightmode="manual">🎮 Fight it yourself</button>
+        <button class="btn small ${fightMode === "plan" ? "gold" : "ghost"}" data-fightmode="plan">📋 Game plan (auto)</button></div>
+      <div class="prompt">${f.round === 0 ? (fightMode === "manual" ? "You call every move: attack, dodge or move, one exchange at a time." : "Choose your game plan for round 1") : fightMode === "manual" ? `Corner advice between rounds. Ready for round ${f.round + 1}?` : `Corner advice between rounds — game plan for round ${f.round + 1}?`}
         ${f.scout ? `<br><span class="scout">🧠 Coach: "They're going to ${esc(PLAN_NAMES[f.scout])} this round."</span>` : ""}
         ${f.oppFiredUp && f.round === 0 ? `<br><span style="color:#ff6b6e">Your opponent is fired up after the trash talk.</span>` : ""}</div>
       ${f.round === 0 ? `<div class="touch-row"><span>Before the bell:</span>
         <button class="btn small ${touchGloves ? "gold" : ""}" data-touch="1">🤜🤛 Touch gloves</button>
         <button class="btn small ${touchGloves ? "" : "primary"}" data-touch="0">🙅 Refuse</button></div>` : ""}
-      <div class="plans">
+      ${fightMode === "manual" ? `<button class="btn primary big" data-manual>🔔 ${f.round === 0 ? "Start the fight" : "Start round " + (f.round + 1)}</button>` : `<div class="plans">
         ${PLANS.map((p) => `<button class="btn" data-plan="${p.id}">${p.name}<span class="sub">${p.desc}</span></button>`).join("")}
-      </div>`;
+      </div>`}`;
     return;
   }
   const r = state.lastResult || {};
@@ -1370,6 +1440,21 @@ document.addEventListener("click", async (ev) => {
     return;
   }
   if (d.skip !== undefined) { skipPlayback = true; return; }
+  if (d.fightmode) {
+    fightMode = d.fightmode;
+    try { localStorage.setItem("cc3d_fightmode", fightMode); } catch { /* ignore */ }
+    return renderFightControls(state.fight);
+  }
+  if (d.manual !== undefined) {
+    if (playing) return;
+    if (await api("fight/manual", { touch: touchGloves })) render();
+    return;
+  }
+  if (d.turn) {
+    if (playing) return;
+    if (await api("fight/turn", { action: d.turn })) render();
+    return;
+  }
   if (d.sound !== undefined) { audio.toggle(); syncSoundButtons(); updateMusic(); if (modal && modal.kind === "settings") renderModal(); return; }
   if (d.settings !== undefined) return openModal("settings");
   if (d.soundset !== undefined) {
@@ -1487,7 +1572,9 @@ document.addEventListener("click", async (ev) => {
     modal = null;
     return closeWorld();
   }
-  if (d.enter) return openModal("place", { place: d.enter });
+  if (d.enter) return d.enter === "exit" ? leavePlace() : enterPlace(d.enter);
+  if (d.leave !== undefined) return leavePlace();
+  if (d.placemenu !== undefined) return stage && stage.world.inside ? openModal("place", { place: stage.world.inside.id }) : null;
   if (d.phone !== undefined) return openModal("phone");
   if (d.drive !== undefined) {
     if (stage) stage.world.toggleDrive();

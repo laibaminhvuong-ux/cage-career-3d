@@ -19,6 +19,7 @@ const TOURS = {
   fight: [
     { sel: "#fightHead", title: "Fight night", text: "Health and stamina drop live as the fight plays out. Low stamina weakens everything you throw." },
     { sel: ".touch-row", title: "Touch gloves?", text: "Before round one: touch gloves out of respect, or refuse. Refusing fires up your opponent, but backing it up wins fame." },
+    { sel: ".mode-row", title: "Fight it yourself — or not", text: "🎮 Fight it yourself: call every exchange — attack, dodge or move — like a turn-based RPG. Read your opponent: a slip beats a punch, a check beats a leg kick, a sprawl beats a takedown. 📋 Game plan: pick a strategy and watch." },
     { sel: ".plans", title: "Game plan", text: "Pick a plan for each round: strike, wrestle, go for submissions, counter, or go all out. Your coach gives advice between rounds." },
     { sel: "#arenaStage", title: "Watch it happen", text: "Drag to look around the cage. The commentators call the action. Tap ⏭ Skip talk to skip the announcements, or change the speed." },
   ],

@@ -127,6 +127,18 @@ export const POSES = {
     shL: [0.05, 0, 0.14], elL: [-0.35, 0, 0], shR: [0.05, 0, -0.14], elR: [-0.35, 0, 0],
     hipL: [0, 0, 0.06], knL: [0.04, 0, 0], hipR: [0, 0, -0.06], knR: [0.04, 0, 0],
   }),
+  // sitting on a chair or sofa, hands resting on the thighs
+  sit: pose(null, {
+    hipsPos: [0, -0.5, -0.05], spine: [-0.05, 0, 0], neck: [0.05, 0, 0],
+    shL: [-0.35, 0, 0.12], elL: [-0.9, 0, 0], shR: [-0.35, 0, -0.12], elR: [-0.9, 0, 0],
+    hipL: [-1.5, 0, 0.12], knL: [1.5, 0, 0], hipR: [-1.5, 0, -0.12], knR: [1.5, 0, 0],
+  }),
+  // behind the wheel: sitting, thighs forward, hands at ten and two
+  drive: pose(null, {
+    hipsPos: [0, -0.5, -0.05], spine: [-0.12, 0, 0], neck: [0.05, 0, 0],
+    shL: [-0.95, 0, 0.22], elL: [-0.75, 0, 0], shR: [-0.95, 0, -0.22], elR: [-0.75, 0, 0],
+    hipL: [-1.4, 0, 0.1], knL: [0.5, 0, 0], hipR: [-1.4, 0, -0.1], knR: [0.5, 0, 0],
+  }),
   dejected: pose(null, {
     hipsPos: [0, -0.02, 0], spine: [0.15, 0, 0], neck: [0.55, 0, 0],
     shL: [0.1, 0, 0.08], elL: [-0.25, 0, 0], shR: [-0.6, 0, -0.1], elR: [-2.1, 0, 0],
@@ -1607,24 +1619,69 @@ export class Fighter3D {
     this.lastPos.copy(pos);
     const sp = dt > 0 ? moved / dt : 0;
     this.speed += (sp - this.speed) * Math.min(1, dt * 8);
-    if (this.speed > 0.15 && (this.base === "stance" || this.base === "relaxed" || this.base === "ref" || this.base === "dejected") && !this.queue) {
-      this.walk += moved * 9;
-      const a = Math.min(1, this.speed / 1.2) * 0.42;
-      target.hipL[0] += Math.sin(this.walk) * a;
-      target.knL[0] += Math.max(0, Math.cos(this.walk)) * a * 1.2;
-      target.hipR[0] -= Math.sin(this.walk) * a;
-      target.knR[0] += Math.max(0, -Math.cos(this.walk)) * a * 1.2;
-      target.hipsPos[1] += Math.abs(Math.cos(this.walk)) * 0.02;
-      if (this.injured) {
-        // favouring one leg
-        target.hips[2] += Math.max(0, Math.sin(this.walk)) * 0.12;
-        target.spine[0] += 0.12;
+    const gaitOk = (this.base === "stance" || this.base === "relaxed" || this.base === "ref" || this.base === "dejected") && !this.queue;
+    this.gait = (this.gait || 0) + ((gaitOk && this.speed > 0.15 ? 1 : 0) - (this.gait || 0)) * Math.min(1, dt * 6);
+    if (this.gait > 0.01 && gaitOk) {
+      if (this.base === "stance") {
+        // fight footwork: short shuffling steps, guard up
+        this.walk += moved * 14;
+        const a = Math.min(1, this.speed / 1.2) * 0.22 * this.gait;
+        target.hipL[0] += Math.sin(this.walk) * a;
+        target.knL[0] += Math.max(0, Math.cos(this.walk)) * a * 1.3;
+        target.hipR[0] -= Math.sin(this.walk) * a;
+        target.knR[0] += Math.max(0, -Math.cos(this.walk)) * a * 1.3;
+      } else {
+        this.addGait(target, moved);
+        rate = Math.max(rate, 22); // follow the stride closely instead of smoothing it away
       }
     }
 
     const k = 1 - Math.exp(-dt * rate);
     for (const key in target) for (let i = 0; i < 3; i++) this.cur[key][i] += (target[key][i] - this.cur[key][i]) * k;
     this.applyPose(this.cur);
+  }
+
+  /**
+   * Walking and running. One stride (two steps) covers more ground the faster you go, so the feet
+   * keep pace with the ground; legs swing from the hip with the knee folding on the swing forward,
+   * arms swing against the legs (bent more when running), the body leans in, the shoulders and
+   * hips twist against each other and the body bobs once per step.
+   */
+  addGait(target, moved) {
+    const v = this.speed, g = this.gait;
+    const run = Math.max(0, Math.min(1, (v - 2.4) / 2.6)); // 0 = walking, 1 = running
+    const stride = 1.35 + run * 1.2;
+    this.walk += (moved / stride) * Math.PI * 2;
+    const ph = this.walk, sn = Math.sin(ph), cs = Math.cos(ph);
+    const lerp = (a, b) => a + (b - a) * run;
+    const hipA = lerp(0.38, 0.62) * g, kneeA = lerp(0.75, 1.55) * g;
+    // hips: negative x swings the leg forward; the left leg leads when sin > 0
+    target.hipL[0] += -hipA * sn + lerp(0, -0.12) * g;
+    target.hipR[0] += hipA * sn + lerp(0, -0.12) * g;
+    // knee folds while the leg swings forward (and a little on landing)
+    const swingL = Math.max(0, cs), swingR = Math.max(0, -cs);
+    target.knL[0] += kneeA * swingL ** 1.4 + 0.12 * g * Math.max(0, -cs);
+    target.knR[0] += kneeA * swingR ** 1.4 + 0.12 * g * Math.max(0, cs);
+    // arms against the legs; elbows bend more as you run
+    const armA = lerp(0.32, 0.75) * g;
+    target.shL[0] += armA * sn;
+    target.shR[0] -= armA * sn;
+    target.elL[0] += lerp(-0.1, -1.2) * g - Math.max(0, -sn) * 0.25 * g;
+    target.elR[0] += lerp(-0.1, -1.2) * g - Math.max(0, sn) * 0.25 * g;
+    target.shL[2] += lerp(0, 0.08) * g;
+    target.shR[2] -= lerp(0, 0.08) * g;
+    // the body: lean into it, shoulders twist against the hips, a bob on every step
+    target.spine[0] += lerp(0.04, 0.2) * g;
+    target.neck[0] -= lerp(0.02, 0.12) * g;
+    target.chest[1] += lerp(0.1, 0.16) * sn * g;
+    target.hips[1] -= lerp(0.08, 0.1) * sn * g;
+    target.hipsPos[1] += (lerp(-0.012, -0.05) - Math.cos(ph * 2) * lerp(0.014, 0.03)) * g;
+    if (this.injured) {
+      // favouring one leg: a limp on the right step
+      target.hips[2] += Math.max(0, sn) * 0.12 * g;
+      target.spine[0] += 0.1 * g;
+      target.knR[0] *= 0.6;
+    }
   }
 
   idlePose() {

@@ -999,6 +999,9 @@ class ArenaView {
 
   handle(e, f, instant) {
     this.flush();
+    // hands-on fights: stepping in closes the distance, backing off opens it, circling turns the pair
+    if (e.r) this.standGap = e.r === "in" ? 1.0 : 1.65;
+    if (e.mv === "circle") this.theta += 0.9;
     const A = this.side(e.side);
     const D = A ? this.other(A) : null;
     const g = e.g !== undefined ? e.g : this.inferG(e);
@@ -1015,6 +1018,7 @@ class ArenaView {
           this.mode = "stand";
           this.top = this.down = null;
           this.refIn = false;
+          this.standGap = null;
           this.C.set(0, 0, 0);
           // touching gloves, or one fighter leaving the other hanging
           const rn = Number((e.text.match(/Round (\d+)/) || [])[1]) || f.round;
@@ -1458,7 +1462,7 @@ class ArenaView {
         }
         if (this.C.length() > R * 0.5) this.C.setLength(R * 0.5);
         const dir = new THREE.Vector3(Math.cos(this.theta), 0, Math.sin(this.theta));
-        const gap = this.mode === "intro" ? 1.05 : 1.3;
+        const gap = this.mode === "intro" ? 1.05 : this.standGap || 1.3;
         P.target.copy(this.C).addScaledVector(dir, -gap / 2);
         O.target.copy(this.C).addScaledVector(dir, gap / 2);
         ref.target.copy(this.C).addScaledVector(this.farSide(), this.refIn ? 0.6 : this.mode === "intro" ? 0.9 : 2.0);
