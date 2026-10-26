@@ -1168,7 +1168,19 @@ const FAN_COMMENTS = {
   flex: ["Sheeeesh 🤑", "Money fights!", "Teach me your ways", "That's a dream ride", "W lifestyle"],
   family: ["So wholesome ❤️", "Family first 🙏", "Goals!!", "Beautiful family", "The real champion"],
   callout: ["OH IT'S ON 🍿", "Bad blood!", "Sign it!! 🔥", "He's scared lol", "Make it happen GFC!"],
+  selfie: ["Looking sharp 😎", "Fight face ready", "The drip 🔥", "Main character energy", "Handsome AND dangerous"],
+  qa: ["Best answer ever 😂", "Respect for replying to fans 🙏", "Do another Q&A!", "Humble king", "Real one"],
+  sponsor: ["Ordering now 🛒", "Sellout 😂 jk love it", "Partner of champions", "Code pls!", "Brand looks clean"],
 };
+const SELFIES = ["Fight face 😤", "Post-workout glow ✨", "Fresh cut, fresh mindset 💈", "Weigh-in ready 💪", "Sunday vibes ☀️"];
+const QA = ["Fan Q&A — asked my toughest opponent, my walkout song and my cheat meal 🍕 Answers in the comments!",
+  "You asked, I answered: how I cut weight, my favorite combo and who I want next 👀", "Live Q&A done! Thanks for 1,000 questions 🙏"];
+// texting and calling: what people say back
+const PARTNER_LINES = ["Miss you ❤️ come home safe", "Proud of you always 🥰", "Dinner tonight? I'm cooking 🍝", "Don't forget to stretch lol",
+  "Saw your clip, you looked amazing 😍", "Love you. Go get 'em 💪"];
+const MOM_LINES = ["Are you eating enough? 🍲", "I watched your last fight with my eyes closed 😅", "Call your grandma, she misses you!",
+  "Proud of you, my champion ❤️", "Wear a jacket, it's cold out", "Don't get hit in the face, okay?"];
+const ME_TO_PARTNER = ["Thinking about you ❤️", "Camp is brutal but I'm good 💪", "Can't wait to see you tonight", "You're my lucky charm 🍀"];
 const fmtMoney = (n) => "$" + Math.round(n).toLocaleString("en-US");
 function randomLookString() {
   return [nextInt(6), nextInt(9), nextInt(6), 0, nextInt(8)].join(",");
@@ -1343,6 +1355,14 @@ export class Career {
     this.lifeJoy(-20);
   }
 
+  /** Adds a line to a phone conversation ("me", "them" or "call"). */
+  thread(id, from, text) {
+    const M = (this.lifeState.msgs ||= {});
+    const T = (M[id] ||= []);
+    T.push({ from, text, date: this.dateLabel() });
+    while (T.length > 30) T.shift();
+  }
+
   /** Adds a post to the feed; reach depends on fame, followers and what the post shows. */
   post(kind, text, boost = 1) {
     const L = this.lifeState;
@@ -1385,6 +1405,25 @@ export class Career {
           this.fame = clamp(this.fame + 2, 0, 100);
           if (target === this.rival) this.rivalHeat = Math.min(100, this.rivalHeat + 8);
           if (this.scheduled && target === this.scheduled.opp) this.scheduled.oppBonus = Math.min(6, (this.scheduled.oppBonus || 0) + 1);
+        } else if (kind === "selfie") {
+          text = pickOf(SELFIES);
+          boost = 0.8;
+          this.lifeJoy(1);
+        } else if (kind === "qa") {
+          text = pickOf(QA);
+          boost = 1.2;
+          this.fame = clamp(this.fame + 1, 0, 100);
+        } else if (kind === "sponsor") {
+          const d = pickOf(L.sponsors || []);
+          if (!d) throw new GameError("No sponsor to shout out yet.");
+          text = "Proud to rep " + d.name + " 🙌 #ad";
+          boost = 0.9;
+          const bonus = Math.round(d.weekly * 1.5);
+          this.money += bonus;
+          this.earnings += bonus;
+          L.done.post = this.week;
+          const g = this.post("sponsor", text, boost);
+          return "Posted! +" + g.toLocaleString("en-US") + " followers, and " + d.name + " pays a " + fmtMoney(bonus) + " bonus.";
         } else throw new GameError("Unknown post.");
         L.done.post = this.week;
         const gained = this.post(kind, text, boost);
@@ -1573,6 +1612,54 @@ export class Career {
         L.tryingForKids = !L.tryingForKids;
         return L.tryingForKids ? "You and " + P.name + " are trying for a baby. 👶" : "Not right now.";
       }
+      case "text": {
+        // a text to your partner: once a week
+        this.lifeReady("text");
+        if (!L.partner) throw new GameError("There's nobody to text yet.");
+        L.done.text = this.week;
+        L.partner.affection = clamp(L.partner.affection + 4, 0, 100);
+        this.lifeJoy(1);
+        this.thread("partner", "me", String(p.msg || pickOf(ME_TO_PARTNER)).slice(0, 120));
+        this.thread("partner", "them", pickOf(PARTNER_LINES));
+        return null;
+      }
+      case "call": {
+        const who = String(p.who || "");
+        if (who === "mom") {
+          this.lifeReady("callmom");
+          L.done.callmom = this.week;
+          this.lifeJoy(3);
+          this.thread("mom", "call", "📞 Call · " + (3 + nextInt(25)) + " min");
+          this.thread("mom", "them", pickOf(MOM_LINES));
+          return "You call your mom. You feel better already. (+3 happiness)";
+        }
+        if (who === "partner") {
+          this.lifeReady("callpartner");
+          if (!L.partner) throw new GameError("There's nobody to call.");
+          L.done.callpartner = this.week;
+          L.partner.affection = clamp(L.partner.affection + 6, 0, 100);
+          this.lifeJoy(2);
+          this.thread("partner", "call", "📞 Call · " + (5 + nextInt(40)) + " min");
+          return "A long call with " + L.partner.name + ". (+6 affection)";
+        }
+        if (who === "coach") {
+          // the coach's read on your next opponent
+          const o = this.scheduled && this.scheduled.opp;
+          let tip;
+          if (!o) tip = "No fight booked. Stay sharp, keep training and I'll find you one.";
+          else {
+            const weak = [...STATS].sort((a, b) => o.get(a) - o.get(b))[0];
+            const strong = [...STATS].sort((a, b) => o.get(b) - o.get(a))[0];
+            const plan = { striking: "make it a fistfight", power: "make them carry your weight", speed: "pressure them, cut off the cage",
+              wrestling: "take them down", grappling: "drag it to the mat", cardio: "push the pace and drown them late", chin: "hunt the head" }[weak];
+            tip = o.lastName() + " is " + ({ Striker: "a striker", Wrestler: "a wrestler", "Jiu-Jitsu": "a jiu-jitsu ace" }[o.style] || "an all-rounder") + ". Their " + strong + " is dangerous, but their " + weak + " is the weak spot — " + plan + ".";
+          }
+          this.thread("coach", "call", "📞 Call · " + (2 + nextInt(10)) + " min");
+          this.thread("coach", "them", tip);
+          return null;
+        }
+        throw new GameError("Who are you calling?");
+      }
       case "family": {
         this.lifeReady("family");
         if (!L.partner && !L.kids.length && !L.pets.length) throw new GameError("There's nobody at home yet.");
@@ -1695,6 +1782,7 @@ export class Career {
       kids: L.kids.map((k) => ({ ...k, age: Math.floor((this.week - k.born) / 52) })), tryingForKids: L.tryingForKids,
       lifestyle: L.lifestyle, feed: L.feed.slice(0, 15), done: Object.fromEntries(Object.entries(L.done).map(([k, w]) => [k, w === this.week])),
       lastBills: L.lastBills || 0, lastSponsor: L.lastSponsor || 0, sponsorRate: Math.round(L.followers / 1000) * 20,
+      msgs: JSON.parse(JSON.stringify(L.msgs || {})), postCount: L.feed.length,
       sponsors: L.sponsors.map((d) => ({ ...d, clauseText: CLAUSES[d.clause] })),
       sponsorOffers: L.sponsorOffers.map((d) => ({ ...d, clauseText: CLAUSES[d.clause] })),
       sponsorRefresh: Math.max(0, 8 - L.sponsorAge), marketability: Math.round(this.marketability()),

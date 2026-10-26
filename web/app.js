@@ -761,6 +761,7 @@ function renderModal() {
   el.classList.remove("hidden");
   // inside a place its menu is a side panel, so the room stays in view
   el.classList.toggle("side", modal.kind === "place" && !!(stage && stage.world.inside));
+  el.classList.toggle("phone-mode", modal.kind === "phone");
   const body = $("modalBody");
   const s = state;
   if (modal.kind === "saves") {
@@ -1172,27 +1173,207 @@ function renderPlace(body) {
   }
 }
 
+// ------------------------------------------------------------------ the phone
+// A phone in your pocket: a home screen of apps, each one a real screen. The battery is your
+// energy, the clock is your own, and the apps run on the career's data.
+
+const PHONE_APPS = [
+  { id: "gram", name: "Fightgram", icon: "📸", bg: "linear-gradient(135deg,#f58529,#dd2a7b 50%,#8134af)" },
+  { id: "messages", name: "Messages", icon: "💬", bg: "linear-gradient(#5ff777,#13c33b)" },
+  { id: "calls", name: "Phone", icon: "📞", bg: "linear-gradient(#5ff777,#13c33b)" },
+  { id: "bank", name: "Bank", icon: "🏦", bg: "linear-gradient(#1e3a8a,#0b1b4d)" },
+  { id: "calendar", name: "Calendar", icon: "📅", bg: "#fff" },
+  { id: "news", name: "Fight News", icon: "📰", bg: "linear-gradient(#ef4444,#991b1b)" },
+  { id: "maps", name: "Maps", icon: "🗺️", bg: "linear-gradient(#a7f3d0,#60a5fa)" },
+  { id: "music", name: "Music", icon: "🎵", bg: "linear-gradient(#fb7185,#e11d48)" },
+  { id: "stats", name: "Fight Stats", icon: "📊", bg: "linear-gradient(#111827,#374151)" },
+  { id: "rankings", name: "Rankings", icon: "🏆", bg: "linear-gradient(#f4b942,#b45309)" },
+  { id: "weather", name: "Weather", icon: "⛅", bg: "linear-gradient(#38bdf8,#1d4ed8)" },
+  { id: "settings", name: "Settings", icon: "⚙️", bg: "linear-gradient(#9ca3af,#4b5563)" },
+];
+const DOCK = ["calls", "messages", "gram", "music"];
+
+function phoneHandle() {
+  return state.fighter.name.toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
 function renderPhone(body) {
-  const L = state.life;
-  body.innerHTML = `
-    <div class="phone">
-      <div class="phone-head"><b>@${esc(state.fighter.name.toLowerCase().replace(/[^a-z0-9]+/g, ""))}</b>
-        <span>${compact(L.followers)} followers · sponsors ${money(L.sponsorRate)}/wk</span></div>
-      <div class="label">Post <span class="muted">(once a week)</span></div>
-      <div class="btn-row">
+  const s = state, L = s && s.life;
+  if (!L) return closeModal();
+  const now = new Date();
+  const clock = now.getHours() + ":" + String(now.getMinutes()).padStart(2, "0");
+  const bars = Math.min(4, 1 + Math.floor(s.fame / 25));
+  const app = modal.app || null;
+  const status = `<div class="ph-status"><b>${clock}</b><span class="ph-island"></span>
+    <span class="ph-sig">${"▂▄▆█".split("").map((c, i) => `<i class="${i < bars ? "on" : ""}">${c}</i>`).join("")}</span>
+    <span class="ph-batt" title="Energy ${s.energy}%"><i style="width:${s.energy}%;background:${s.energy < 25 ? "#ef4444" : "#34c759"}"></i></span></div>`;
+  let screen;
+  if (!app) {
+    const badge = { messages: Object.values(L.msgs || {}).length ? "" : "", news: s.news.length ? Math.min(9, s.news.length) : "", gram: L.done.post ? "" : "!" };
+    const icon = (a, dock) => `<button class="ph-app" data-phoneapp="${a.id}">
+        <span class="ph-ico" style="background:${a.bg}">${a.icon}${badge[a.id] ? `<em>${badge[a.id]}</em>` : ""}</span>${dock ? "" : `<span class="ph-name">${a.name}</span>`}</button>`;
+    screen = `<div class="ph-home">
+      <div class="ph-widget"><div class="ph-wd">${now.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}</div>
+        <div class="ph-wt">${s.scheduled ? `🥊 Fight in <b>${s.scheduled.weeks}</b> week${s.scheduled.weeks === 1 ? "" : "s"} vs ${nm(s.scheduled.opponent.displayName)}` : "No fight booked"}</div>
+        <div class="ph-wt">❤️ Happiness ${L.happiness} · ⚡ Energy ${s.energy}</div></div>
+      <div class="ph-grid">${PHONE_APPS.filter((a) => !DOCK.includes(a.id)).map((a) => icon(a)).join("")}</div>
+      <div class="ph-dock">${DOCK.map((id) => icon(PHONE_APPS.find((a) => a.id === id), true)).join("")}</div>
+    </div>`;
+  } else {
+    const A = PHONE_APPS.find((a) => a.id === app.split(":")[0]);
+    screen = `<div class="ph-appview ph-${A.id}">
+      <div class="ph-bar"><button class="ph-back" data-phoneapp="${app.includes(":") ? A.id : ""}">‹ ${app.includes(":") ? A.name : "Home"}</button><b>${A.name}</b><span></span></div>
+      <div class="ph-scroll">${phoneApp(app, s, L)}</div></div>`;
+  }
+  body.innerHTML = `<div class="phone-device"><div class="phone-screen">${status}${screen}
+    <button class="ph-homebar" data-phoneapp="" aria-label="Home"></button></div></div>`;
+}
+
+function phoneApp(app, s, L) {
+  const [id, sub] = app.split(":");
+  const C = L.catalog;
+  if (id === "gram") {
+    const posts = L.feed;
+    return `<div class="gram-head"><span class="gram-av">${esc(s.fighter.name[0])}</span>
+        <div class="gram-nums"><div><b>${L.postCount}</b>posts</div><div><b>${compact(L.followers)}</b>followers</div><div><b>${Math.min(999, 40 + s.fame * 3)}</b>following</div></div></div>
+      <div class="gram-bio"><b>${nm(s.fighter.displayName)}</b><br>${esc(s.weightClass)} · ${esc(s.orgShort)} · ${s.fighter.record}<br><span class="muted">💼 sponsors ${money(L.sponsorRate)}/wk</span></div>
+      <div class="label" style="margin:10px 0 6px">New post ${L.done.post ? `<span class="muted">· posted this week</span>` : ""}</div>
+      <div class="gram-post-btns">
         ${lifeBtn("post", "💪 Training clip", 'data-kind="training"', "small")}
+        ${lifeBtn("post", "🤳 Selfie", 'data-kind="selfie"', "small")}
         ${lifeBtn("post", "🏎️ Flex", 'data-kind="flex"', "small")}
         ${lifeBtn("post", "❤️ Family pic", 'data-kind="family"', "small")}
+        ${lifeBtn("post", "❓ Fan Q&A", 'data-kind="qa"', "small")}
+        ${lifeBtn("post", "🤝 Sponsor shout-out", 'data-kind="sponsor"', "small")}
         ${lifeBtn("post", "🎤 Call someone out", 'data-kind="callout"', "small")}
       </div>
-      <div class="feed">${L.feed.length ? L.feed.map((p) => `
-        <div class="post">
-          <div class="muted" style="font-size:12px">${esc(p.date)}</div>
-          <div>${esc(p.text)}</div>
-          <div class="muted" style="font-size:12px">❤️ ${compact(p.likes)} · +${compact(p.gained)} followers</div>
-          ${p.comments.map((c) => `<div class="comment"><b>@${esc(c.user)}</b> ${esc(c.text)}</div>`).join("")}
-        </div>`).join("") : `<p class="muted">No posts yet. Your fans are waiting.</p>`}</div>
-    </div>`;
+      ${posts.length ? posts.map((p) => `
+        <div class="gram-card">
+          <div class="gram-user"><span class="gram-av sm">${esc(s.fighter.name[0])}</span><b>${esc(phoneHandle())}</b><span class="muted">· ${esc(p.date)}</span></div>
+          <div class="gram-img k-${esc(p.kind)}">${{ training: "🥊", flex: "🏎️", family: "👨‍👩‍👧", callout: "🎤", selfie: "🤳", qa: "❓", sponsor: "🤝" }[p.kind] || "📸"}</div>
+          <div class="gram-acts">❤️ ${compact(p.likes)} &nbsp; 💬 ${p.comments.length} &nbsp; ↗︎ <span class="muted">+${compact(p.gained)} followers</span></div>
+          <div class="gram-cap"><b>${esc(phoneHandle())}</b> ${esc(p.text)}</div>
+          ${p.comments.map((c) => `<div class="gram-cm"><b>${esc(c.user)}</b> ${esc(c.text)}</div>`).join("")}
+        </div>`).join("") : `<p class="muted" style="text-align:center;margin:24px 0">No posts yet. Your fans are waiting.</p>`}`;
+  }
+  if (id === "messages") {
+    const P = L.partner, M = L.msgs || {};
+    const coach = s.team.head && s.team.head.name ? s.team.head.name : "Coach";
+    const chats = [
+      P && { id: "partner", name: P.name, av: "❤️" },
+      { id: "mom", name: "Mom", av: "👩" },
+      { id: "coach", name: coach, av: "🧢" },
+      s.rival && { id: "rival", name: s.rival.displayName, av: "⚔️" },
+    ].filter(Boolean);
+    if (!sub) {
+      return `<div class="msg-list">${chats.map((c) => {
+        const T = c.id === "rival" ? [] : M[c.id] || [];
+        const last = T[T.length - 1];
+        return `<button class="msg-row" data-phoneapp="messages:${c.id}"><span class="msg-av">${c.av}</span>
+          <span class="msg-mid"><b>${nm(c.name)}</b><span class="muted">${last ? esc(last.text) : c.id === "rival" ? "Talk your trash…" : "No messages yet"}</span></span>
+          <span class="muted" style="font-size:11px">${last ? esc(last.date) : ""}</span></button>`;
+      }).join("")}</div>`;
+    }
+    const c = chats.find((x) => x.id === sub);
+    if (!c) return `<p class="muted">This conversation is gone.</p>`;
+    const T = sub === "rival" ? [] : M[sub] || [];
+    let thread = T.map((m) => m.from === "call" ? `<div class="msg-call">${esc(m.text)} · ${esc(m.date)}</div>` : `<div class="bubble ${m.from === "me" ? "me" : "them"}">${esc(m.text)}</div>`).join("");
+    if (sub === "rival" && s.lastMeet && s.rival && s.lastMeet.id === s.rival.id) {
+      thread = `<div class="bubble me">${esc(s.lastMeet.you)}</div><div class="bubble them">${esc(s.lastMeet.them)}</div>`;
+    }
+    const actions = {
+      partner: `${lifeBtn("text", "Send a sweet text ❤️", "", "primary small")} ${lifeBtn("call", "📞 Call", 'data-who="partner"', "small")}`,
+      mom: lifeBtn("call", "📞 Call Mom", 'data-who="mom"', "primary small"),
+      coach: `<button class="btn primary small" data-life="call" data-who="coach">📞 Ask about my next opponent</button>`,
+      rival: s.rival ? `<button class="btn primary small" data-meet-phone="trash">🔥 Send trash talk</button> <button class="btn small" data-meet-phone="respect">🤝 Show respect</button>` : "",
+    }[sub];
+    return `<div class="msg-head"><span class="msg-av">${c.av}</span><b>${nm(c.name)}</b></div>
+      <div class="msg-thread">${thread || `<p class="muted" style="text-align:center">Say something.</p>`}</div>
+      <div class="msg-actions">${actions}</div>`;
+  }
+  if (id === "calls") {
+    const P = L.partner;
+    const row = (av, name, sub2, btn) => `<div class="msg-row"><span class="msg-av">${av}</span><span class="msg-mid"><b>${name}</b><span class="muted">${sub2}</span></span>${btn}</div>`;
+    return `<div class="label">Favorites</div><div class="msg-list">
+      ${P ? row("❤️", nm(P.name), esc(P.stage), lifeBtn("call", "📞", 'data-who="partner"', "small")) : ""}
+      ${row("👩", "Mom", "mobile", lifeBtn("call", "📞", 'data-who="mom"', "small"))}
+      ${row("🧢", esc(s.team.head && s.team.head.name ? s.team.head.name : "Coach"), "head coach", `<button class="btn small" data-life="call" data-who="coach">📞</button>`)}
+      ${s.team.manager && s.team.manager.name ? row("💼", esc(s.team.manager.name), "manager", `<button class="btn small" data-phoneapp="calendar">📅</button>`) : ""}
+      </div>
+      <p class="muted" style="font-size:12px">Calling family lifts your mood. Your coach scouts your next opponent.</p>`;
+  }
+  if (id === "bank") {
+    const house = C.houses[L.house], style = C.lifestyles[L.lifestyle];
+    const sponsorPay = L.sponsors.reduce((a, d) => a + d.weekly, 0);
+    const out = s.gym.fee + s.teamSalary + house.upkeep + style.cost;
+    const net = sponsorPay - out;
+    const line = (k, v, neg) => `<div class="bank-line"><span>${k}</span><b style="color:${neg ? "#ef4444" : "#16a34a"}">${neg ? "−" : "+"}${money(Math.abs(v))}</b></div>`;
+    return `<div class="bank-card"><div class="muted" style="color:#c7d2fe">Checking ···· ${String(Math.abs(L.followers * 7) % 10000).padStart(4, "0")}</div>
+        <div class="bank-bal">${money(s.money)}</div><div style="color:#c7d2fe;font-size:12px">Career earnings ${money(s.earnings)}</div></div>
+      <div class="label">Every week</div>
+      ${line("Sponsors", sponsorPay, false)}
+      ${line("Gym fee", s.gym.fee, true)}
+      ${line("Team salaries", s.teamSalary, true)}
+      ${line(esc(house.name) + " upkeep", house.upkeep, true)}
+      ${line(esc(style.name) + " lifestyle", style.cost, true)}
+      <div class="bank-line total"><span>Net per week</span><b style="color:${net >= 0 ? "#16a34a" : "#ef4444"}">${net >= 0 ? "+" : "−"}${money(Math.abs(net))}</b></div>
+      <p class="muted" style="font-size:12px">Fight purses and bonuses come on top. Last week: bills ${money(L.lastBills)}, sponsors ${money(L.lastSponsor)}.</p>`;
+  }
+  if (id === "calendar") {
+    const ev = [];
+    if (s.scheduled) ev.push(["🥊", `Fight vs ${nm(s.scheduled.opponent.displayName)}`, `in ${s.scheduled.weeks} week${s.scheduled.weeks === 1 ? "" : "s"}`]);
+    if (s.belt && s.belt.idle !== null && s.rank === 0) ev.push(["🏆", "Title defense deadline", `${Math.max(0, s.belt.stripWeeks - s.belt.idle)} weeks left`]);
+    if (s.gfc) ev.push(["📝", `${esc(s.orgShort)} contract`, `${s.contractFights} fight${s.contractFights === 1 ? "" : "s"} left`]);
+    for (const o of s.promoOffers) ev.push(["📨", `${esc(o.short)} contract offer`, "waiting in Promotions"]);
+    for (const d of L.sponsors) ev.push(["🤝", esc(d.name) + " deal", `${d.weeksLeft} weeks left`]);
+    if (s.divisionCooldown) ev.push(["⚖️", "Can change division", `in ${s.divisionCooldown} weeks`]);
+    ev.push(["🎂", "Birthday", `turning ${s.fighter.age + 1} in ${53 - s.week} weeks`]);
+    return `<div class="cal-top"><div class="cal-y">Year ${s.year}</div><div class="cal-w">Week <b>${s.week}</b> of 52</div></div>
+      <div class="cal-strip">${Array.from({ length: 7 }, (_, i) => { const w = s.week + i; const fight = s.scheduled && i === s.scheduled.weeks; return `<div class="${i === 0 ? "now" : ""} ${fight ? "fight" : ""}"><span>W${((w - 1) % 52) + 1}</span><b>${fight ? "🥊" : i === 0 ? "•" : ""}</b></div>`; }).join("")}</div>
+      <div class="label">Upcoming</div>
+      ${ev.map(([i, t, w]) => `<div class="cal-ev"><span>${i}</span><div><b>${t}</b><div class="muted">${w}</div></div></div>`).join("")}`;
+  }
+  if (id === "news") {
+    return `<div class="news-app">${s.news.slice(0, 25).map((n, i) => {
+      const m = n.match(/^(Y\d+ W\d+) — (.*)$/);
+      const head = m ? m[2] : n;
+      return `<div class="news-item ${i === 0 ? "top" : ""}"><div class="muted" style="font-size:11px">${m ? esc(m[1]) : ""} · ${esc(s.orgShort)} NEWS</div><b>${esc(head)}</b></div>`;
+    }).join("")}</div>`;
+  }
+  if (id === "maps") {
+    const places = [["home", "🏠", "Home"], ["gym", "🥊", "Gym"], ["club", "🪩", "Nightclub"], ["cafe", "☕", "Café"], ["ink", "🖋️", "Ink Studio"],
+      ["cars", "🚗", "Car Dealer"], ["realty", "🏡", "Realtor"], ["pets", "🐾", "Pet Shop"], ["arena", "🏆", "The Arena"]];
+    return `<div class="map-art">📍</div><p class="muted" style="font-size:12px;margin:6px 0 10px">Tap a place to go straight there.</p>
+      ${places.map(([pid, ic, n]) => `<button class="msg-row" data-goplace="${pid}"><span class="msg-av">${ic}</span><span class="msg-mid"><b>${n}</b><span class="muted">${Math.round(1 + (pid.length * 37) % 9)} min walk</span></span><span>›</span></button>`).join("")}`;
+  }
+  if (id === "music") {
+    const v = audio.volumes();
+    const on = audio.isOn() && v.music > 0;
+    const track = state.fight ? ["Walkout Anthem", "Cage Career OST"] : worldOpen() ? ["City Strolls", "Cage Career OST"] : ["Gym Beats Vol. 2", "Cage Career OST"];
+    return `<div class="music-art">${on ? "🎧" : "🎵"}</div>
+      <div class="music-t"><b>${track[0]}</b><div class="muted">${track[1]}</div></div>
+      <div class="music-ctl"><button class="btn" data-music="toggle">${on ? "⏸ Pause" : "▶️ Play"}</button></div>
+      <label class="set-row" style="grid-template-columns:auto 1fr 40px"><span>🔈</span><input type="range" min="0" max="100" step="5" value="${Math.round(v.music * 100)}" data-vol="music"><b data-volval="music">${Math.round(v.music * 100)}%</b></label>`;
+  }
+  if (id === "stats") {
+    const f = s.fighter, fin = f.koWins + f.subWins + f.decWins;
+    const pct = (n) => (fin ? Math.round((n / fin) * 100) : 0) + "%";
+    return `<div class="stat-big">${f.record}<div class="muted">W-L-D</div></div>
+      <div class="stat-tiles"><div><b>${f.koWins}</b>KO/TKO<span>${pct(f.koWins)}</span></div><div><b>${f.subWins}</b>Submissions<span>${pct(f.subWins)}</span></div><div><b>${f.decWins}</b>Decisions<span>${pct(f.decWins)}</span></div></div>
+      <div class="bank-line"><span>Overall</span><b>${f.overall} (peak ${s.peakOverall})</b></div>
+      <div class="bank-line"><span>Titles won · defenses</span><b>${s.titlesWon} · ${s.titleDefenses}</b></div>
+      <div class="bank-line"><span>Streak</span><b>${f.streak > 0 ? f.streak + " wins" : f.streak < 0 ? -f.streak + " losses" : "—"}</b></div>
+      <div class="label">Last fights</div>
+      ${s.history.slice(0, 8).map((h) => `<div class="bank-line"><span><span class="res ${h.result}">${h.result}</span> ${nm(h.opponent)}</span><b>${esc(h.method)}</b></div>`).join("") || `<p class="muted">No pro fights yet.</p>`}`;
+  }
+  if (id === "weather") {
+    const wk = s.week, temps = [6, 9, 14, 19, 24, 28, 30, 27, 22, 15, 9, 6];
+    const t = temps[Math.floor(((wk - 1) % 52) / 4.34)];
+    const sky = ["☀️", "⛅", "🌤️", "🌦️"][(wk * 7) % 4];
+    return `<div class="wx"><div class="wx-city">Fight City</div><div class="wx-t">${t}°</div><div class="wx-s">${sky} ${t > 22 ? "Hot — hydrate between rounds" : t < 10 ? "Cold — warm up longer" : "Perfect training weather"}</div></div>
+      <div class="wx-days">${["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d, i) => `<div><span>${d}</span><b>${["☀️", "⛅", "🌤️", "🌦️", "☀️", "⛅", "🌤️"][(wk + i) % 7]}</b><span>${t + (((wk + i) * 3) % 5) - 2}°</span></div>`).join("")}</div>`;
+  }
+  return "";
 }
 
 // ------------------------------------------------------------------ fight screen
@@ -1575,14 +1756,41 @@ document.addEventListener("click", async (ev) => {
   if (d.enter) return d.enter === "exit" ? leavePlace() : enterPlace(d.enter);
   if (d.leave !== undefined) return leavePlace();
   if (d.placemenu !== undefined) return stage && stage.world.inside ? openModal("place", { place: stage.world.inside.id }) : null;
-  if (d.phone !== undefined) return openModal("phone");
+  if (d.phone !== undefined) return openModal("phone", { app: null });
+  if (d.phoneapp !== undefined) {
+    const a = d.phoneapp;
+    if (a === "settings") return openModal("settings");
+    if (a === "rankings") {
+      await api("promo/view", { id: state.orgKey });
+      return openModal("divisions", { dtab: state.weightClass });
+    }
+    modal.app = a || null;
+    return renderModal();
+  }
+  if (d.goplace) {
+    if (!worldOpen()) openWorld();
+    return enterPlace(d.goplace);
+  }
+  if (d.music !== undefined) {
+    const v = audio.volumes();
+    if (!audio.isOn()) audio.setOn(true);
+    audio.setVolume("music", v.music > 0 ? 0 : 0.8);
+    syncSoundButtons();
+    updateMusic();
+    return renderModal();
+  }
+  if (d.meetPhone) {
+    if (!state.rival) return;
+    if (await api("fighter/meet", { id: state.rival.id, type: d.meetPhone })) render();
+    return;
+  }
   if (d.drive !== undefined) {
     if (stage) stage.world.toggleDrive();
     return renderWorldBottom();
   }
   if (d.life) {
     const params = { type: d.life };
-    for (const k of ["kind", "id", "level", "region", "design"]) if (d[k] !== undefined) params[k] = d[k];
+    for (const k of ["kind", "id", "level", "region", "design", "who"]) if (d[k] !== undefined) params[k] = d[k];
     if (await api("life", params)) render();
     return;
   }
