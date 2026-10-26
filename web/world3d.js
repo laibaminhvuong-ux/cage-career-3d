@@ -570,10 +570,83 @@ export const PLACES = [
 // Every door in town opens into a furnished room you walk around in: built the first time you go
 // in, far away from the town (so it never shows through a window), with its own lights and people.
 
+/** Floorboards (light = true) or tiles, as a texture tiled every 4 m. */
+function floorTexture(color, kind = "planks") {
+  const key = "floor" + color + kind;
+  if (texCache[key]) return texCache[key];
+  const c = document.createElement("canvas");
+  c.width = c.height = 256;
+  const g = c.getContext("2d");
+  const base = new THREE.Color(color);
+  const shade = (k) => base.clone().multiplyScalar(k).getStyle();
+  if (kind === "planks") {
+    for (let row = 0; row < 8; row++) {
+      for (let x = -(row % 2) * 64; x < 256; x += 128) {
+        g.fillStyle = shade(0.86 + Math.random() * 0.24);
+        g.fillRect(x, row * 32, 128, 32);
+        // grain
+        g.strokeStyle = shade(0.75);
+        g.globalAlpha = 0.25;
+        for (let k = 0; k < 4; k++) {
+          g.beginPath();
+          g.moveTo(x, row * 32 + 4 + k * 7 + Math.random() * 3);
+          g.bezierCurveTo(x + 40, row * 32 + Math.random() * 30, x + 90, row * 32 + Math.random() * 30, x + 128, row * 32 + 4 + k * 7);
+          g.stroke();
+        }
+        g.globalAlpha = 1;
+        g.fillStyle = shade(0.55);
+        g.fillRect(x, row * 32, 2, 32);
+      }
+      g.fillStyle = shade(0.5);
+      g.fillRect(0, row * 32, 256, 1.5);
+    }
+  } else {
+    for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) {
+      g.fillStyle = shade(0.92 + Math.random() * 0.12);
+      g.fillRect(i * 64, j * 64, 64, 64);
+    }
+    g.strokeStyle = shade(0.6);
+    g.lineWidth = 2;
+    for (let i = 0; i <= 4; i++) {
+      g.beginPath(); g.moveTo(i * 64, 0); g.lineTo(i * 64, 256); g.stroke();
+      g.beginPath(); g.moveTo(0, i * 64); g.lineTo(256, i * 64); g.stroke();
+    }
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.anisotropy = 8;
+  return (texCache[key] = t);
+}
+
+/** Painted plaster: a faint mottle so walls don't look like flat plastic. */
+function plasterTexture(color) {
+  const key = "plaster" + color;
+  if (texCache[key]) return texCache[key];
+  const c = document.createElement("canvas");
+  c.width = c.height = 128;
+  const g = c.getContext("2d");
+  g.fillStyle = color;
+  g.fillRect(0, 0, 128, 128);
+  for (let i = 0; i < 900; i++) {
+    g.fillStyle = Math.random() < 0.5 ? "rgba(0,0,0,0.018)" : "rgba(255,255,255,0.025)";
+    g.fillRect(Math.random() * 128, Math.random() * 128, 2 + Math.random() * 4, 2 + Math.random() * 4);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  return (texCache[key] = t);
+}
+
 /** An empty room facing -z from its door at +z: floor, walls, ceiling, skirting, ceiling lights. */
-function room(w, d, h, { floor = "#9a7b58", floorTex = null, wall = "#e9e2d4", ceiling = "#f4f1ea", light = "#fff1dc", lights = 2, power = 14 } = {}) {
+function room(w, d, h, { floor = "#9a7b58", floorTex = null, wall = "#e9e2d4", ceiling = "#f4f1ea", light = "#fff1dc", lights = 2, power = 14, windows = "both" } = {}) {
   const g = new THREE.Group();
-  const fl = new THREE.Mesh(new THREE.PlaneGeometry(w, d), floorTex ? new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.55 }) : mat(floor, { roughness: 0.5 }));
+  // floors get boards (warm colors) or large tiles; walls get painted plaster
+  const warm = new THREE.Color(floor).getHSL({}).h < 0.15 && new THREE.Color(floor).getHSL({}).l > 0.25;
+  const ft = (floorTex || floorTexture(floor, warm ? "planks" : "tiles")).clone();
+  ft.needsUpdate = true;
+  ft.repeat.set(w / 4, d / 4);
+  const fl = new THREE.Mesh(new THREE.PlaneGeometry(w, d), new THREE.MeshStandardMaterial({ map: ft, roughness: warm ? 0.45 : 0.35 }));
   fl.rotation.x = -Math.PI / 2;
   fl.receiveShadow = true;
   g.add(fl);
@@ -581,7 +654,10 @@ function room(w, d, h, { floor = "#9a7b58", floorTex = null, wall = "#e9e2d4", c
   ce.rotation.x = Math.PI / 2;
   ce.position.y = h;
   g.add(ce);
-  const wallM = mat(wall, { roughness: 0.9 });
+  const wt = plasterTexture(wall).clone();
+  wt.needsUpdate = true;
+  wt.repeat.set(3, 1.5);
+  const wallM = new THREE.MeshStandardMaterial({ map: wt, roughness: 0.92 });
   const wallAt = (ww, x, z, ry) => {
     const m = new THREE.Mesh(new THREE.PlaneGeometry(ww, h), wallM);
     m.position.set(x, h / 2, z);
@@ -592,7 +668,26 @@ function room(w, d, h, { floor = "#9a7b58", floorTex = null, wall = "#e9e2d4", c
     sk.position.set(x, 0.06, z);
     sk.rotation.y = ry;
     g.add(sk);
+    // crown molding where the wall meets the ceiling
+    const cm = box(ww, 0.08, 0.08, new THREE.Color(ceiling).multiplyScalar(0.92).getStyle());
+    cm.position.set(x, h - 0.04, z);
+    cm.rotation.y = ry;
+    g.add(cm);
   };
+  // windows in the side walls: bright daylight with frames and a mullion
+  const daylight = new THREE.MeshBasicMaterial({ color: "#dbeeff", toneMapped: false });
+  const sides = { both: [-1, 1], left: [-1], right: [1], none: [] }[windows] || [];
+  for (const sx of sides) for (const wz of d > 9 ? [-d / 4, d / 5] : [0]) {
+    const win = new THREE.Group();
+    win.add(new THREE.Mesh(new THREE.PlaneGeometry(1.6, 1.2), daylight));
+    at(box(1.75, 0.08, 0.06, "#e8e4dc"), 0, 0.64, 0, win);
+    at(box(1.75, 0.08, 0.06, "#e8e4dc"), 0, -0.64, 0, win);
+    for (const x of [-0.84, 0, 0.84]) at(box(0.06, 1.3, 0.06, "#e8e4dc"), x, 0, 0, win);
+    at(box(1.8, 0.05, 0.18, "#e8e4dc"), 0, -0.68, 0.08, win);
+    win.position.set(sx * (w / 2 - 0.02), Math.min(1.75, h - 1.0), wz);
+    win.rotation.y = -sx * Math.PI / 2;
+    g.add(win);
+  }
   wallAt(w, 0, -d / 2, 0);
   wallAt(d, -w / 2, 0, Math.PI / 2);
   wallAt(d, w / 2, 0, -Math.PI / 2);
@@ -735,7 +830,7 @@ function buildInterior(id, ctx) {
     const lux = tier >= 3;
     g = room(w, d, h, {
       floorTex: lux ? noiseTexture("#e8e4dc", "#cfc8bb", "#f7f5f0", 6) : noiseTexture("#9a6f47", "#7c5534", "#b48558", 5),
-      wall: lux ? "#f2efe8" : tier === 1 ? "#d9cdb8" : "#e8dfcf", lights: lux ? 3 : 2,
+      wall: lux ? "#f2efe8" : tier === 1 ? "#d9cdb8" : "#e8dfcf", lights: lux ? 3 : 2, windows: "left",
     });
     // living area: sofa facing the TV, a rug, a coffee table
     const rug = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 2.4), mat(lux ? "#7a1f2b" : "#4b5b73"));
@@ -757,7 +852,7 @@ function buildInterior(id, ctx) {
     for (const [x, z, r] of [[-0.45, -0.6, 0], [0.45, -0.6, 0], [-0.45, 0.6, Math.PI], [0.45, 0.6, Math.PI]]) at(chair(), w / 4 + 0.6 + x, 0, 0.6 + z, g).rotation.y = r;
     block(w / 4 - 0.4, -0.2, w / 4 + 1.6, 1.4);
     // pictures: a fight poster, family art
-    at(picture(1.0, 1.4, poster("CAGE", "CAREER 3D", "#7f1d1d")), -w / 2 + 0.03, 1.7, -1, g).rotation.y = Math.PI / 2;
+    at(picture(0.9, 1.25, poster("CAGE", "CAREER 3D", "#7f1d1d")), -0.3, 1.8, -d / 2 + 0.04, g);
     at(picture(1.4, 1.0, emojiArt("🏔️", "#bfdbfe")), w / 2 - 0.03, 1.7, 0.8, g).rotation.y = -Math.PI / 2;
     at(plant(), -w / 2 + 0.6, 0, d / 2 - 0.8, g);
     at(plant(1.2), w / 2 - 0.6, 0, d / 2 - 0.8, g);
@@ -775,7 +870,7 @@ function buildInterior(id, ctx) {
     if (ctx.partner) person(-w / 4 + 0.4, 1.6, Math.PI, { seed: ctx.partner.name, female: (ctx.partner.gender || "F") === "F", shirt: "#e11d48", sit: true });
   } else if (id === "club") {
     w = 16; d = 12; h = 4.2;
-    g = room(w, d, h, { floor: "#141017", wall: "#1d1626", ceiling: "#0c0a10", light: "#b46cff", lights: 2, power: 9 });
+    g = room(w, d, h, { floor: "#141017", wall: "#1d1626", ceiling: "#0c0a10", light: "#b46cff", lights: 2, power: 9, windows: "none" });
     // the dance floor: tiles that pulse with the beat
     const tiles = [];
     for (let i = 0; i < 5; i++) for (let j = 0; j < 4; j++) {
@@ -817,7 +912,7 @@ function buildInterior(id, ctx) {
     for (const [x, z] of [[-1.5, -1], [0.6, -1.6], [1.4, -0.4], [-0.6, 0.2], [-2, -2.2]]) person(x, z, Math.random() * TAU, { seed: "dancer" + x, shirt: cols[Math.floor(Math.abs(x * 3)) % 5], dance: 1 });
   } else if (id === "ink") {
     w = 10; d = 8; h = 3.2;
-    g = room(w, d, h, { floor: "#2b2b2e", wall: "#3a3a40", ceiling: "#222226", light: "#ffe2c0", lights: 2, power: 12 });
+    g = room(w, d, h, { floor: "#2b2b2e", wall: "#3a3a40", ceiling: "#222226", light: "#ffe2c0", lights: 2, power: 12, windows: "none" });
     // the tattoo chair, the artist's stool and a work lamp
     const ch = new THREE.Group();
     at(box(0.7, 0.5, 1.9, "#111"), 0, 0.5, 0, ch);
@@ -950,7 +1045,7 @@ function buildInterior(id, ctx) {
     block(-w / 2 + 1.1, 1.6, -w / 2 + 2.1, 3.6);
   } else if (id === "pets") {
     w = 12; d = 9; h = 3.2;
-    g = room(w, d, h, { floor: "#d9cbb5", wall: "#fff3d6", light: "#fff4e0", lights: 2, power: 12 });
+    g = room(w, d, h, { floor: "#d9cbb5", wall: "#fff3d6", light: "#fff4e0", lights: 2, power: 12, windows: "right" });
     // shelves of food and toys, cages, a fish tank, animals wandering around
     for (let s = 0; s < 3; s++) {
       at(box(4, 0.05, 0.5, "#8b5a3c"), -2, 0.6 + s * 0.7, -d / 2 + 0.3, g);
@@ -1002,7 +1097,7 @@ function buildInterior(id, ctx) {
   } else {
     // the arena: an empty hall with the cage in the middle, stands all around and the big screen
     w = 26; d = 22; h = 9;
-    g = room(w, d, h, { floor: "#141519", wall: "#191b22", ceiling: "#08090c", light: "#ffffff", lights: 3, power: 26 });
+    g = room(w, d, h, { floor: "#141519", wall: "#191b22", ceiling: "#08090c", light: "#ffffff", lights: 3, power: 26, windows: "none" });
     const R = 4.2;
     const mat0 = new THREE.Mesh(new THREE.CircleGeometry(R, 8), new THREE.MeshStandardMaterial({ map: textTexture(ctx.org || "GFC", { w: 512, h: 512, bg: "#e7e2d6", fg: "#c8102e", font: "italic 900 150px Arial" }), roughness: 0.8 }));
     mat0.rotation.set(-Math.PI / 2, 0, Math.PI / 8);
