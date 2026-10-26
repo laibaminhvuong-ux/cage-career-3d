@@ -540,21 +540,36 @@ export class Fight {
     return Object.keys(w)[0];
   }
 
-  /** One exchange in hands-on mode. Returns nothing; events go to the round's log. */
-  manualTurn(action) {
+  /**
+   * One exchange in hands-on mode. Events go to the round's log. quick = real-time play: a beat
+   * of a few seconds instead of half a minute, with damage, stamina and knockdown power scaled
+   * down to match, so a round still adds up to about the same fight.
+   */
+  manualTurn(action, quick = false) {
     if (!this.manual || this.finished) throw new GameError("The round isn't on.");
     const opts = this.manualOptions();
     if (!opts.actions.includes(action)) throw new GameError("You can't do that right now.");
     this.manual.turn++;
-    const step = 18 + nextInt(12);
+    this.scale = quick ? 0.38 : 1;
+    try {
+      this.exchange(action, quick);
+    } finally {
+      this.scale = 1;
+    }
+  }
+
+  exchange(action, quick) {
+    const step = quick ? 7 + nextInt(5) : 18 + nextInt(12);
     if (this.ground) this.top.control += step;
     this.clock = Math.min(ROUND_SECONDS, this.clock + step);
-    const mine = action, theirs = this.aiAction();
+    // in real time the opponent breathes too: some beats are just footwork and feints
+    const idle = { stand: "circle", top: "pass", bottom: "tieup" }[!this.ground ? "stand" : this.topTag === "o" ? "top" : "bottom"];
+    const mine = action, theirs = quick && rnd() < 0.42 ? idle : this.aiAction();
     if (!this.ground) this.standTurn(mine, theirs);
     else if (this.topTag === "p") this.groundTurn(this.p, mine, this.o, theirs);
     else this.groundTurn(this.o, theirs, this.p, mine);
     // a breather while moving around: stamina comes back a little every exchange
-    for (const c of [this.p, this.o]) c.stamina = Math.min(100, c.stamina + 1.2 + c.s("cardio") / 60);
+    for (const c of [this.p, this.o]) c.stamina = Math.min(100, c.stamina + (1.2 + c.s("cardio") / 60) * this.scale);
     if (!this.finished && this.clock >= ROUND_SECONDS) {
       this.manual = null;
       this.closeRound();
@@ -568,7 +583,7 @@ export class Fight {
     for (const [c, a] of acts) {
       if (a === "in") this.range = "in";
       if (a === "out") this.range = "out";
-      const cost = STAND_ACTIONS[a].cost;
+      const cost = STAND_ACTIONS[a].cost * (this.scale || 1);
       c.stamina = Math.max(0, Math.min(100, c.stamina - cost));
     }
     const moves = acts.filter(([, a]) => STAND_ACTIONS[a].kind === "move");
@@ -576,6 +591,14 @@ export class Fight {
     if (!attacks.length) {
       // nobody committed: feints, footwork, a read for whoever dodged into nothing
       const [c, a] = moves[0] || acts[0];
+      if ((this.scale || 1) < 1 && rnd() < 0.55) {
+        // real time: footwork mostly shows in the cage, not in the log
+        this.ev("info", c, "");
+        const e = this.current[this.current.length - 1];
+        e.mv = a;
+        e.quiet = true;
+        return;
+      }
       const text = a === "in" ? c.n() + " walks " + this.other(c).n() + " down and cuts off the cage."
         : a === "out" ? c.n() + " backs off to the outside and breathes."
         : a === "circle" ? c.n() + " circles away from the fence, feinting."
@@ -648,13 +671,13 @@ export class Fight {
     }
     let dmg = A.dmg * (0.6 + a.s("power") / 70) * (0.75 + rnd() * 0.5);
     if (dact === "block" && !A.low) dmg *= 0.45;
-    if (A.drain) d.stamina = Math.max(0, d.stamina - A.drain);
+    if (A.drain) d.stamina = Math.max(0, d.stamina - A.drain * (this.scale || 1));
     if (A.slow) d.legHits = (d.legHits || 0) + 1;
     const landed = A.hits || 1;
     a.sig += landed;
     a.totSig += landed;
     this.hit(a, d, dmg);
-    const kdChance = A.ko ? A.ko * (a.s("power") / 100) * (1.25 - d.s("chin") / 100) + d.damage / 300 - (dact === "block" ? 0.15 : 0) : 0;
+    const kdChance = (A.ko ? A.ko * (a.s("power") / 100) * (1.25 - d.s("chin") / 100) + d.damage / 300 - (dact === "block" ? 0.15 : 0) : 0) * (0.35 + 0.65 * (this.scale || 1));
     if (rnd() < kdChance) {
       a.kd++;
       a.totKd++;
@@ -675,8 +698,8 @@ export class Fight {
 
   /** A ground exchange: t is on top with action ta, b underneath with ba. */
   groundTurn(t, ta, b, ba) {
-    t.stamina = Math.max(0, t.stamina - (TOP_ACTIONS[ta] || {}).cost);
-    b.stamina = Math.max(0, b.stamina - (BOTTOM_ACTIONS[ba] || {}).cost);
+    t.stamina = Math.max(0, t.stamina - (TOP_ACTIONS[ta] || {}).cost * (this.scale || 1));
+    b.stamina = Math.max(0, b.stamina - (BOTTOM_ACTIONS[ba] || {}).cost * (this.scale || 1));
     const tie = ba === "tieup";
     // escapes first: if the bottom fighter gets out, the top fighter's plan is gone
     if (ba === "sweep" || ba === "getup") {
@@ -944,6 +967,7 @@ export class Fight {
   }
 
   hit(a, d, dmg) {
+    dmg *= this.scale || 1;
     d.damage += dmg;
     a.dealt += dmg;
   }
@@ -2824,9 +2848,9 @@ export class Career {
     this.fight.startManualRound(touch);
   }
 
-  fightManualTurn(action) {
+  fightManualTurn(action, quick = false) {
     if (!this.fight || this.fight.finished) throw new GameError("No fight in progress.");
-    this.fight.manualTurn(action);
+    this.fight.manualTurn(action, quick);
     if (this.fight.finished) this.resolveFight();
   }
 
@@ -3641,7 +3665,7 @@ export class Game {
       case "fight/round": this.need(career).fightRound(p.plan, p.touch !== false && p.touch !== "false"); break;
       case "fight/close": this.need(career).closeFight(); break;
       case "fight/manual": this.need(career).fightManualStart(p.touch !== false && p.touch !== "false"); break;
-      case "fight/turn": this.need(career).fightManualTurn(p.action); break;
+      case "fight/turn": this.need(career).fightManualTurn(p.action, !!p.quick); break;
       case "retire": msg = this.need(career).retire(); break;
       case "talk": msg = this.need(career).talk(p.target, p.tone); break;
       case "staff/hire": msg = this.need(career).hire(int(p.index)); break;

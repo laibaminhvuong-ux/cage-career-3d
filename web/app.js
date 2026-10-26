@@ -1403,7 +1403,7 @@ function renderFightScreen() {
     }
     caption(null);
     $("fightLog").innerHTML = f.round === 0 ? introHtml(f) : "";
-    events.forEach((e) => $("fightLog").appendChild(eventEl(e, false)));
+    events.forEach((e) => { if (!e.quiet) $("fightLog").appendChild(eventEl(e, false)); });
     if (f.round === 0) setTimeout(() => startTour("fight"), 1500);
     fightShown = events.length;
     headSnapshot = f;
@@ -1460,6 +1460,59 @@ function caption(e) {
   captionTimer = setTimeout(() => el.classList.remove("show"), e.type === "finish" ? 8000 : 3200);
 }
 
+/** A live, hands-on round: one beat after another until the bell, whatever you press goes next. */
+async function realtimeLoop() {
+  if (rt.running) return;
+  rt.running = true;
+  try {
+    while (!rt.stop && state && state.fight && state.fight.manual && !state.fight.finished && !$("fightScreen").classList.contains("hidden")) {
+      if (rt.paused) {
+        await new Promise((r) => setTimeout(r, 200));
+        continue;
+      }
+      const m = state.fight.manual;
+      const action = rt.pending && m.actions.includes(rt.pending) ? rt.pending : IDLE_ACTION[m.where];
+      rt.pending = null;
+      const before = fightShown;
+      if (!(await api("fight/turn", { action, quick: true }))) break;
+      const f = state.fight;
+      const events = allEvents(f).slice(before);
+      const t0 = performance.now();
+      for (const e of events) {
+        fightShown++;
+        if (!e.quiet) {
+          $("fightLog").appendChild(eventEl(e, true));
+          caption(e);
+        }
+        let pause = stage ? stage.arena.play(e, f) : 400;
+        updateFightBars(e);
+        if (e.type === "kd" || e.type === "finish" || e.type === "round") pause = Math.max(pause, 1400);
+        else pause = Math.min(pause, 650);
+        await new Promise((r) => setTimeout(r, pause / speed));
+      }
+      scrollLog();
+      // one beat lasts at least this long, so the fight has a rhythm you can play to
+      const left = 950 / speed - (performance.now() - t0);
+      if (left > 0) await new Promise((r) => setTimeout(r, left));
+      headSnapshot = f;
+      renderFightHead(f);
+      renderFightControls(f);
+      if (f.finished) {
+        audio.music(null);
+        audio.sting((state.lastResult || {}).result);
+      }
+    }
+  } finally {
+    rt.running = false;
+    rt.pending = null;
+    updateMusic();
+    if (state && state.fight) {
+      renderFightHead(state.fight);
+      renderFightControls(state.fight);
+    }
+  }
+}
+
 async function playEvents(events, f) {
   playing = true;
   skipPlayback = false;
@@ -1496,6 +1549,8 @@ async function playEvents(events, f) {
   renderFightHead(f);
   renderFightControls(f);
   scrollLog();
+  // a hands-on round has opened: from here it runs live
+  if (f.manual && !f.finished) realtimeLoop();
 }
 
 /** Health and stamina drain live as each moment of the round plays out. */
@@ -1534,12 +1589,41 @@ function renderFightHead(f) {
 }
 
 // hands-on fighting: every choice, grouped as the controls show them
-const MOVE_ACTIONS = [["in", "⬆️", "Step in"], ["out", "⬇️", "Back off"], ["circle", "🔄", "Circle"]];
-const ATTACK_ACTIONS = [["jab", "👊", "Jab"], ["cross", "🥊", "Cross"], ["hook", "🪝", "Hook"], ["uppercut", "⤴️", "Uppercut"],
-  ["leg", "🦵", "Leg kick"], ["body", "🦶", "Body kick"], ["head", "💥", "Head kick"], ["flashy", "🌀", "Spinning attack"], ["takedown", "🤼", "Takedown"]];
-const DODGE_ACTIONS = [["slip", "↪️", "Slip"], ["block", "🛡️", "Block"], ["check", "🦿", "Check kick"], ["sprawl", "🧱", "Sprawl"]];
-const TOP_ACTIONS = [["gnp", "👊", "Ground & pound"], ["pass", "➡️", "Pass guard"], ["sub", "🔒", "Submission"], ["standup", "🧍", "Stand up"]];
-const BOTTOM_ACTIONS = [["sweep", "🔃", "Sweep"], ["getup", "🧍", "Get up"], ["guardsub", "🔒", "Submission"], ["tieup", "🛡️", "Tie up"]];
+const MOVE_ACTIONS = [["in", "⬆️", "Step in", "W"], ["out", "⬇️", "Back off", "S"], ["circle", "🔄", "Circle", "A"]];
+const ATTACK_ACTIONS = [["jab", "👊", "Jab", "J"], ["cross", "🥊", "Cross", "K"], ["hook", "🪝", "Hook", "L"], ["uppercut", "⤴️", "Uppercut", "U"],
+  ["leg", "🦵", "Leg kick", "I"], ["body", "🦶", "Body kick", "O"], ["head", "💥", "Head kick", "P"], ["flashy", "🌀", "Spinning attack", "Y"], ["takedown", "🤼", "Takedown", "T"]];
+const DODGE_ACTIONS = [["slip", "↪️", "Slip", "Q"], ["block", "🛡️", "Block", "E"], ["check", "🦿", "Check kick", "R"], ["sprawl", "🧱", "Sprawl", "F"]];
+const TOP_ACTIONS = [["gnp", "👊", "Ground & pound", "J"], ["pass", "➡️", "Pass guard", "K"], ["sub", "🔒", "Submission", "L"], ["standup", "🧍", "Stand up", "S"]];
+const BOTTOM_ACTIONS = [["sweep", "🔃", "Sweep", "J"], ["getup", "🧍", "Get up", "K"], ["guardsub", "🔒", "Submission", "L"], ["tieup", "🛡️", "Tie up", "E"]];
+// what your fighter does when you don't press anything: stay light on the feet, hold position, cover up
+const IDLE_ACTION = { stand: "circle", top: "pass", bottom: "tieup" };
+// real-time fighting: the next move you've queued, and whether the loop is running or paused
+const rt = { pending: null, running: false, paused: false };
+
+// between live rounds: a short corner break, then the bell rings by itself
+const CORNER_SECONDS = 8;
+let corner = null; // { round, until, timer }
+function cornerLeft() {
+  return corner ? Math.max(0, Math.ceil((corner.until - performance.now()) / 1000)) : CORNER_SECONDS;
+}
+function startCorner(f) {
+  if (corner && corner.round === f.round) return;
+  if (corner) clearInterval(corner.timer);
+  corner = { round: f.round, until: performance.now() + CORNER_SECONDS * 1000 };
+  corner.timer = setInterval(async () => {
+    const cur = state && state.fight;
+    if (!cur || cur.finished || cur.manual || cur.round !== corner.round || fightMode !== "manual" || $("fightScreen").classList.contains("hidden")) {
+      clearInterval(corner.timer);
+      return;
+    }
+    const el = $("cornerCount");
+    if (el) el.textContent = "next round in " + cornerLeft() + "s";
+    if (cornerLeft() <= 0 && !playing && !rt.running) {
+      clearInterval(corner.timer);
+      if (await api("fight/manual", { touch: touchGloves })) render();
+    }
+  }, 250);
+}
 const ACTION_TIPS = {
   in: "Close the distance: punches land more, kicks less", out: "Get out of range and catch your breath", circle: "Reset off the fence, recover a little",
   jab: "Fast and safe", cross: "Solid power", hook: "Big damage, knockdown power", uppercut: "Best up close",
@@ -1555,19 +1639,26 @@ try { fightMode = localStorage.getItem("cc3d_fightmode") || "manual"; } catch { 
 function manualPanel(f) {
   const m = f.manual;
   const left = Math.max(0, 300 - (f.clock || 0));
-  const btn = ([id, icon, label]) => `<button class="btn act-btn" data-turn="${id}" title="${esc(ACTION_TIPS[id] || "")}">${icon} ${label}<span class="sub">${esc(ACTION_TIPS[id] || "")}</span></button>`;
+  const btn = ([id, icon, label, key]) => `<button class="btn act-btn ${rt.pending === id ? "queued" : ""}" data-turn="${id}" title="${esc(ACTION_TIPS[id] || "")} (${key})">${icon} ${label} <kbd>${key}</kbd><span class="sub">${esc(ACTION_TIPS[id] || "")}</span></button>`;
   const group = (title, list) => `<div class="act-group"><div class="label">${title}</div><div class="act-grid">${list.map(btn).join("")}</div></div>`;
   const where = m.where === "stand" ? (m.range === "in" ? "Inside, in punching range" : "Outside, at kicking range")
     : (m.where === "top" ? "You're on top" : "You're on your back") + " · " + ({ guard: "guard", half: "half guard", side: "side control", mount: "full mount", back: "back control", legs: "leg lock", headlock: "headlock" }[m.pos] || m.pos);
   return `
-    <div class="prompt">Round ${f.round} · <b>${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}</b> left · ${where}</div>
+    <div class="prompt rt-head"><span class="live-dot ${rt.paused ? "paused" : ""}"></span> LIVE · Round ${f.round} · <b>${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}</b> · ${where}
+      <button class="btn small ghost" data-rtpause>${rt.paused ? "▶️ Resume" : "⏸ Pause"}</button></div>
+    <div class="rt-hint">The fight doesn't wait: tap or press a key any time and your fighter throws it on the next beat.</div>
     ${m.where === "stand" ? group("Attack", ATTACK_ACTIONS) + group("Dodge", DODGE_ACTIONS) + group("Move", MOVE_ACTIONS)
       : group(m.where === "top" ? "On top" : "On your back", m.where === "top" ? TOP_ACTIONS : BOTTOM_ACTIONS)}
-    <div class="btn-row" style="justify-content:center;margin-top:8px"><button class="btn small ghost" data-plan="BALANCED">⏩ Let the game plan finish this round</button></div>`;
+    <div class="btn-row" style="justify-content:center;margin-top:8px"><button class="btn small ghost" data-plan="BALANCED">⏩ Sim the rest of this round</button></div>`;
 }
 
 function renderFightControls(f) {
   const el = $("fightControls");
+  if (f && f.manual && !f.finished) {
+    // a live round: the controls stay up the whole time
+    el.innerHTML = manualPanel(f);
+    return;
+  }
   if (playing) {
     el.innerHTML = `<button class="btn big" data-skip>Skip ▶▶</button>`;
     return;
@@ -1577,6 +1668,7 @@ function renderFightControls(f) {
     return;
   }
   if (!f.finished) {
+    if (fightMode === "manual" && f.round > 0) startCorner(f);
     el.innerHTML = `
       <div class="mode-row"><button class="btn small ${fightMode === "manual" ? "gold" : "ghost"}" data-fightmode="manual">🎮 Fight it yourself</button>
         <button class="btn small ${fightMode === "plan" ? "gold" : "ghost"}" data-fightmode="plan">📋 Game plan (auto)</button></div>
@@ -1586,7 +1678,7 @@ function renderFightControls(f) {
       ${f.round === 0 ? `<div class="touch-row"><span>Before the bell:</span>
         <button class="btn small ${touchGloves ? "gold" : ""}" data-touch="1">🤜🤛 Touch gloves</button>
         <button class="btn small ${touchGloves ? "" : "primary"}" data-touch="0">🙅 Refuse</button></div>` : ""}
-      ${fightMode === "manual" ? `<button class="btn primary big" data-manual>🔔 ${f.round === 0 ? "Start the fight" : "Start round " + (f.round + 1)}</button>` : `<div class="plans">
+      ${fightMode === "manual" ? `<button class="btn primary big" data-manual>🔔 ${f.round === 0 ? "Start the fight" : `Start round ${f.round + 1} now <span class="sub" id="cornerCount">next round in ${cornerLeft()}s</span>`}</button>` : `<div class="plans">
         ${PLANS.map((p) => `<button class="btn" data-plan="${p.id}">${p.name}<span class="sub">${p.desc}</span></button>`).join("")}
       </div>`}`;
     return;
@@ -1617,6 +1709,12 @@ document.addEventListener("click", async (ev) => {
   if (d.startfight !== undefined) return act("fight/start");
   if (d.plan) {
     if (playing) return;
+    if (rt.running) {
+      // finishing a live round on autopilot: let the current beat end first
+      rt.stop = true;
+      while (rt.running) await new Promise((r) => setTimeout(r, 50));
+      rt.stop = false;
+    }
     if (await api("fight/round", { plan: d.plan, touch: touchGloves })) render();
     return;
   }
@@ -1632,9 +1730,15 @@ document.addEventListener("click", async (ev) => {
     return;
   }
   if (d.turn) {
-    if (playing) return;
-    if (await api("fight/turn", { action: d.turn })) render();
+    // queue it for the next beat
+    rt.pending = d.turn;
+    document.querySelectorAll("[data-turn]").forEach((x) => x.classList.toggle("queued", x.dataset.turn === d.turn));
+    if (!rt.running && state.fight && state.fight.manual) realtimeLoop();
     return;
+  }
+  if (d.rtpause !== undefined) {
+    rt.paused = !rt.paused;
+    return renderFightControls(state.fight);
   }
   if (d.sound !== undefined) { audio.toggle(); syncSoundButtons(); updateMusic(); if (modal && modal.kind === "settings") renderModal(); return; }
   if (d.settings !== undefined) return openModal("settings");
@@ -1848,6 +1952,26 @@ function resetFightScreen() {
 
 $("modal").addEventListener("click", (ev) => {
   if (ev.target.id === "modal") closeModal();
+});
+
+// real-time fight controls on the keyboard
+document.addEventListener("keydown", (ev) => {
+  const f = state && state.fight;
+  if (!f || !f.manual || f.finished || $("fightScreen").classList.contains("hidden")) return;
+  if (/INPUT|TEXTAREA|SELECT/.test((ev.target && ev.target.tagName) || "")) return;
+  if (ev.key === " " || ev.key === "Escape") {
+    rt.paused = !rt.paused;
+    renderFightControls(f);
+    ev.preventDefault();
+    return;
+  }
+  const list = f.manual.where === "stand" ? [...ATTACK_ACTIONS, ...DODGE_ACTIONS, ...MOVE_ACTIONS, ["circle", "", "", "D"]] : f.manual.where === "top" ? TOP_ACTIONS : BOTTOM_ACTIONS;
+  const hit = list.find((a) => a[3] === ev.key.toUpperCase());
+  if (!hit) return;
+  ev.preventDefault();
+  rt.pending = hit[0];
+  document.querySelectorAll("[data-turn]").forEach((x) => x.classList.toggle("queued", x.dataset.turn === hit[0]));
+  if (!rt.running) realtimeLoop();
 });
 
 // settings: volume sliders, language, FPS counter
