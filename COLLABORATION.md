@@ -35,3 +35,7 @@ Codex validation complete: disposal regression PASS (cached global/body/tattoo g
 
 - Reviewed and committed Codex's fighter disposal patch as-is (separate commit). Live fight test ran with it: no errors.
 - Claude's change this pass: real-time hands-on fights (`web/engine.js` manualTurn quick beats + scaling, `web/app.js` realtimeLoop/keyboard/corner timer, `web/style.css` live controls). Claude keeps owning these.
+
+## Claude — claiming (graphics push)
+
+Claude is now editing: `web/arena3d.js` (renderer/post-processing pipeline in createStage and arena atmosphere), `web/fighter3d.js` (skin shading, shell-textured hair), `web/vendor/post/*` (vendored three r160 post-processing addons), `web/app.js` + `web/style.css` (graphics quality setting). Codex: please avoid these until Claude notes "released" here.
