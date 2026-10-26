@@ -438,6 +438,22 @@ input:focus, select:focus { outline: 2px solid var(--red); outline-offset: 1px; 
 .fps-meter { position: fixed; bottom: 8px; left: 8px; z-index: 50; padding: 2px 8px; border-radius: 6px;
   background: rgba(0, 0, 0, .6); color: #7cfc9a; font: 700 12px/1.4 ui-monospace, monospace; pointer-events: none; }
 
+.mode-row { display: flex; gap: 8px; justify-content: center; margin-bottom: 8px; flex-wrap: wrap; }
+.act-group { margin-top: 6px; }
+.act-group .label { margin: 4px 0; }
+.act-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 6px; }
+.act-btn { padding: 8px 6px; font-size: 13px; line-height: 1.2; }
+.act-btn .sub { display: block; font-size: 10.5px; font-weight: 400; color: var(--muted); margin-top: 2px; }
+@media (max-width: 560px) { .act-grid { grid-template-columns: repeat(3, 1fr); } .act-btn .sub { display: none; } }
+
+/* a place's menu while you're standing inside it */
+#modal.side { background: transparent; backdrop-filter: none; pointer-events: none; justify-content: flex-end; align-items: stretch; padding: 70px 12px 96px; }
+#modal.side .modal-panel { pointer-events: auto; max-width: 400px; max-height: none; background: rgba(20, 22, 28, .92); }
+@media (max-width: 560px) {
+  #modal.side { align-items: flex-end; padding: 0 0 84px; }
+  #modal.side .modal-panel { height: auto; max-height: 52vh; border-radius: 16px 16px 0 0; }
+}
+
 </style>
 </head>
 <body>
