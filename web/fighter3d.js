@@ -1000,6 +1000,8 @@ export class Fighter3D {
     root.updateMatrixWorld(true);
     const kind = opts.ref ? "ref" : opts.casual ? "casual" : "fighter";
     const body = buildBody(bones, order, width, kind, { body: look.body, abs: look.abs, female, step: opts.detail === "low" ? 0.022 : undefined });
+    // Body geometry is cached across fighters; only the vertex-painted skin is private.
+    this.sharedGeometry = new Set(Object.values(body).filter((g) => g && g.isBufferGeometry));
     const skeleton = new THREE.Skeleton(order.map((n) => bones[n]));
     const skinned = (g, m) => {
       const sm = new THREE.SkinnedMesh(g, m);
@@ -1731,12 +1733,19 @@ export class Fighter3D {
   }
 
   dispose() {
-    const keep = new Set(Object.values(shared));
+    const keep = new Set([...Object.values(shared), ...(this.sharedGeometry || []), ...(this.tattoos || []).map((o) => o.geometry)]);
+    const geometries = new Set(), materials = new Set(), skeletons = new Set();
     this.root.traverse((o) => {
       if (!o.isMesh) return;
-      if (!keep.has(o.geometry)) o.geometry.dispose();
-      o.material.dispose();
+      if (!keep.has(o.geometry)) geometries.add(o.geometry);
+      for (const m of Array.isArray(o.material) ? o.material : [o.material]) if (m) materials.add(m);
+      if (o.isSkinnedMesh && o.skeleton) skeletons.add(o.skeleton);
     });
+    // Materials and skeletons are shared within this fighter, so release each once.
+    // Cached geometry, iris/tattoo textures and the environment map remain reusable.
+    for (const g of geometries) g.dispose();
+    for (const m of materials) m.dispose();
+    for (const s of skeletons) s.dispose();
     this.root.removeFromParent();
   }
 }
