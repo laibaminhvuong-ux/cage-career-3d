@@ -6,6 +6,7 @@ import { Fighter3D, orgStyle, setFighterEnv, GROUND_POSES, POSES, SEQUENCES, att
 import * as audio from "./audio.js";
 import { WorldView } from "./world3d.js";
 import { RoomEnvironment } from "./vendor/RoomEnvironment.js";
+import { createPost } from "./post3d.js";
 import { cornerCall, finishShout, interviewCall, reaction, resultCall, roundCall } from "./announcer.js";
 
 const R = 4.4; // cage radius to the fence posts
@@ -93,11 +94,14 @@ export function createStage() {
   let view = null;
   let host = null;
   const clock = new THREE.Clock();
+  // the finishing pipeline (bloom, ambient occlusion, grade); absent in tests that stub the renderer
+  const post = typeof createPost === "function" ? createPost(renderer) : null;
 
   const resize = () => {
     if (!host) return;
     const w = Math.max(1, host.clientWidth), h = Math.max(1, host.clientHeight);
     renderer.setSize(w, h, false);
+    if (post) post.setSize(w, h);
     canvas.style.width = "100%";
     canvas.style.height = "100%";
     view.camera.aspect = w / h;
@@ -167,7 +171,8 @@ export function createStage() {
     const dt = Math.min(clock.getDelta(), 0.1);
     view.update(dt);
     renderer.toneMappingExposure = view.exposure || 1.05;
-    renderer.render(view.scene, view.camera);
+    if (post) post.render(view, dt);
+    else renderer.render(view.scene, view.camera);
     frames++;
     if (now - fpsSince >= 500) {
       if (onFps) onFps(Math.round((frames * 1000) / (now - fpsSince)));
@@ -178,7 +183,9 @@ export function createStage() {
   const setFps = (cap) => { fpsCap = cap === 30 || cap === 60 ? cap : 0; };
   const watchFps = (fn) => { onFps = fn; };
 
-  return { preview, arena, world, show, setFps, watchFps };
+  const setQuality = (q) => post && post.setQuality(q);
+  const getQuality = () => (post ? post.getQuality() : "low");
+  return { preview, arena, world, show, setFps, watchFps, setQuality, getQuality };
 }
 
 /** A promotion's logo: its badge shape in its colors with the wordmark across it. r = radius. */
@@ -251,6 +258,7 @@ export function drawOrgLogo(g, org, x, y, r) {
 
 class PreviewView {
   constructor() {
+    this.look = { bloom: [0.3, 0.4, 0.95], ao: 0.4, contrast: 1.08, saturation: 1.05, warmth: 0.5, vignette: 0.55, grain: 0.02 };
     const scene = (this.scene = new THREE.Scene());
     scene.background = new THREE.Color("#0f1116");
     scene.fog = new THREE.Fog("#0f1116", 7, 14);
@@ -782,6 +790,8 @@ const BASE_MS = { strike: 1000, miss: 800, big: 1500, kd: 2100, td: 1500, stuff:
 
 class ArenaView {
   constructor() {
+    // fight-night broadcast look: punchy contrast, glowing lights, a heavy vignette
+    this.look = { bloom: [0.45, 0.45, 0.9], ao: 0.5, contrast: 1.1, saturation: 1.08, warmth: 0.6, vignette: 0.5, grain: 0.028 };
     const scene = (this.scene = new THREE.Scene());
     scene.background = new THREE.Color("#07080b");
     scene.fog = new THREE.FogExp2("#07080b", 0.035);

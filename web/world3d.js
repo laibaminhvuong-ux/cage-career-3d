@@ -1185,6 +1185,8 @@ export class WorldView {
     scene.add(sun, sun.target);
 
     this.exposure = 0.78; // daylight plus sky reflections: a touch darker than the arena
+    // daylight look: clean and saturated, a soft vignette, wide ambient occlusion for buildings
+    this.look = { bloom: [0.06, 0.3, 0.99], ao: 1.2, contrast: 1.1, saturation: 1.18, warmth: 0.4, vignette: 0.22, grain: 0.012 };
     this.solids = []; // [minX, minZ, maxX, maxZ] rectangles you can't walk through
     this.buildTown();
 

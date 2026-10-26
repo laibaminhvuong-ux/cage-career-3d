@@ -457,16 +457,18 @@ function headShapes(F = FACES[0], seed = "", female = false) {
   e(add, [0, 0.025, -0.005], [0.09 * J(0.04), 0.105 * J(0.04), 0.1], 0.03); // cranium
   e(add, [0, -0.005, 0.03], [0.074 * fw, 0.085 * fl, 0.075], 0.03); // face
   e(add, [0, -0.05 * fl, 0.03], [0.068 * jw, 0.05, 0.07], 0.025); // jaw
-  e(add, [0, -0.083 * fl, 0.068 + chin], [0.026 * jw, 0.02, 0.022], 0.015); // chin
+  e(add, [0, -0.083 * fl, 0.068 + chin], [0.024 * jw, 0.019, 0.022], 0.02); // chin
+  for (const s of [-1, 1]) e(add, [s * 0.035 * jw, -0.072 * fl, 0.05], [0.022, 0.016, 0.03], 0.025); // jawline toward the chin
   e(add, [0, 0.052, 0.076 + v("browZ", 0)], [0.07, 0.017 * brow, 0.025 * brow], 0.015); // brow ridge
   const tipY = -0.004 - 0.012 * (nl - 1);
   c(add, [0, 0.04 + bt, 0.093 + bz], [0, tipY, 0.107 + bz * 0.5 + 0.006 * (nl - 1)], 0.009 * J(0.15), 0.011 * tw, 0.01); // nose bridge
   if (F.hump) e(add, [0, 0.018, 0.103 + bz], [0.01, 0.012, 0.009], 0.008);
-  e(add, [0, tipY - 0.004, 0.106 + bz * 0.4 + 0.006 * (nl - 1)], [0.016 * tw, 0.014 * v("tipR"), 0.014 * v("tipR")], 0.008); // nose tip
+  e(add, [0, tipY - 0.004, 0.105 + bz * 0.4 + 0.006 * (nl - 1)], [0.0138 * tw, 0.0125 * v("tipR"), 0.013 * v("tipR")], 0.009); // nose tip
   e(add, [0, -0.035, 0.094 + v("lipZ", 0)], [0.024 * J(0.08), 0.008 * lips, 0.012 * (0.85 + lips * 0.15)], 0.006); // upper lip
   e(add, [0, -0.047, 0.092 + v("lipZ", 0)], [0.021 * J(0.08), 0.009 * lips, 0.012 * (0.85 + lips * 0.15)], 0.006); // lower lip
   for (const s of [-1, 1]) {
-    e(add, [s * 0.05 * cx, 0.0, 0.068 + v("cheekZ", 0)], [0.028 * cr, 0.02 * cr, 0.024], 0.024); // cheekbones
+    // cheekbones: a ridge under the outer eye, not a ball
+    e(add, [s * 0.052 * cx, 0.008, 0.07 + v("cheekZ", 0)], [0.024 * cr, 0.011 * cr, 0.016], 0.03);
     e(add, [s * 0.012 * v("wingX") * J(0.1), tipY - 0.008, 0.099 + bz * 0.3], [0.009 * v("wingX"), 0.008, 0.009], 0.006); // nostril wings
     e(add, [s * 0.091, 0.01, -0.008], [0.012, 0.03 * J(0.12), 0.022], 0.008); // ears
     e(sub, [s * 0.034, 0.03, 0.095], [0.021, 0.015 * (0.7 + 0.3 * v("eyeH")), 0.014 * v("socket")], 0.01); // eye sockets
@@ -476,7 +478,8 @@ function headShapes(F = FACES[0], seed = "", female = false) {
     e(add, [s * 0.098, 0.012, -0.016], [0.006, 0.024, 0.005], 0.004); // the rim of the ear
   }
   // the line where the lips meet, the groove above the upper lip and the dent above the chin
-  e(sub, [0, -0.0415, 0.106 + v("lipZ", 0)], [0.02 * J(0.08), 0.0016, 0.012], 0.003);
+  e(sub, [0, -0.0415, 0.108 + v("lipZ", 0)], [0.018 * J(0.08), 0.0006, 0.006], 0.002);
+  e(add, [0, -0.008, 0.06], [0.05 * fw, 0.035, 0.04], 0.03); // fills the midface so cheeks and nose blend smoothly
   e(sub, [0, -0.063 * fl, 0.09 + chin], [0.012, 0.003, 0.006], 0.006);
   return { add, sub };
 }

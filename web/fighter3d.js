@@ -862,12 +862,120 @@ function addDetail(m, kind) {
   return m;
 }
 
+/**
+ * Light scattering under the skin: direct light wraps a little past the shadow line and comes
+ * out warmer (red light travels furthest through flesh), so skin reads soft instead of plastic.
+ */
+const SSS_PARS = (() => {
+  const src = THREE.ShaderChunk.lights_physical_pars_fragment;
+  const from = "float dotNL = saturate( dot( geometryNormal, directLight.direction ) );\n\n\tvec3 irradiance = dotNL * directLight.color;";
+  if (!src.includes(from)) return null;
+  return src.replace(from, `float dotNLraw = dot( geometryNormal, directLight.direction );
+	float dotNL = saturate( dotNLraw );
+	// wrap lighting per color channel: red reaches furthest into the shadow side
+	vec3 wrapK = vec3( 0.42, 0.2, 0.14 );
+	vec3 wrapped = saturate( ( vec3( dotNLraw ) + wrapK ) / ( 1.0 + wrapK ) );
+	vec3 irradiance = mix( vec3( dotNL ), wrapped, 0.85 ) * directLight.color;`);
+})();
+
 /** Skin: pores and tone variation, a soft reddish sheen at grazing angles, a thin clearcoat for sweat. */
 function skinMat(color) {
-  return addDetail(new THREE.MeshPhysicalMaterial({
-    color, roughness: 0.52, metalness: 0, envMap, envMapIntensity: 0.38,
+  return addSSS(addDetail(new THREE.MeshPhysicalMaterial({
+    color, roughness: 0.58, metalness: 0, envMap, envMapIntensity: 0.3, specularIntensity: 0.7,
     sheen: 0.55, sheenRoughness: 0.55, sheenColor: new THREE.Color("#ff8f74"), clearcoat: 0.1, clearcoatRoughness: 0.5,
-  }), "skin");
+  }), "skin"));
+}
+
+/** Adds the scattering to a material that already has its own onBeforeCompile. */
+function addSSS(m) {
+  if (!SSS_PARS) return m;
+  const prev = m.onBeforeCompile;
+  m.onBeforeCompile = (sh, r) => {
+    if (prev) prev(sh, r);
+    sh.fragmentShader = sh.fragmentShader.replace("#include <lights_physical_pars_fragment>", SSS_PARS);
+  };
+  const key = m.customProgramCacheKey;
+  m.customProgramCacheKey = () => (key ? key.call(m) : "") + "-sss";
+  return m;
+}
+
+// ------------------------------------------------------------------ shell hair
+// Hair as a stack of thin shells over the scalp: each shell keeps only the cross-sections of
+// individual strands at that height, so together they read as thousands of tufted hairs with
+// soft, see-through edges (instead of a solid helmet). Strands taper and lower shells are darker,
+// as light gets lost deep in the hair.
+const furMats = new Map();
+function furMat(color, layer, layers, density, clump, scalp) {
+  // layer 0 is the scalp: solid under the hair, ragged at the hairline
+  const key = [color, layer, layers, density, clump, scalp].join("|");
+  if (furMats.has(key)) return furMats.get(key);
+  const m = new THREE.MeshStandardMaterial({ color, roughness: 0.55, metalness: 0, envMap, envMapIntensity: 0.4, side: THREE.DoubleSide });
+  const t = layer / layers;
+  m.customProgramCacheKey = () => "fur";
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.furT = { value: t };
+    sh.uniforms.furDensity = { value: density };
+    sh.uniforms.furClump = { value: clump };
+    sh.uniforms.furBase = { value: layer === 0 ? 1 : 0 };
+    sh.uniforms.furScalp = { value: scalp ? 1 : 0 };
+    sh.vertexShader = sh.vertexShader
+      .replace("#include <common>", "#include <common>\nvarying vec2 vFurUv;")
+      .replace("#include <begin_vertex>", "#include <begin_vertex>\nvFurUv = uv;");
+    sh.fragmentShader = sh.fragmentShader
+      .replace("#include <common>", `#include <common>
+        varying vec2 vFurUv;
+        uniform float furT, furDensity, furClump, furBase, furScalp;
+        float furHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }`)
+      .replace("#include <map_fragment>", `#include <map_fragment>
+        {
+          // strands on a jittered grid; uv.x wraps around the head, so stretch it to keep them round
+          vec2 g = vFurUv * vec2(furDensity * 2.0, furDensity);
+          vec2 cell = floor(g);
+          vec2 jitter = vec2(furHash(cell), furHash(cell + 17.0)) - 0.5;
+          float len = 0.35 + 0.65 * furHash(cell + 3.0);
+          // clumps: neighbouring strands share a little length, so the hair looks tufted
+          len *= mix(1.0, 0.6 + 0.8 * furHash(floor(g / 4.0)), furClump);
+          // the hairline: strands thin out and shorten over the last stretch of the cap (uv.y -> 0),
+          // with a ragged, noisy edge instead of a straight line
+          float ex = vFurUv.x * 40.0, ex2 = vFurUv.x * 13.0;
+          float edgeNoise = mix(furHash(vec2(floor(ex), 0.0)), furHash(vec2(floor(ex) + 1.0, 0.0)), smoothstep(0.0, 1.0, fract(ex))) * 0.07
+            + mix(furHash(vec2(floor(ex2), 5.0)), furHash(vec2(floor(ex2) + 1.0, 5.0)), smoothstep(0.0, 1.0, fract(ex2))) * 0.08;
+          // a natural hairline on scalp caps: higher over the forehead, down at the temples and nape
+          // (u = 0.25 is the front of the head, 0.75 the back)
+          float front = max(0.0, cos((vFurUv.x - 0.25) * 6.2832));
+          float back = max(0.0, cos((vFurUv.x - 0.75) * 6.2832));
+          float lift = furScalp * (0.13 * pow(front, 1.5) - 0.04 * back);
+          float hairline = smoothstep(0.0, 0.3, vFurUv.y - edgeNoise - lift);
+          if (furBase > 0.5) {
+            if (hairline < 0.12) discard;
+            diffuseColor.rgb *= 0.45;
+          } else {
+            len *= hairline;
+            float r = length(fract(g) - 0.5 - jitter * 0.4);
+            if (furT > len || r > 0.5 * (1.0 - furT / max(len, 0.01))) discard;
+            diffuseColor.rgb *= mix(0.3, 1.12, furT) * (0.85 + 0.3 * furHash(cell + 9.0));
+          }
+        }`);
+  };
+  furMats.set(key, m);
+  return m;
+}
+
+/** Grows shell hair out of a hair mesh: layers shells, each pushed out along the normals. */
+function growFur(base, color, { layers = 10, length = 0.012, density = 70, clump = 0.5, scalp = false } = {}) {
+  const g = base.geometry;
+  for (let i = 1; i <= layers; i++) {
+    const shell = new THREE.Mesh(g, furMat(color, i, layers, density, clump, scalp));
+    // push out along the normals by scaling around the cap's own center (cheap and close enough on a dome)
+    const k = 1 + (length * i) / layers / 0.105;
+    shell.scale.setScalar(k);
+    shell.castShadow = false;
+    shell.receiveShadow = false;
+    shell.renderOrder = i;
+    base.add(shell);
+  }
+  // the scalp under the hair: dark, with the same ragged hairline as the strands
+  base.material = furMat(color, 0, layers, density, clump, scalp);
 }
 
 const SOLE = new THREE.Vector3();
@@ -1199,7 +1307,7 @@ export class Fighter3D {
         // lips: a touch darker and redder than the skin
         const le = (x / 0.024) ** 2 + ((y + 0.041) / 0.012) ** 2;
         const lip = z > 0.085 && le < 1 ? Math.min(1, (1 - le) * 2.5) : 0;
-        const k = this.beardShade(x, y, z);
+        const k = Math.max(this.beardShade(x, y, z), this.browShade(x, y, z));
         if (!k) {
           out[0] = 1 - lip * 0.18;
           out[1] = out[2] = 1 - lip * 0.34;
@@ -1302,7 +1410,10 @@ export class Fighter3D {
   }
 
   buildHead(head, skin, hairM, dark, look, ref) {
-    const white = mat("#f1ece4", { roughness: 0.25 });
+    // painted facial hair (brows, and beards below) takes the hair color; the referee is grey
+    this.beardType = "None";
+    this.beardColor = new THREE.Color(ref ? "#8d8d8d" : LOOK_OPTIONS.hairColor[look.hairColor]);
+    const white = mat("#e6dcd2", { roughness: 0.25 });
     const iris = new THREE.MeshStandardMaterial({ map: irisTexture(["#4a2c18", "#2e1b10", "#4f6e3c", "#3d6488"][(look.skin + look.hair) % 4]), roughness: 0.3 });
     const pupil = mat("#050505", { roughness: 0.1 });
     void pupil;
@@ -1313,7 +1424,7 @@ export class Fighter3D {
     for (const sx of [-1, 1]) {
       const Fx = FACES[look.face || 0];
       mesh(geo("eyeWhite", () => new THREE.SphereGeometry(0.0118, 20, 14)), white, head, sx * 0.034, 0.029, 0.083).scale.y = Fx.eyeH || 1;
-      const ir = mesh(geo("irisDisc", () => new THREE.CircleGeometry(0.0058, 28)), iris, head, sx * 0.034, 0.029, 0.0951);
+      const ir = mesh(geo("irisDisc2", () => new THREE.CircleGeometry(0.0066, 28)), iris, head, sx * 0.034, 0.029, 0.0951);
       ir.scale.y = Math.min(1, Fx.eyeH || 1);
       // a clear, wet cornea over the iris catches the highlights
       mesh(geo("cornea", () => new THREE.SphereGeometry(0.0072, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.5)), cornea, head, sx * 0.034, 0.029, 0.0905).rotation.x = Math.PI / 2;
@@ -1338,6 +1449,7 @@ export class Fighter3D {
       }), browM, head, sx * 0.035, 0.0555, (F.browZ || 0) + Math.max(0.0935, 0.0735 + 0.0217 * (F.brow ?? 1) * (this.female ? 0.55 : 1)));
       brow.rotation.set(-0.25, -sx * 0.35, -sx * (Math.PI / 2 - 0.12));
       brow.scale.set(1, 1, 0.5);
+      brow.visible = false; // brows are painted into the skin (see browShade); the mesh stays for the hit swelling
     }
     // lips are part of the face mesh; their color is painted in (see the face paint in setDamage)
     void lipM;
@@ -1357,10 +1469,12 @@ export class Fighter3D {
       sides.scale.set(0.95, 1.12, 1.05);
       sides.rotation.x = -0.25;
     };
+    const hairColor = LOOK_OPTIONS.hairColor[look.hairColor];
     const fullCap = (cover = 0.5) => {
-      const cap = mesh(capGeo(cover), hairM, head, 0, 0.03, -0.006);
-      cap.scale.set(0.99, 1.2, 1.1);
-      cap.rotation.x = -0.25;
+      const cap = mesh(capGeo(cover + 0.1), hairM, head, 0, 0.03, -0.006);
+      cap.scale.set(0.97, 1.17, 1.08);
+      cap.rotation.x = -0.2;
+      growFur(cap, hairColor, { layers: 14, length: 0.011, density: 95, scalp: true });
       return cap;
     };
     const strandGeo = (r, len) => geo("strand" + r + len, () => ropeGeo(r, r * 0.8, len, 0.12));
@@ -1444,15 +1558,17 @@ export class Fighter3D {
       }
     }
     if (h === "Buzz" || h === "Short" || h === "Man bun" || h === "Long") {
-      const cap = mesh(capGeo(h === "Buzz" ? 0.42 : 0.48), hairM, head, 0, 0.03, -0.006);
-      cap.scale.set(h === "Buzz" ? 0.94 : 0.99, h === "Buzz" ? 1.12 : 1.2, h === "Buzz" ? 1.05 : 1.1);
-      cap.rotation.x = -0.25;
+      const cap = mesh(capGeo(h === "Buzz" ? 0.55 : 0.6), hairM, head, 0, 0.03, -0.006);
+      cap.scale.set(h === "Buzz" ? 0.94 : 0.97, h === "Buzz" ? 1.12 : 1.17, h === "Buzz" ? 1.05 : 1.08);
+      cap.rotation.x = -0.2;
+      growFur(cap, hairColor, h === "Buzz" ? { layers: 5, length: 0.004, density: 110, clump: 0.1, scalp: true } : { layers: 14, length: 0.012, density: 95, scalp: true });
     }
     if (h === "Short") {
-      // a short fringe swept forward over the hairline
-      const fringe = mesh(geo("fringe", () => new THREE.SphereGeometry(0.06, 16, 10)), hairM, head, 0, 0.1, 0.05);
-      fringe.scale.set(1.2, 0.38, 0.85);
-      fringe.rotation.x = -0.35;
+      // a short fringe: a strip of longer hair over the front of the cap
+      const fringe = mesh(geo("fringe2", () => new THREE.SphereGeometry(0.105, 18, 6, -0.9, 1.8, Math.PI * 0.18, Math.PI * 0.3)), hairM, head, 0, 0.03, -0.006);
+      fringe.scale.set(0.98, 1.18, 1.09);
+      fringe.rotation.x = -0.25;
+      growFur(fringe, hairColor, { layers: 14, length: 0.02, density: 95, clump: 0.7 });
     }
     if (h === "Mohawk") {
       const strip = mesh(new THREE.BoxGeometry(0.04, 0.07, 0.2), hairM, head, 0, 0.1, -0.015);
@@ -1467,8 +1583,10 @@ export class Fighter3D {
     }
     if (h === "Afro") {
       // a full rounded afro sitting on top and back, hairline just above the brows
-      const fro = mesh(new THREE.SphereGeometry(0.13, 20, 16), hairM, head, 0, 0.09, -0.035);
+      const fro = mesh(new THREE.SphereGeometry(0.115, 20, 16), hairM, head, 0, 0.09, -0.035);
       fro.scale.set(1.12, 0.95, 1.0);
+      // tightly coiled: dense, short-tufted, strongly clumped
+      growFur(fro, hairColor, { layers: 18, length: 0.03, density: 120, clump: 0.9 });
     }
     if (h === "Braids") {
       // cornrows: tight rows running from the hairline to the nape
@@ -1492,8 +1610,9 @@ export class Fighter3D {
       const cap = mesh(capGeo(0.5), hairM, head, 0, 0.03, -0.006);
       cap.scale.set(0.99, 1.2, 1.1);
       cap.rotation.x = -0.25;
-      const locGeo = (len) => geo("loc" + len, () => ropeGeo(0.0125, 0.0105, len, 0.09));
-      const tipGeo = geo("loctip", () => new THREE.SphereGeometry(0.0115, 6, 5));
+      growFur(cap, hairColor, { layers: 5, length: 0.006, density: 40, clump: 0.8 });
+      const locGeo = (len) => geo("loc2" + len, () => ropeGeo(0.0085, 0.007, len, 0.1));
+      const tipGeo = geo("loctip2", () => new THREE.SphereGeometry(0.0078, 6, 5));
       const loc = (angle, y, ring, len, tilt) => {
         const g = new THREE.Group();
         g.position.set(Math.sin(angle) * ring * 0.95, y, Math.cos(angle) * ring * 1.05 - 0.006);
@@ -1504,22 +1623,37 @@ export class Fighter3D {
         mesh(tipGeo, hairM, strand, 0, -len, 0);
       };
       // lower ring: sides and back only, longest at the back
-      for (let i = 0; i < 20; i++) {
-        const a = 0.95 + (i / 19) * (Math.PI * 2 - 1.9);
+      for (let i = 0; i < 32; i++) {
+        const a = 1.25 + (i / 31) * (Math.PI * 2 - 2.5);
         const back = Math.abs(Math.cos(a)) * (Math.cos(a) < 0 ? 1 : 0);
         loc(a, 0.06, 0.098, back > 0.5 ? 0.24 : 0.2, 0.22);
       }
       // upper ring adds volume on top
-      for (let i = 0; i < 14; i++) {
-        const a = 0.7 + (i / 13) * (Math.PI * 2 - 1.4);
+      for (let i = 0; i < 22; i++) {
+        const a = 1.0 + (i / 21) * (Math.PI * 2 - 2.0);
         loc(a, 0.105, 0.08, 0.2, 0.42);
       }
       // a few shorter locs swept over the forehead
-      for (const a of [-0.45, -0.15, 0.2, 0.5]) loc(a, 0.115, 0.075, 0.085, 0.75);
+      // a few short locs falling to the sides of the forehead, clear of the eyes
+      for (const a of [-0.8, -0.6, -0.4, 0.4, 0.6, 0.8]) loc(a, 0.118, 0.07, 0.075, 0.6);
     }
     // facial hair is painted into the skin (see beardShade)
     this.beardType = this.female ? "None" : LOOK_OPTIONS.beard[look.beard];
     this.beardColor = new THREE.Color(LOOK_OPTIONS.hairColor[look.hairColor]);
+  }
+
+  /** Eyebrows: an arched band of hair over each eye, thick near the nose and thinning at the tail. */
+  browShade(x, y, z) {
+    if (z < 0.07 || y < 0.04 || y > 0.075) return 0;
+    const ax = Math.abs(x);
+    if (ax < 0.012 || ax > 0.058) return 0;
+    const t = (ax - 0.012) / 0.046; // 0 at the inner end, 1 at the tail
+    const cy = 0.055 + 0.005 * Math.sin(t * Math.PI) - 0.003 * t + (this.browLift || 0);
+    const half = (0.0055 - 0.003 * t) * (this.female ? 0.75 : 1);
+    const d = Math.abs(y - cy) / half;
+    if (d >= 1) return 0;
+    const fade = Math.min(1, t * 6) * Math.min(1, (1 - t) * 5);
+    return (1 - d * d) * fade * 0.95;
   }
 
   /** How much facial hair covers a point of the face (head space), 0..1. */
