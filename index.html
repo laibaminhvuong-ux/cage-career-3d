@@ -549,6 +549,16 @@ input:focus, select:focus { outline: 2px solid var(--red); outline-offset: 1px; 
   .phone-screen { border-radius: 0; }
 }
 
+/* live hands-on fighting */
+.rt-head { display: flex; align-items: center; gap: 8px; justify-content: center; flex-wrap: wrap; }
+.live-dot { width: 10px; height: 10px; border-radius: 50%; background: #ef4444; box-shadow: 0 0 0 0 rgba(239,68,68,.7); animation: livepulse 1.2s infinite; }
+.live-dot.paused { background: #9ca3af; animation: none; }
+@keyframes livepulse { 0% { box-shadow: 0 0 0 0 rgba(239,68,68,.7); } 70% { box-shadow: 0 0 0 8px rgba(239,68,68,0); } 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0); } }
+.rt-hint { text-align: center; font-size: 12px; color: var(--muted); margin: -2px 0 4px; }
+.act-btn kbd { font: 600 10px ui-monospace, monospace; padding: 1px 4px; border-radius: 4px; background: rgba(255,255,255,.12); margin-left: 2px; }
+.act-btn.queued { outline: 2px solid var(--gold); background: rgba(244,185,66,.18); }
+@media (max-width: 560px) { .act-btn kbd, .rt-hint { display: none; } }
+
 </style>
 </head>
 <body>
