@@ -115,11 +115,25 @@ function tree(kind = "round") {
     }
     return g;
   }
-  at(cyl(0.18, 0.26, 2, "#6b4a2b", 8), 0, 1, 0, g);
-  const leaf = sphere(1.4 + Math.random() * 0.5, kind === "dark" ? "#2d6a3a" : "#3f8f4a");
-  leaf.position.y = 3;
-  leaf.scale.y = 1.15;
-  g.add(leaf);
+  at(cyl(0.16, 0.28, 2.6, "#5d4128", 8), 0, 1.3, 0, g);
+  // branches up into the crown, then leafy clumps in a few shades
+  for (let i = 0; i < 3; i++) {
+    const br = at(cyl(0.05, 0.09, 1.3, "#5d4128", 6), Math.cos(i * 2.1) * 0.3, 2.7, Math.sin(i * 2.1) * 0.3, g);
+    br.rotation.set(Math.sin(i * 2.1) * 0.6, 0, -Math.cos(i * 2.1) * 0.6);
+  }
+  const greens = kind === "dark" ? ["#285f33", "#2f6d3a", "#22532c"] : ["#3f8f4a", "#4c9c50", "#357d40"];
+  const R = 1.3 + Math.random() * 0.5;
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * TAU + Math.random() * 0.5;
+    const leaf = new THREE.Mesh(new THREE.IcosahedronGeometry(R * (0.6 + Math.random() * 0.25), 1), mat(greens[i % 3], { roughness: 0.9, flatShading: true }));
+    leaf.position.set(Math.cos(a) * R * 0.55, 3.2 + Math.random() * 0.8, Math.sin(a) * R * 0.55);
+    leaf.castShadow = true;
+    g.add(leaf);
+  }
+  const top = new THREE.Mesh(new THREE.IcosahedronGeometry(R * 0.75, 1), mat(greens[1], { roughness: 0.9, flatShading: true }));
+  top.position.y = 4.3;
+  top.castShadow = true;
+  g.add(top);
   return g;
 }
 function lamp() {
@@ -1167,6 +1181,13 @@ export class WorldView {
       const b = box(w, h, d, new THREE.MeshStandardMaterial({ map: facade(color, w, h), roughness: 0.85 }));
       b.position.y = h / 2;
       g.add(b);
+      // a cornice and parapet along the roofline, and machinery up top
+      const trim = new THREE.Color(color).multiplyScalar(0.72).getStyle();
+      at(box(w + 0.5, 0.35, d + 0.5, trim), 0, h + 0.05, 0, g);
+      at(box(w + 0.2, 0.5, 0.15, trim), 0, h + 0.45, front * (d / 2 + 0.1), g);
+      at(box(1.6, 0.9, 1.2, "#b8bcc2", { metalness: 0.5, roughness: 0.4 }), -w / 4, h + 0.6, -front * d / 5, g);
+      at(cyl(0.35, 0.35, 0.5, "#9ca3af", 12, { metalness: 0.6 }), w / 4, h + 0.45, -front * d / 6, g);
+      at(box(w, 0.25, 0.3, trim), 0, 0.12, front * (d / 2 + 0.1), g); // plinth
       const sg = sign(text, Math.min(w - 1, 9), 1.4, { bg: signBg, fg: "#fff", font: "bold 64px Arial" });
       sg.position.set(0, h - 1.1, front * (d / 2 + 0.06));
       if (front < 0) sg.rotation.y = Math.PI;
@@ -1178,6 +1199,8 @@ export class WorldView {
         const win = box(2.2, 1.8, 0.1, "#9ccbe6", { roughness: 0.1, metalness: 0.3 });
         win.position.set(x, 1.6, front * (d / 2 + 0.03));
         g.add(win);
+        at(box(2.5, 0.1, 0.3, "#e5e2da"), x, 0.68, front * (d / 2 + 0.12), g); // sill
+        at(box(2.4, 0.12, 0.12, "#2b2b2b"), x, 2.55, front * (d / 2 + 0.08), g); // lintel
       }
       if (extra) extra(g, front);
       S.add(g);
@@ -1295,6 +1318,145 @@ export class WorldView {
       S.add(car);
       this.traffic.push(t);
     });
+    this.dressTown();
+  }
+
+  /**
+   * Street-level detail on top of the basic town: curbs, crosswalks and side-street sidewalks,
+   * benches, bins, hydrants and a bus stop, hedges, flower beds and grass, cars parked at the
+   * curb, and hills on the horizon. Repeated small things are instanced (one draw call each).
+   */
+  dressTown() {
+    const S = this.scene;
+    const concrete = mat("#a9a59c", { roughness: 0.95 });
+    // raised curbs along the main street, sidewalks and curbs on the side streets
+    for (const z of [-5.0, 5.0]) at(box(130, 0.18, 0.22, concrete), 0, 0.09, z, S);
+    for (const x of [-54, 54]) for (const s of [-1, 1]) {
+      const swTex = tiles();
+      swTex.repeat.set(2, 76 / 1.2);
+      at(box(2.4, 0.15, 76, new THREE.MeshStandardMaterial({ map: swTex, roughness: 0.9 })), x + s * 6.2, 0.075, 0, S);
+      at(box(0.22, 0.18, 76, concrete), x + s * 5.0, 0.09, 0, S);
+    }
+    // zebra crossings
+    const white = new THREE.MeshStandardMaterial({ color: "#f3f1ea", roughness: 0.7 });
+    for (const cx of [-30, 0, 30]) for (let i = 0; i < 8; i++) {
+      const st = new THREE.Mesh(new THREE.PlaneGeometry(0.55, 9), white);
+      st.rotation.x = -Math.PI / 2;
+      st.position.set(cx - 2.1 + i * 0.6, 0.021, 0);
+      S.add(st);
+    }
+    // manhole covers
+    for (const x of [-42, -18, 12, 40]) at(new THREE.Mesh(new THREE.CircleGeometry(0.45, 18), mat("#2a2a2a", { metalness: 0.6, roughness: 0.5 })), x, 0.022, x % 2 ? 1.8 : -1.8, S).rotation.x = -Math.PI / 2;
+
+    // street furniture on both sidewalks
+    const bench = () => {
+      const g = new THREE.Group();
+      const wood = mat("#8a5a34", { roughness: 0.8 }), iron = mat("#22252b", { metalness: 0.6, roughness: 0.4 });
+      for (let i = 0; i < 3; i++) at(box(1.8, 0.05, 0.12, wood), 0, 0.46, -0.16 + i * 0.16, g);
+      for (let i = 0; i < 2; i++) at(box(1.8, 0.12, 0.04, wood), 0, 0.68 + i * 0.16, -0.26, g).rotation.x = -0.15;
+      for (const x of [-0.75, 0.75]) {
+        at(box(0.06, 0.46, 0.5, iron), x, 0.23, 0, g);
+        at(box(0.06, 0.45, 0.06, iron), x, 0.7, -0.27, g);
+      }
+      return g;
+    };
+    const bin = () => {
+      const g = new THREE.Group();
+      at(cyl(0.25, 0.22, 0.85, "#2f4f3a", 14, { roughness: 0.6 }), 0, 0.43, 0, g);
+      at(cyl(0.27, 0.27, 0.06, "#1f2a22", 14), 0, 0.88, 0, g);
+      return g;
+    };
+    const hydrant = () => {
+      const g = new THREE.Group();
+      at(cyl(0.12, 0.14, 0.6, "#c81e1e", 12, { roughness: 0.5 }), 0, 0.3, 0, g);
+      at(sphere(0.13, "#c81e1e"), 0, 0.62, 0, g);
+      for (const x of [-1, 1]) at(cyl(0.05, 0.05, 0.12, "#c81e1e", 8), x * 0.15, 0.4, 0, g).rotation.z = Math.PI / 2;
+      return g;
+    };
+    for (let x = -57; x <= 57; x += 12) {
+      for (const z of [-1, 1]) {
+        const e = z * 7.15;
+        if (Math.abs(x + 1.5) < 4 || Math.abs(x - 8) < 4) continue; // keep shop doors clear
+        const b = at(bench(), x + 3, 0.15, e, S);
+        b.rotation.y = z < 0 ? 0 : Math.PI;
+        at(bin(), x + 5, 0.15, e, S);
+      }
+      if ((x / 12) % 2 === 0) at(hydrant(), x - 2, 0.15, -5.45, S);
+    }
+    // a bus stop with a shelter and a timetable
+    const stop = new THREE.Group();
+    const glassM = new THREE.MeshPhysicalMaterial({ color: "#cfe8f7", transparent: true, opacity: 0.3, roughness: 0.05, depthWrite: false });
+    at(box(3.4, 0.08, 1.4, "#3a3f47"), 0, 2.4, 0, stop);
+    at(new THREE.Mesh(new THREE.PlaneGeometry(3.3, 2.2), glassM), 0, 1.25, -0.65, stop);
+    for (const x of [-1.65, 1.65]) at(cyl(0.05, 0.05, 2.4, "#3a3f47", 8), x, 1.2, -0.62, stop);
+    at(bench(), 0, 0, -0.3, stop);
+    at(sign("BUS 12 · CITY CENTER", 1.6, 0.4, { bg: "#0f3d91", fg: "#fff", font: "bold 50px Arial" }), 0, 2.15, 0.71, stop);
+    at(stop, 18, 0.15, 7.2, S).rotation.y = Math.PI;
+
+    // hedges and flower beds in front of the buildings, grass tufts everywhere green
+    const hedgeGeo = new THREE.SphereGeometry(0.5, 10, 7);
+    const hedges = [];
+    for (const [x0, x1, z] of [[-17.5, -6.5, -9.6], [13.5, 22, -9.6], [-6.5, -17.5, 9.6], [13, 3, 9.6], [-42, -26, 9.6]]) {
+      for (let x = Math.min(x0, x1); x <= Math.max(x0, x1); x += 0.75) hedges.push([x, z, 0.75 + Math.random() * 0.25]);
+    }
+    const hedgeMesh = new THREE.InstancedMesh(hedgeGeo, mat("#2f6b34", { roughness: 0.9 }), hedges.length);
+    const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(), sc = new THREE.Vector3();
+    hedges.forEach(([x, z, s], i) => hedgeMesh.setMatrixAt(i, m4.compose(v.set(x, 0.35 * s, z), q.identity(), sc.set(s, 0.8 * s, s))));
+    hedgeMesh.castShadow = hedgeMesh.receiveShadow = true;
+    S.add(hedgeMesh);
+    const flowerCols = ["#f43f5e", "#facc15", "#a855f7", "#fb923c", "#f9fafb"];
+    const flowers = [];
+    for (const [cx, cz] of [[-2, 28], [20, -26], [-50, 26], [46, -24], [-20, -32], [0, -30]]) {
+      at(box(5, 0.25, 2.2, "#6b4a33"), cx, 0.12, cz, S);
+      for (let i = 0; i < 40; i++) flowers.push([cx - 2.3 + Math.random() * 4.6, cz - 0.95 + Math.random() * 1.9, i % flowerCols.length]);
+    }
+    const flowerGeo = new THREE.IcosahedronGeometry(0.12, 0);
+    flowerCols.forEach((c, k) => {
+      const list = flowers.filter((f) => f[2] === k);
+      const fm = new THREE.InstancedMesh(flowerGeo, mat(c, { roughness: 0.7 }), list.length);
+      list.forEach(([x, z], i) => fm.setMatrixAt(i, m4.compose(v.set(x, 0.32 + Math.random() * 0.12, z), q.identity(), sc.set(1, 1, 1))));
+      S.add(fm);
+    });
+    // grass tufts: thin cones scattered over the lawns, never on roads, sidewalks or lots
+    const onHard = (x, z) => Math.abs(z) < 8.4 || Math.abs(Math.abs(x) - 54) < 8.4 || this.solids.some((r) => x > r[0] - 1 && x < r[2] + 1 && z > r[1] - 1 && z < r[3] + 1)
+      || (x > -50 && x < -26 && z > -17 && z < -8);
+    const tuftGeo = new THREE.ConeGeometry(0.035, 0.24, 3);
+    tuftGeo.translate(0, 0.12, 0);
+    const tufts = [];
+    for (let i = 0; i < 16000 && tufts.length < 7000; i++) {
+      const x = (Math.random() - 0.5) * 150, z = (Math.random() - 0.5) * 96;
+      if (!onHard(x, z)) tufts.push([x, z]);
+    }
+    const tuftMesh = new THREE.InstancedMesh(tuftGeo, mat("#4f8f3c", { roughness: 1 }), tufts.length);
+    const col = new THREE.Color();
+    tufts.forEach(([x, z], i) => {
+      q.setFromAxisAngle(v.set(Math.random() - 0.5, 0, Math.random() - 0.5).normalize(), Math.random() * 0.35);
+      const s = 0.7 + Math.random() * 0.8;
+      tuftMesh.setMatrixAt(i, m4.compose(v.set(x, 0, z), q, sc.set(s, s, s)));
+      tuftMesh.setColorAt(i, col.setHSL(0.26 + Math.random() * 0.06, 0.42, 0.36 + Math.random() * 0.14));
+    });
+    S.add(tuftMesh);
+
+    // cars parked along the curb
+    [["sedan", "#7f1d1d", -46], ["hatch", "#e5e7eb", -21], ["suv", "#1e3a8a", 40], ["pickup", "#3f6212", 46], ["muscle", "#ca8a04", -4]].forEach(([id, c, x], i) => {
+      const car = makeCar(id, c);
+      const z = i % 2 ? 4.1 : -4.1;
+      car.position.set(x, 0, z);
+      car.rotation.y = z < 0 ? Math.PI / 2 : -Math.PI / 2;
+      S.add(car);
+      this.solid(x - 2.6, z - 1.1, x + 2.6, z + 1.1);
+    });
+
+    // rolling hills on the horizon, softened by the haze
+    const hillM = mat("#5c8a55", { roughness: 1 });
+    for (let i = 0; i < 22; i++) {
+      const a = (i / 22) * TAU + Math.random() * 0.2, r = 118 + Math.random() * 10;
+      const hill = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 8, 0, TAU, 0, Math.PI / 2), hillM);
+      hill.scale.set(18 + Math.random() * 16, 7 + Math.random() * 10, 14 + Math.random() * 10);
+      hill.position.set(Math.cos(a) * r, -0.5, Math.sin(a) * r);
+      S.add(hill);
+    }
+    this.scene.fog.far = 170;
   }
 
   /** Rebuilds the fighter, home, garage, pets and family when the life changes. info: { look, weightClass, style, life } */
