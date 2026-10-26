@@ -68,7 +68,12 @@ export function createStage() {
   let pm = null;
   try {
     pm = new THREE.PMREMGenerator(renderer);
-    setFighterEnv(pm.fromScene(new RoomEnvironment(), 0.04).texture);
+    const room = new RoomEnvironment();
+    try {
+      setFighterEnv(pm.fromScene(room, 0.04).texture);
+    } finally {
+      room.dispose();
+    }
   } catch (e) {
     console.warn("No reflection map", e);
   }
@@ -83,6 +88,8 @@ export function createStage() {
   } catch (e) {
     console.warn("No sky reflections", e);
   }
+  // The generated textures stay alive; the generator's temporary GPU buffers do not.
+  if (pm) pm.dispose();
   let view = null;
   let host = null;
   const clock = new THREE.Clock();
@@ -94,6 +101,11 @@ export function createStage() {
     canvas.style.width = "100%";
     canvas.style.height = "100%";
     view.camera.aspect = w / h;
+    if (view === arena) {
+      // Keep both fighters in portrait shots without moving through the fence.
+      const portraitScale = Math.max(1, 0.95 / view.camera.aspect);
+      view.camera.fov = Math.min(85, THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(42 / 2)) * portraitScale)));
+    }
     view.camera.updateProjectionMatrix();
   };
   const ro = new ResizeObserver(resize);
@@ -117,12 +129,20 @@ export function createStage() {
     drag.x = e.clientX;
   });
   canvas.addEventListener("pointerup", (e) => { if (ownUp(e)) return; drag = null; });
-  canvas.addEventListener("pointercancel", () => { drag = null; });
+  const cancelDrag = () => {
+    drag = null;
+    // Cancel a world drag without treating it as a tap-to-walk command.
+    world.drag = null;
+  };
+  canvas.addEventListener("pointercancel", cancelDrag);
+  canvas.addEventListener("lostpointercapture", cancelDrag);
+  window.addEventListener("blur", cancelDrag);
 
   function show(container, which) {
     const v = which === "arena" ? arena : which === "world" ? world : preview;
     world.active = v === world;
     if (host === container && view === v) return;
+    cancelDrag();
     if (v === world) world.enter();
     if (host) ro.unobserve(host);
     host = container;
@@ -135,10 +155,16 @@ export function createStage() {
   // frame rate: capped at 30 or 60, or as fast as the screen allows (0); onFps reports the measured rate
   let fpsCap = 0, lastFrame = 0, frames = 0, fpsSince = performance.now(), onFps = null;
   renderer.setAnimationLoop((now) => {
+    if (!view || !host || !host.isConnected || host.offsetParent === null || document.hidden) {
+      clock.getDelta();
+      lastFrame = 0;
+      frames = 0;
+      fpsSince = now;
+      return;
+    }
     if (fpsCap && now - lastFrame < 1000 / fpsCap - 2) return;
     lastFrame = now;
     const dt = Math.min(clock.getDelta(), 0.1);
-    if (!view || !host || !host.isConnected || host.offsetParent === null || document.hidden) return;
     view.update(dt);
     renderer.toneMappingExposure = view.exposure || 1.05;
     renderer.render(view.scene, view.camera);
@@ -234,6 +260,9 @@ class PreviewView {
     key.position.set(1.5, 5.5, 3);
     key.castShadow = true;
     key.shadow.mapSize.set(1024, 1024);
+    key.shadow.normalBias = 0.015;
+    key.shadow.camera.near = 0.5;
+    key.shadow.camera.far = 12;
     scene.add(key, key.target);
     const rimR = new THREE.PointLight(RED, 9, 8, 1.5);
     rimR.position.set(-2.5, 1.8, -1.5);
@@ -405,7 +434,23 @@ function buildCage(scene) {
       g.restore();
     }
   });
-  const floor = new THREE.Mesh(new THREE.CircleGeometry(R + 0.02, 8), new THREE.MeshStandardMaterial({ map: mat, roughness: 0.82 }));
+  // A separate linear height map preserves the printed sponsors while grazing
+  // light picks out the fabric weave. Repeating it avoids another large texture.
+  const weave = canvasTexture(128, 128, (g, w, h) => {
+    g.fillStyle = "#808080";
+    g.fillRect(0, 0, w, h);
+    for (let y = 0; y < h; y += 8) for (let x = 0; x < w; x += 8) {
+      const over = ((x + y) / 8) % 2 === 0;
+      g.fillStyle = "#a0a0a0";
+      g.fillRect(x + 1, y + 1, over ? 6 : 3, over ? 3 : 6);
+      g.fillStyle = "#686868";
+      g.fillRect(x + 5, y + 5, 2, 2);
+    }
+  });
+  weave.colorSpace = THREE.NoColorSpace;
+  weave.wrapS = weave.wrapT = THREE.RepeatWrapping;
+  weave.repeat.set(24, 24);
+  const floor = new THREE.Mesh(new THREE.CircleGeometry(R + 0.02, 8), new THREE.MeshStandardMaterial({ map: mat, bumpMap: weave, bumpScale: 0.012, roughness: 0.9 }));
   floor.rotation.x = -Math.PI / 2;
   floor.rotation.z = Math.PI / 8;
   floor.receiveShadow = true;
@@ -746,11 +791,19 @@ class ArenaView {
     key.position.set(0, 10, 0.5);
     key.castShadow = true;
     key.shadow.mapSize.set(1536, 1536);
-    key.shadow.bias = -0.002;
-    key.shadow.normalBias = 0.03;
+    key.shadow.bias = -0.0003;
+    key.shadow.normalBias = 0.02;
     key.shadow.camera.near = 4;
     key.shadow.camera.far = 14;
     scene.add(key, key.target);
+    // Broad neutral fills keep faces readable from both broadcast angles,
+    // while the red/blue lights still define the corners. No extra shadow maps.
+    for (const [x, z] of [[-4, 3], [4, -3]]) {
+      const fill = new THREE.SpotLight("#dce8ff", 14, 18, 0.8, 0.9, 1.2);
+      fill.position.set(x, 5, z);
+      fill.target.position.set(0, 1, 0);
+      scene.add(fill, fill.target);
+    }
     for (const [x, z, c] of [[-6, -4, RED], [6, 4, BLUE]]) {
       const rim = new THREE.SpotLight(c, 40, 16, 0.5, 0.8, 1.2);
       rim.position.set(x, 5, z);
