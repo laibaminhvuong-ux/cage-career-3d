@@ -8,7 +8,8 @@ const CACHE_KEY = "cc3d_tr_";
 
 /** Hand-written translations: [English, Tiếng Việt, Español, Português, Français]. {x} matches any text. */
 const BUILT_IN = ["vi", "es", "pt", "fr"];
-const ROWS = [
+/** Exported so `tools/check_i18n.mjs` can verify the table and the app shell's coverage. */
+export const ROWS = [
   ["Saves", "Lưu trữ", "Partidas", "Salvamentos", "Sauvegardes"],
   ["Hall of Fame", "Đại sảnh Danh vọng", "Salón de la Fama", "Hall da Fama", "Panthéon"],
   ["Life", "Cuộc sống", "Vida", "Vida", "Vie"],
@@ -194,9 +195,27 @@ const ROWS = [
   ["needs {x} fame", "cần {x} danh tiếng", "requiere {x} de fama", "precisa de {x} de fama", "requiert {x} de célébrité"],
   ["{x} rankings", "Bảng xếp hạng {x}", "Ranking de {x}", "Ranking do {x}", "Classement {x}"],
   ["All promotions & divisions", "Mọi giải đấu & hạng cân", "Todas las promotoras y divisiones", "Todas as organizações e divisões", "Toutes les organisations et catégories"],
-  ["{x} rankings", "Bảng xếp hạng {x}", "Ranking de {x}", "Ranking do {x}", "Classement {x}"],
-  ["YOUR DIVISION", "HẠNG CỦA BẠN", "TU DIVISIÓN", "SUA DIVISÃO", "TA CATÉGORIE"],
   ["All {x} divisions", "Tất cả hạng cân {x}", "Todas las divisiones de {x}", "Todas as divisões do {x}", "Toutes les catégories {x}"],
+
+  // App shell (web/index.html): the loading screen, the top bar, the yes/no dialog, the world help
+  // line and the arena toolbar. Hand-written so the shell reads correctly even offline.
+  ["Loading your fighters…", "Đang tải võ sĩ của bạn…", "Cargando tus peleadores…", "Carregando seus lutadores…", "Chargement de tes combattants…"],
+  ["Start at 21 on the regional circuit with nothing but a garage gym and a dream. Win, earn a Contender Series shot, sign with the GFC and chase the belt.", "Bắt đầu ở tuổi 21 trên đấu trường khu vực với chỉ một phòng tập ga-ra và một giấc mơ. Thắng, giành suất Contender Series, ký với GFC và theo đuổi chiếc đai.", "Empieza a los 21 en el circuito regional con solo un gimnasio de garaje y un sueño. Gana, consigue una plaza en el Contender Series, ficha por la GFC y persigue el cinturón.", "Comece aos 21 no circuito regional com apenas uma academia de garagem e um sonho. Vença, conquiste uma vaga no Contender Series, assine com a GFC e persiga o cinturão.", "Commence à 21 ans sur le circuit régional avec pour seul bagage un garage et un rêve. Gagne, décroche une place au Contender Series, signe à la GFC et vise la ceinture."],
+  ["e.g. Alex Rivera", "ví dụ: Alex Rivera", "p. ej.: Alex Rivera", "ex.: Alex Rivera", "ex. : Alex Rivera"],
+  ["e.g. The Storm", "ví dụ: The Storm", "p. ej.: The Storm", "ex.: The Storm", "ex. : The Storm"],
+  ["3D preview unavailable on this device", "Thiết bị này không xem trước được 3D", "Vista previa 3D no disponible en este dispositivo", "Prévia 3D indisponível neste dispositivo", "Aperçu 3D indisponible sur cet appareil"],
+  ["Tap the ground or use WASD to walk · Shift to run · drag to look around", "Chạm vào mặt đất hoặc dùng WASD để đi · Shift để chạy · kéo để nhìn quanh", "Toca el suelo o usa WASD para caminar · Shift para correr · arrastra para mirar alrededor", "Toque no chão ou use WASD para andar · Shift para correr · arraste para olhar em volta", "Touche le sol ou utilise WASD pour marcher · Maj pour courir · fais glisser pour regarder autour"],
+  ["Yes", "Có", "Sí", "Sim", "Oui"],
+  ["Cancel", "Hủy", "Cancelar", "Cancelar", "Annuler"],
+  ["Close", "Đóng", "Cerrar", "Fechar", "Fermer"],
+  ["Phone", "Điện thoại", "Teléfono", "Celular", "Téléphone"],
+  ["Toggle sound", "Bật/tắt âm thanh", "Activar o desactivar el sonido", "Ligar/desligar o som", "Activer ou couper le son"],
+  ["How fights work", "Trận đấu diễn ra thế nào", "Cómo funcionan las peleas", "Como funcionam as lutas", "Comment se déroulent les combats"],
+  ["Skip the announcements", "Bỏ qua phần giới thiệu", "Saltar los anuncios", "Pular os anúncios", "Passer les annonces"],
+  ["Playback speed", "Tốc độ phát", "Velocidad de reproducción", "Velocidade de reprodução", "Vitesse de lecture"],
+  ["Instant replay (pauses fight)", "Phát lại tức thì (tạm dừng trận)", "Repetición instantánea (pausa la pelea)", "Replay instantâneo (pausa a luta)", "Ralenti instantané (met le combat en pause)"],
+  ["Show the full play-by-play", "Xem toàn bộ diễn biến", "Mostrar el relato completo", "Mostrar o relato completo", "Afficher tout le déroulé"],
+  ["Replay", "Phát lại", "Repetición", "Replay", "Ralenti"],
 ];
 
 // ~130 world languages: [code, name in that language]
