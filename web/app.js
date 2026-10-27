@@ -1019,9 +1019,13 @@ function renderModal() {
       <p class="muted" style="font-size:12px">Adult ring-card presenters wear sports bras and shorts by default. Turn on for bikini outfits at media day and between rounds. Saved on this device.</p>
       <div class="label">🖥️ Graphics</div>
       <div class="set-row"><span>Graphics quality</span><div class="btn-row" style="margin:0">
-        ${[["low", "Low"], ["medium", "Medium"], ["high", "High"]].map(([q, l]) => `<button class="btn small ${stage && stage.getQuality() === q ? "gold" : "ghost"}" data-quality="${q}">${l}</button>`).join("")}
+        ${[["auto", "Auto"], ["low", "Low"], ["medium", "Medium"], ["high", "High"]].map(([q, l]) => `<button class="btn small ${stage && stage.getQuality() === q ? "gold" : "ghost"}" data-quality="${q}">${l}</button>`).join("")}
       </div></div>
-      <p class="muted" style="font-size:12px;margin:-2px 0 6px">High adds ambient occlusion (soft contact shadows). Medium keeps the glow, grading and smooth edges. Low is the fastest.</p>
+      ${stage && stage.getQuality() === "auto" && stage.getAutoStatus() ? (() => {
+        const a = stage.getAutoStatus();
+        return `<p class="muted" style="font-size:12px;margin:-2px 0 6px">⚡ Auto keeps the game smooth on this device. Right now: <b style="color:var(--text)">${({ low: "Low", medium: "Medium", high: "High" })[a.level]}</b> effects at <b style="color:var(--text)">${a.scale}%</b> resolution.</p>`;
+      })() : ""}
+      <p class="muted" style="font-size:12px;margin:-2px 0 6px">Auto watches your frame rate and adjusts effects and resolution by itself. High adds ambient occlusion (soft contact shadows). Medium keeps the glow, grading and smooth edges. Low is the fastest.</p>
       <div class="set-row"><span>Frame rate</span><div class="btn-row" style="margin:0">
         ${[[30, "30 FPS"], [60, "60 FPS"], [0, "Max"]].map(([n, l]) => `<button class="btn small ${gfx.fps === n ? "gold" : "ghost"}" data-fps="${n}">${l}</button>`).join("")}
       </div></div>

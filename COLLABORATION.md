@@ -215,3 +215,33 @@ Handover, needs a file I do not own:
 ## Claude — integrated Codex (walkouts/replays/corner/film) + Freebuff (i18n)
 
 Reviewed both passes. All 9 checks PASS (stage, post, fighter_dispose, belts, events, presentation, fight_features, i18n). Applied Freebuff's handover: `translate="no"` on the boot-mark in index.html, and check_i18n listed in README.md (Freebuff can now shrink the BRAND exemption in check_i18n.mjs). Committed each agent's work under its own name, built from committed sources, deployed. All files released — everyone may claim again.
+
+## Freebuff — claiming (trophies & achievements)
+
+User asked for trophies/achievements, so Freebuff is crossing lanes this pass into shared files. Claiming: new `web/achievements.js` (definitions + evaluator) and `web/trophies-ui.js` (screen HTML), plus **small additive hooks** in `web/engine.js` (one import, `trophies` in `migrate()`, one evaluate call at the end of `resolveFight()`, one in `retire()`, one line in `toJson()`), `web/app.js` (import, one modal branch, one click handler, a block in the fight-result panel), `web/index.html` (top-bar 🏆 button), `web/style.css` (trophy styles), `web/i18n.js` (rows for the new shell strings) and new `tools/check_achievements.mjs`. No `dist/` or build edits; no gameplay-rule changes — the engine edits only record unlocks.
+
+Claude: these touch your lane (engine/app/CSS). Every edit is additive and small; `resolveFight()`'s existing logic and `lastResult` are untouched apart from gaining a `trophies` field, and saves stay compatible (`migrate()` initialises `trophies` for old careers). Please review before committing, and tell me here if you'd rather own the engine/app wiring yourself so I hand over the two new modules instead.
+
+## Freebuff — released (trophies & achievements)
+
+Files: new `web/achievements.js` (24 trophy definitions + evaluator + screen data), new `web/trophies-ui.js` (screen HTML), new `tools/check_achievements.mjs`; hooks in `web/engine.js` (6 added lines: one import, `trophies` in `migrate()`, `evaluateTrophies` at the end of `resolveFight()` and in `retire()`, one line in `toJson()`); `web/app.js` (import, one modal branch, one click handler, one line in the fight result panel); `web/index.html` (top-bar 🏆 button); `web/style.css` (trophy styles); `web/i18n.js` (3 shell rows); `README.md` (feature bullet + this check in the list). No `dist/` or build edits. Left uncommitted for the integrator.
+
+What it does: 24 trophies in four groups (Career, In the cage, The belt, Money & fame) — first fight/win, first finish, first submission, 5 KOs, 5 subs, 3- and 7-fight streaks, a performance bonus and five of them, beating your rival, a PPV main event, GFC contract, top 15, top 3, title, first defence, three defences, two divisions, 25 fights, retirement, Hall of Famer, 100 fame, $1m earned. Unlocks are stored on the career (`career.trophies` as `{ id, date }`) so they save with it; the fight that earns them announces them on the result panel, and the full shelf (earned + locked, with counts per group) opens from 🏆 in the top bar.
+
+Save compatibility: `migrate()` adds an empty `trophies` list, so careers saved before this feature load unchanged; nothing was renamed or removed. No gameplay rule changed — `resolveFight()` computes exactly what it did before, then records unlocks.
+
+Validated with `node tools/check_achievements.mjs` (PASS): trophy table is well formed, ids unique, every trophy reachable and none free (checked against a maximal and an empty snapshot); an old save with the field deleted loads and migrates to an empty list; 21 fabricated milestones each earn their trophy exactly once and are never announced twice; trophies survive `packCareer`/`unpackCareer` and the screen state matches the career; a fight played through the real `Game.call` API to a real finish announced and recorded its trophies; the screen renders one card per trophy, all four groups, escaped text; and the index.html button, app.js handler/modal branch and result-panel line are present. All nine checks PASS (stage, post, fighter_dispose, belts, events, presentation, fight_features, i18n, achievements), `app.js`/`engine.js` and both new modules parse as ES modules, and the whole `web/` import graph resolves (51 imports, 22 modules, 0 unresolved).
+
+`check_i18n.mjs` also changed: Claude's boot-mark `translate="no"` fix made the CAGE/CAREER exemption unnecessary, so it and its stale comment are gone and both brand marks are now asserted; it still PASSes (Trophies/Earned/Locked got hand-written rows).
+
+Not verified: this machine has no Chromium, so there is no visual/DOM check of the modal or the new CSS — the renderer output, escaping and wiring are covered by the check instead. Bundling and deploying remain the integrator's.
+
+Handovers (optional, both in my lane): trophy names/descriptions are machine-translated for the four built-in languages (hand-writing them would be 24 × 4 rows); and retirement/Hall-of-Fame trophies are recorded but announced only on the shelf, not in a toast.
+
+## Claude — integrated Freebuff trophies; claiming (auto-quality)
+
+Committed Freebuff's trophies pass (all its checks PASS). Now claiming web/post3d.js, web/arena3d.js (createStage render loop only), web/app.js (Settings graphics row), web/i18n.js (2 rows) for an Auto graphics-quality mode.
+
+## Claude — released (auto-quality)
+
+Settings → Graphics quality now has Auto (the default when nothing is saved): createStage watches frame times and walks a ladder of [effects level, render resolution] steps, down fast when slow, back up after ~12 s of headroom, never back to a step that failed twice. post3d.js: QUALITY_MODES, getQuality() returns the setting, getLevel()/setLevel() the drawn level. All checks PASS; browser-verified stepping down on CPU rendering. Files released.

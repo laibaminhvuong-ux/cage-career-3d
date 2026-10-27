@@ -160,6 +160,49 @@ export function createStage() {
 
   // frame rate: capped at 30 or 60, or as fast as the screen allows (0); onFps reports the measured rate
   let fpsCap = 0, lastFrame = 0, frames = 0, fpsSince = performance.now(), onFps = null;
+  // Auto quality: a ladder from the richest look to the lightest. Each step is an effects level
+  // plus a render resolution (fewer pixels is often the biggest saving). The game watches its
+  // own frame rate and steps down when it can't keep up, and back up when there's headroom.
+  const maxPr = Math.min(window.devicePixelRatio || 1, 1.75);
+  const LADDER = [["high", maxPr], ["high", Math.min(maxPr, 1.25)], ["medium", Math.min(maxPr, 1.25)], ["medium", 1], ["low", 1], ["low", 0.8], ["low", 0.65]]
+    .filter((s, i, a) => i === 0 || s[0] !== a[i - 1][0] || s[1] !== a[i - 1][1]);
+  const small = typeof screen !== "undefined" && typeof matchMedia === "function" && (Math.min(screen.width, screen.height) < 700 || matchMedia("(pointer: coarse)").matches);
+  const auto = { step: Math.min(LADDER.length - 1, small ? Math.max(0, LADDER.findIndex((s) => s[0] === "medium" && s[1] <= 1)) : 1), sum: 0, n: 0, since: 0, calm: 0, fails: {} };
+  const applyStep = () => {
+    const [level, pr] = LADDER[auto.step];
+    if (post) post.setLevel(level);
+    if (Math.abs(renderer.getPixelRatio() - pr) > 0.01) {
+      renderer.setPixelRatio(pr);
+      resize();
+    }
+  };
+  const autoOn = () => !!post && post.getQuality() === "auto";
+  /** Called every rendered frame with the time since the last one. */
+  const autoTune = (now, ms) => {
+    // (a gap over 1.5 s is the tab being away, not the game being slow)
+    if (!autoOn() || ms <= 0 || ms > 1500) return;
+    auto.sum += ms;
+    auto.n++;
+    if (now - auto.since < 2000 || auto.n < 2) return;
+    const fps = (1000 * auto.n) / auto.sum;
+    auto.sum = auto.n = 0;
+    auto.since = now;
+    const target = fpsCap ? fpsCap * 0.9 : 55;
+    if (fps < target * 0.82 && auto.step < LADDER.length - 1) {
+      // too slow: step down (two steps when it's struggling badly), and remember that the richer step didn't hold up
+      auto.fails[auto.step] = (auto.fails[auto.step] || 0) + 1;
+      auto.step = Math.min(LADDER.length - 1, auto.step + (fps < target * 0.45 ? 2 : 1));
+      auto.calm = 0;
+      applyStep();
+    } else if (fps >= target * 0.97 && auto.step > 0) {
+      // smooth for a while: try one step richer (unless that step already failed twice)
+      if (++auto.calm >= 6 && (auto.fails[auto.step - 1] || 0) < 2) {
+        auto.step--;
+        auto.calm = 0;
+        applyStep();
+      }
+    } else auto.calm = 0;
+  };
   renderer.setAnimationLoop((now) => {
     if (!view || !host || !host.isConnected || host.offsetParent === null || document.hidden) {
       clock.getDelta();
@@ -169,6 +212,7 @@ export function createStage() {
       return;
     }
     if (fpsCap && now - lastFrame < 1000 / fpsCap - 2) return;
+    if (lastFrame) autoTune(now, now - lastFrame);
     lastFrame = now;
     const dt = Math.min(clock.getDelta(), 0.1);
     view.update(dt);
@@ -185,9 +229,21 @@ export function createStage() {
   const setFps = (cap) => { fpsCap = cap === 30 || cap === 60 ? cap : 0; };
   const watchFps = (fn) => { onFps = fn; };
 
-  const setQuality = (q) => post && post.setQuality(q);
+  const setQuality = (q) => {
+    if (!post) return;
+    post.setQuality(q);
+    if (q === "auto") applyStep();
+    else if (Math.abs(renderer.getPixelRatio() - maxPr) > 0.01) {
+      // a fixed setting renders at full resolution again
+      renderer.setPixelRatio(maxPr);
+      resize();
+    }
+  };
   const getQuality = () => (post ? post.getQuality() : "low");
-  return { preview, arena, world, show, setFps, watchFps, setQuality, getQuality };
+  /** What Auto is doing right now, for the Settings screen. */
+  const getAutoStatus = () => (post ? { level: post.getLevel(), scale: Math.round((renderer.getPixelRatio() / maxPr) * 100) } : null);
+  if (autoOn()) applyStep();
+  return { preview, arena, world, show, setFps, watchFps, setQuality, getQuality, getAutoStatus };
 }
 
 /** A promotion's logo: its badge shape in its colors with the wordmark across it. r = radius. */

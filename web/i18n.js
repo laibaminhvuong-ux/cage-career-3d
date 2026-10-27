@@ -175,6 +175,7 @@ export const ROWS = [
   ["Commentary voice", "Giọng bình luận", "Voz de los comentaristas", "Voz dos comentaristas", "Voix des commentateurs"],
   ["Graphics", "Đồ họa", "Gráficos", "Gráficos", "Graphismes"],
   ["Graphics quality", "Chất lượng đồ họa", "Calidad gráfica", "Qualidade gráfica", "Qualité graphique"],
+  ["Auto", "Tự động", "Automática", "Automática", "Auto"],
   ["Low", "Thấp", "Baja", "Baixa", "Basse"],
   ["Medium", "Trung bình", "Media", "Média", "Moyenne"],
   ["High", "Cao", "Alta", "Alta", "Haute"],

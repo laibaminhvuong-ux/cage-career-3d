@@ -12,6 +12,8 @@ import { GTAOPass } from "./vendor/post/GTAOPass.js";
 
 const STORE_KEY = "cc3d_quality";
 export const QUALITIES = ["low", "medium", "high"];
+/** What the Settings offer: Auto picks a level (and a render resolution) to keep each device smooth. */
+export const QUALITY_MODES = ["auto", ...QUALITIES];
 
 const GRADE = {
   uniforms: {
@@ -47,9 +49,11 @@ function defaultQuality() {
 }
 
 export function createPost(renderer) {
-  let quality = null;
-  try { quality = localStorage.getItem(STORE_KEY); } catch { /* storage blocked */ }
-  if (!QUALITIES.includes(quality)) quality = defaultQuality();
+  let mode = null;
+  try { mode = localStorage.getItem(STORE_KEY); } catch { /* storage blocked */ }
+  if (!QUALITY_MODES.includes(mode)) mode = "auto";
+  // the level actually drawn: the chosen one, or Auto's current pick
+  let quality = mode === "auto" ? defaultQuality() : mode;
   const size = new THREE.Vector2(1, 1);
   const chains = new Map(); // view -> { composer, bloom, ao, grade }
 
@@ -118,11 +122,20 @@ export function createPost(renderer) {
         c.bloom.resolution.set(w / 2, h / 2);
       }
     },
-    getQuality: () => quality,
+    /** The setting ("auto", "low", "medium", "high"). */
+    getQuality: () => mode,
+    /** The level being drawn right now. */
+    getLevel: () => quality,
     setQuality(q) {
+      if (!QUALITY_MODES.includes(q)) return;
+      mode = q;
+      try { localStorage.setItem(STORE_KEY, q); } catch { /* ignore */ }
+      if (q !== "auto") this.setLevel(q);
+    },
+    /** Auto (or a fixed setting) switches the drawn level; the old effect chains are freed. */
+    setLevel(q) {
       if (!QUALITIES.includes(q) || q === quality) return;
       quality = q;
-      try { localStorage.setItem(STORE_KEY, q); } catch { /* ignore */ }
       drop();
     },
   };
