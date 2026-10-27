@@ -8,7 +8,7 @@ import { WorldView } from "./world3d.js";
 import { RoomEnvironment } from "./vendor/RoomEnvironment.js";
 import { createPost } from "./post3d.js";
 import { RingCardPresenter } from "./ringcard3d.js";
-import { cornerCall, finishShout, interviewCall, reaction, resultCall, roundCall } from "./announcer.js";
+import { commentary, cornerCall, finishShout, interviewCall, reaction, resultCall, roundCall } from "./announcer.js";
 
 const R = 4.4; // cage radius to the fence posts
 const RED = "#d62828";
@@ -1304,8 +1304,14 @@ class ArenaView {
     }
 
     if (!instant) {
+      // the big moments always get called (cutting into whatever was being said); otherwise the
+      // commentary team keeps talking through the fight whenever nobody's mid-sentence
       const call = reaction(e, f);
-      if (call && !audio.talking()) audio.say(call);
+      if (call && (e.type === "kd" || e.type === "big" || !audio.talking())) audio.say(call);
+      else if (!audio.talking() && Math.random() < 0.55) {
+        const line = commentary(e, f);
+        if (line) audio.say(line);
+      }
     }
 
     // keep the position in step with the engine

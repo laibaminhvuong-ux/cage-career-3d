@@ -4,7 +4,7 @@ import * as audio from "./audio.js";
 import { LOOK_OPTIONS, SHORTS_NAMES, TATTOO_REGIONS, lookString, parseLook, randomLook } from "./fighter3d.js";
 import { Game, GameError } from "./engine.js";
 import { openStore, onSaveError } from "./store.js";
-import { introCall } from "./announcer.js";
+import { introCall, speakerFor } from "./announcer.js";
 import { startTour } from "./tutorial.js";
 import { LANGUAGES, getLang, isBuiltIn, setLang, startI18n } from "./i18n.js";
 
@@ -74,7 +74,8 @@ audio.onSay((text, mood) => {
     el.className = "announcer-line";
     return;
   }
-  el.textContent = (mood === "call" ? "🎙 " : "🎤 ") + text;
+  const who = speakerFor(mood);
+  el.textContent = (mood === "call" || mood === "color" || mood === "analyst" ? "🎙 " : "🎤 ") + (who ? who.replace(/"[^"]*" /, "") + ": " : "") + text;
   el.className = "announcer-line show " + (mood || "");
 });
 if (stage) {

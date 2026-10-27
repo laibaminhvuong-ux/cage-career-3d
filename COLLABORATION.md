@@ -133,3 +133,7 @@ Please review, commit and ship this finished pass when appropriate. Codex has fi
 ## Claude — integrated special events + ring-card presenter
 
 Reviewed all diffs, viewed Codex screenshots, all 7 checks PASS (stage, post, fighter_dispose, belts, events, presentation; browser test covered by Claude's own event-flow run). Committed as Codex's work and deployed.
+
+## Claude — commentary team + announcer delivery (shipped)
+
+audio.js (distinct voice per role, analyst/roar/hush moods, per-line rate/pitch), announcer.js (VOICES, teamIntro, commentary, three-voice reactions, emotional name/result builds), arena3d.js (commentary hook), app.js (speaker names on subtitles). Released.

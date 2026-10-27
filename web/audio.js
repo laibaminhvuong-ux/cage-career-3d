@@ -556,8 +556,13 @@ const MOODS = {
   hype: { rate: 0.74, pitch: 0.95, volume: 1 },
   shout: { rate: 0.68, pitch: 1.1, volume: 1 },
   tense: { rate: 0.78, pitch: 0.55, volume: 0.9 },
-  call: { rate: 1.12, pitch: 1.15, volume: 1 },
-  color: { rate: 1.02, pitch: 0.82, volume: 0.95 },
+  // the commentary team: fast play-by-play, a deep slow ex-champion, an excitable analyst
+  call: { rate: 1.14, pitch: 1.12, volume: 1 },
+  color: { rate: 0.94, pitch: 0.6, volume: 0.95 },
+  analyst: { rate: 1.18, pitch: 1.38, volume: 1 },
+  // the announcer at full stretch: drawn-out names, a hushed build before the big reveal
+  roar: { rate: 0.55, pitch: 1.2, volume: 1 },
+  hush: { rate: 0.8, pitch: 0.5, volume: 0.75 },
   ref: { rate: 0.96, pitch: 0.7, volume: 0.9 },
   coach: { rate: 1.08, pitch: 0.95, volume: 1 },
   interview: { rate: 1.0, pitch: 1.05, volume: 0.95 },
@@ -571,14 +576,22 @@ export function onSay(fn) {
   onSayHook = fn;
 }
 
+// everyone who speaks gets their own voice where the device has enough: the announcer first, then the
+// three commentators (never the announcer's voice when there are two or more), then the rest
+const ROLES = ["announcer", "call", "color", "analyst", "ref", "interview", "coach", "fighter"];
+let voiceMap = null;
 function pickVoice(kind) {
   const voices = speechSynthesis.getVoices();
   const en = voices.filter((x) => /^en/i.test(x.lang));
-  // a different voice per person where the device has enough of them
-  const nth = { call: 1, color: 2, ref: 3, coach: 4, interview: 5, fighter: 6 }[kind];
-  if (nth && en.length > nth) return en[nth];
-  if (kind === "call") return en.find((x) => /GB|AU/i.test(x.lang)) || en[1] || en[0];
-  return en.find((x) => /en[-_](US)/i.test(x.lang) && /male|david|daniel|alex|fred|guy/i.test(x.name)) || en.find((x) => /en[-_]US/i.test(x.lang)) || en[0];
+  if (!en.length) return null;
+  if (!voiceMap || voiceMap.n !== en.length) {
+    const anc = en.find((x) => /en[-_](US)/i.test(x.lang) && /male|david|daniel|alex|fred|guy/i.test(x.name)) || en.find((x) => /en[-_]US/i.test(x.lang)) || en[0];
+    // spread the commentators across accents too (US, UK, Australia...) so they sound like different people
+    const rest = en.filter((v) => v !== anc).sort((a, b) => (a.lang === anc.lang) - (b.lang === anc.lang));
+    const order = [anc, ...rest];
+    voiceMap = { n: en.length, map: Object.fromEntries(ROLES.map((r, i) => [r, order[i % order.length]])) };
+  }
+  return voiceMap.map[kind] || voiceMap.map.announcer;
 }
 
 function nextLine() {
@@ -598,8 +611,11 @@ function nextLine() {
     try {
       const u = new SpeechSynthesisUtterance(seg.t);
       Object.assign(u, MOODS[seg.mood] || MOODS.calm);
+      // a line can push its own delivery further (rising pitch through a build-up, a slower roar)
+      if (seg.rate) u.rate = Math.max(0.3, Math.min(2, u.rate * seg.rate));
+      if (seg.pitch) u.pitch = Math.max(0, Math.min(2, u.pitch * seg.pitch));
       u.volume = Math.min(1, u.volume * vol.voice * vol.master);
-      const v = pickVoice(MOODS[seg.mood] && ["call", "color", "ref", "coach", "interview", "fighter"].includes(seg.mood) ? seg.mood : "announcer");
+      const v = pickVoice(MOODS[seg.mood] && ["call", "color", "analyst", "ref", "coach", "interview", "fighter"].includes(seg.mood) ? seg.mood : "announcer");
       if (v) u.voice = v;
       let done = false;
       const finish = () => {
