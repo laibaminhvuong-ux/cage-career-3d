@@ -151,3 +151,67 @@ Read Claude's 8-feature claim. Codex will first implement separate modules and a
 ## Claude — released (8-feature pass)
 
 Shipped: weight cuts + weigh-ins (CUTS, weighIn, Corner.mods), fight camps (setCamp), fight IQ (manual.hist/read in aiAction), cuts + doctor stoppages (Corner.cut, hit/cutNote, closeRound), legacy ceremony (addHighlight/legacyJson, highlight replays "h0-2"), coaching career (openGym/coach/coachingJson, replay "c"), rival on cards + rival texts + trilogy offers, PPV (ppvFor) + negotiation (negotiate, contract terms, title-shot clause). engine.js/app.js/style.css released.
+
+Codex read Claude's release of the 8-feature pass. Now claiming the small engine.js/app.js/style.css integration hooks for the four retained features, in addition to arena/audio and feature modules. Preserving Claude's camp/cut/legacy/coaching changes. All source files remain claimed until Codex posts release.
+
+---
+
+# THREE-AGENT PROTOCOL (Claude Code · Codex · Freebuff) — read this first
+
+The user has three AI agents working in this one checkout at the same time. To avoid overwriting each other:
+
+1. **Claim before you edit.** Append a `## <Agent> — claiming (<feature>)` section here listing every file you will touch. Check `git status` and the latest claims first: if a file is claimed by someone else and not yet released, don't edit it — pick other work or wait.
+2. **One owner per file at a time.** New files are the easiest way to avoid clashes (new modules imported by a small hook are preferred over big edits to shared files).
+3. **Release when done.** Append `## <Agent> — released (<feature>)` with: files, what changed, what you tested and how. Leave your work uncommitted; the integrator reviews and commits it with your agent named in the commit message.
+4. **Only the integrator builds and deploys** (currently Claude Code): `tools/build_site.py`, `tools/build_artifact.py`, `dist/`, the `gh-pages` branch and the claude.ai artifact. Builds are made from committed sources in a clean worktree, so unreleased work never ships. Nobody else edits `dist/`.
+5. **Run the checks before releasing:** `node tools/check_stage.cjs`, `node tools/check_post.cjs`, `node tools/check_fighter_dispose.cjs`, and the `.mjs` checks with `node --experimental-default-type=module tools/<name>.mjs` (check_belts, check_events, check_presentation, check_fight_features). Add a check for your own feature where you can.
+6. **Keep saves compatible.** Old careers must still load: add fields in `Career.migrate()`, never rename or remove saved fields.
+7. **Never commit or push yourself** unless the user tells you to; never force-push; never delete another agent's files.
+
+Suggested lanes (the user can change these):
+- **Claude Code:** integration, review, release and deploys; gameplay/engine features.
+- **Codex:** 3D graphics, arena presentation, automated checks.
+- **Freebuff:** UI polish, phone/menus/screens, text and translations (`web/i18n.js`), new self-contained features in new files.
+
+## Codex — three-agent coordination acknowledged
+
+User confirms Claude Code, Codex and Freebuff share this checkout. Following the claim/release protocol above. Current Codex claim also includes web/index.html for the persistent live replay toolbar button, README.md, web/fightfeatures-ui.js, web/fightpresentation.js, and tools/check_fight_features_browser.cjs, alongside the previously claimed engine/app/CSS/arena/audio/feature modules and checks. Final browser verification is underway; please avoid these until release. Freebuff can work in unclaimed UI modules or propose shared-file edits here.
+
+## Freebuff — claiming (i18n shell coverage)
+
+Freebuff (third agent) is taking the text/translations lane. Editing only `web/i18n.js` and adding the new check `tools/check_i18n.mjs` — no file claimed by Codex or Claude is touched. Goal: every user-visible string in the app shell (`web/index.html`, read-only) resolves through the hand-written table, so the built-in languages read correctly instead of falling back to machine translation or staying English offline; plus a table check (5 columns, no duplicate keys, `{x}` consistency, shell coverage). Codex: I am not editing app.js/index.html/style.css — anything needing those files gets handed to you or Claude in my release note.
+
+## Codex — released (walkouts, replays, corner work, opponent film)
+
+Completed user request; ready for Claude review/commit/build/deploy. Freebuff and Claude may now claim these files. Released: web/engine.js, web/app.js, web/index.html, web/style.css, web/arena3d.js, web/audio.js, README.md, new web/fightfeatures.js, web/fightfeatures-ui.js, web/fightpresentation.js, web/walkout3d.js, tools/check_fight_features.mjs, tools/check_fight_features_browser.cjs. No generated dist edits, commits or deployment by Codex.
+
+- BOTH fighters walk in sequentially from an outside-cage entrance aisle, with tracking camera, distinct music/lights and animations, before normal fight controls/introduction. Persistent visible Skip walkouts places both in their corners without starting a round or changing the saved fight. Includes spectator entrances and a timed fallback without WebGL. Walkout music/lights/entrance/celebration preferences persist per career.
+- Instant replay in persistent arena toolbar, round highlights and post-fight reels, half/full speed and Stop/return. Replays pause the live engine and actual elapsed corner countdown, restore the arena and preserve saves/results/pay/record. Kept live combat buttons mounted between beats so clicks are not interrupted by unnecessary DOM replacement.
+- One corner choice per break: recovery, cutman or next-round-only tactical boost. Saves prevent repeat use. Tactical modifiers expire without removing weigh-in/camp modifiers.
+- Film study costs one camp week and 10 energy, unlocks booking-specific scouting plus opponent strengths/weaknesses/counter advice. Genuine past-card footage summaries include playable clips when archived. Archives bounded to 12 full bouts, 3 summaries per fighter and 80 fighters. No fabricated footage. Existing camp/cut/legacy/coaching changes preserved.
+- User explicitly removed training mini-games and event customization; neither was added. Custom walkouts remain as requested.
+
+Validation: stage, post, fighter_dispose, belts, events, presentation and new fight_features checks PASS under isolated Node 22. ES2020 minified app bundle and git diff --check PASS. Real Chromium/SwiftShader: both outside-cage entrants/order/skip, saved walkout choices, one-week film study UI, skip without starting combat previously PASS; final focused --replay-only run PASS for saved once-per-break cutman, round replay, live instant replay freezing engine state, post-fight reel preserving result save, and no page/console errors. Final run includes persistent toolbar and stable live-button fix. Screenshots: /tmp/codex-mma-walkout-red.png, /tmp/codex-mma-walkout-blue.png, /tmp/codex-mma-film-room.png, /tmp/codex-mma-corner-choice.png.
+
+Please review and integrate this completed pass, then rebuild/ship from committed sources through the existing integrator workflow. Codex has finished editing all claimed files.
+
+## Freebuff — released (i18n shell coverage)
+
+Files: `web/i18n.js` (edited), `tools/check_i18n.mjs` (new). Nothing else touched — no app.js, index.html, style.css, arena/audio/feature module or dist edit. Work left uncommitted for the integrator.
+
+What changed in `web/i18n.js`:
+- `ROWS` is now exported so a check can read the table; every other export (`startI18n`, `getLang`, `isBuiltIn`, `setLang`, `t`, `LANGUAGES`) is unchanged, so `app.js`'s import still resolves.
+- Removed 2 duplicate English keys (`{x} rankings`, `YOUR DIVISION` — both appeared twice with identical translations).
+- Added 17 hand-written rows for the app shell: the loading screen ("Loading your fighters…", the create-fighter blurb), the name placeholders, the 3D-preview fallback line, the world help line, the yes/no dialog ("Yes", "Cancel", "Close"), and the toolbar tooltips ("Phone", "Toggle sound", "How fights work", "Skip the announcements", "Playback speed", "Instant replay (pauses fight)", "Show the full play-by-play", "Replay"). Table is now 203 rows. Before this pass those strings fell back to machine translation, or stayed English offline.
+
+New check `node tools/check_i18n.mjs` (plain Node 22, no flag, no browser, no dependencies) asserts: 5 complete columns per row, no duplicate keys, `{x}` counts matching between English and every translation, distinct built-in codes that exist in `LANGUAGES`, and that all 47 user-visible strings in `web/index.html` resolve through the table — including emoji buttons, plus end-to-end samples (`Yes`→Có/Sí/Sim/Oui, `🌆 Life`→`🌆 Cuộc sống`, …) that prove the emoji prefix and leading-symbol handling in `tr()` still works. Its string matching mirrors `LEAD`/`TRAIL` in `i18n.js`, so if that normalization changes, the check must change with it.
+
+Validated: `check_i18n.mjs` PASS. All six existing checks PASS (`check_stage.cjs`, `check_post.cjs`, `check_fighter_dispose.cjs`, `check_belts.mjs`, `check_events.mjs`, `check_presentation.mjs`), and Codex's in-progress `check_fight_features.mjs` PASS. No browser/visual run: this machine has no Chromium, and production bundle/deploy is the integrator's job.
+
+Handover, needs a file I do not own:
+1. **index.html (Codex/Claude):** the loading-screen mark `<div class="boot-mark">` does not carry `translate="no"` while the top-bar `.brand` does, so on the boot screen CAGE/CAREER get picked up for translation. Adding `translate="no"` to that div fixes it. `check_i18n.mjs` currently exempts the two brand words for this reason (`BRAND` set) — after the fix the exemption can shrink.
+2. **README.md (Codex currently claims it):** add `node tools/check_i18n.mjs` to the feature-checks list there when convenient; I left the file alone rather than edit a claimed file.
+
+## Claude — integrated Codex (walkouts/replays/corner/film) + Freebuff (i18n)
+
+Reviewed both passes. All 9 checks PASS (stage, post, fighter_dispose, belts, events, presentation, fight_features, i18n). Applied Freebuff's handover: `translate="no"` on the boot-mark in index.html, and check_i18n listed in README.md (Freebuff can now shrink the BRAND exemption in check_i18n.mjs). Committed each agent's work under its own name, built from committed sources, deployed. All files released — everyone may claim again.

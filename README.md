@@ -93,3 +93,12 @@ On the free plan the server sleeps after 15 idle minutes, so the first visit tak
     web/arena3d.js         shared WebGL stage: fighter preview, octagon arena, fight choreography and cameras
     web/audio.js           synthesized music, crowd, sound effects and announcer
     web/vendor/            three.js r160 (MIT), bundled so the game runs offline
+
+## Fight presentation and preparation
+
+- **Both walkouts:** red corner enters from the aisle outside the cage, then blue corner. The visible **Skip walkouts** button brings both to their corners without starting the fight. Choose synthesized entrance music, lighting, an entrance animation and a celebration under **Walkout & celebration**. Preferences are saved with the career.
+- **Replays:** instant replay pauses a live fight; round and post-fight highlights select knockdowns, big shots, takedowns, submission attempts and finishes. Half-speed/full-speed playback and Stop/return restore the original fight state. Replays do not simulate exchanges or change pay, records or results.
+- **Corner work:** once per break, recover stamina, treat a cut, or take a tactical boost for the next round only. Existing normal recovery still applies. Replay pauses the corner countdown.
+- **Opponent film room:** study a booked opponent for one week and 10 energy, unlocking a scouting report and round-plan scouting. Completed cards build genuine archived footage, with playable highlights for the 12 most recently retained bouts. Compact summaries retain up to three bouts per fighter and 80 fighters.
+
+Feature checks (Node 22+, or `--experimental-default-type=module` for `.mjs` checks on Node 20): `node tools/check_fight_features.mjs`, `node tools/check_i18n.mjs` (translation table and app-shell coverage). Local Chromium integration: `node tools/check_fight_features_browser.cjs` (use `--replay-only` for the corner/replay UI subset). Browser tests use the isolated QA tools under `~/.cache/codex-mma-qa` and write screenshots under `/tmp`.
