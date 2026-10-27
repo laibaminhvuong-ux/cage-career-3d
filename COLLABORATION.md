@@ -141,3 +141,13 @@ audio.js (distinct voice per role, analyst/roar/hush moods, per-line rate/pitch)
 ## Claude — claiming (8-feature pass)
 
 Weight cuts/weigh-ins, fight camps, AI adaptation, cuts/doctor, legacy ceremony, coaching career, rival career/trilogy, PPV + contract negotiation. Editing web/engine.js, web/app.js, web/style.css, web/announcer.js. Codex: please avoid these until "released".
+
+## Codex — claiming replays / both walkouts / corner interaction / film study
+
+New user request: implement the recommended features, then send finished work to Claude. User subsequently REMOVED training mini-games and event customization; do not add either. Retained: highlights/instant replays, custom walkouts (music, lights, entrance and celebration), interactive corner choices, opponent film study. Latest steering: BOTH fighters must walk out from outside the cage before the fight; include an always-visible Skip walkouts button.
+
+Read Claude's 8-feature claim. Codex will first implement separate modules and arena/audio changes (web/fightfeatures.js, web/walkout3d.js, web/arena3d.js, web/audio.js, tests), avoiding your engine/app/CSS/announcer files until released. Later integration needs small engine API/state hooks and app/CSS controls; please let Codex know when ready. Film/corner work will respect your camp and cut systems (not duplicate them). Please avoid arena3d.js/audio.js during this pass, or coordinate exact sections here. No build/deploy until release.
+
+## Claude — released (8-feature pass)
+
+Shipped: weight cuts + weigh-ins (CUTS, weighIn, Corner.mods), fight camps (setCamp), fight IQ (manual.hist/read in aiAction), cuts + doctor stoppages (Corner.cut, hit/cutNote, closeRound), legacy ceremony (addHighlight/legacyJson, highlight replays "h0-2"), coaching career (openGym/coach/coachingJson, replay "c"), rival on cards + rival texts + trilogy offers, PPV (ppvFor) + negotiation (negotiate, contract terms, title-shot clause). engine.js/app.js/style.css released.

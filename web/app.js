@@ -453,7 +453,7 @@ function offerHtml(o, withButton) {
     interim: "🏆 INTERIM TITLE FIGHT · 5 rounds", unify: "🏆 TITLE UNIFICATION · 5 rounds", title: "🏆 TITLE FIGHT · 5 rounds",
     eliminator: "🎯 TITLE ELIMINATOR · winner gets the next shot", main: "★ MAIN EVENT · 5 rounds",
   };
-  const tag = (o.grudge ? "⚔ GRUDGE MATCH · " : "") + (o.title ? kinds[o.kind] || kinds.title : kinds[o.kind] || (o.contender ? "⭐ CONTENDER SERIES" : `${o.rounds} rounds`));
+  const tag = (o.trilogy ? "⚔ TRILOGY · " : o.grudge ? "⚔ GRUDGE MATCH · " : "") + (o.title ? kinds[o.kind] || kinds.title : kinds[o.kind] || (o.contender ? "⭐ CONTENDER SERIES" : `${o.rounds} rounds`));
   const isInterim = state.belt && state.belt.interim && !state.belt.interimIsMe && o.opponent.displayName === state.belt.interim;
   const rank = o.oppRank === 0 ? "Champion" : isInterim ? "Interim champion" : o.oppRank > 0 ? `#${o.oppRank}` : "";
   return `
@@ -493,7 +493,13 @@ function renderFightCard() {
         <p>${nm(s.fighter.displayName)} retired at ${s.fighter.age} with a record of <b>${s.fighter.record}</b>.</p>
         <p class="muted">${s.titlesWon} title${s.titlesWon === 1 ? "" : "s"} won · ${s.titleDefenses} defenses · ${money(s.earnings)} career earnings · legacy score ${s.legacyScore}</p>
       </div>
+      <div class="btn-row"><button class="btn gold" data-legacy>🏛 Legacy ceremony</button></div>
+      ${coachingHtml(s)}
       <div class="btn-row"><button class="btn primary big" data-newsave>Start a new career</button><button class="btn big" data-saves>💾 Saves</button></div>`;
+    if (s.legacyReel && !legacySeen.has(s.fighter.name)) {
+      legacySeen.add(s.fighter.name);
+      setTimeout(() => openModal("legacy"), 400);
+    }
     return;
   }
   if (s.fightNight) {
@@ -524,6 +530,16 @@ function renderFightCard() {
       </div>
       ${offerHtml(o, false)}
       ${o.oppBonus > 0 ? `<p class="badge red" style="display:inline-block">Opponent fired up: +${o.oppBonus} to all stats</p>` : ""}
+      ${o.campReady ? `<div class="label">🏕 Fight camp — how do you prepare for ${nm(o.opponent.displayName)}?</div><div class="tones">
+        <button class="btn" data-camp="tapes">🎞 Study tapes<span class="sub">Your coach reads their game plan every round</span></button>
+        <button class="btn" data-camp="partners">🥊 Sparring partners<span class="sub">Partners who fight like them: blunt their best weapon (costs money)</span></button>
+        <button class="btn primary" data-camp="hard">🔥 Hard camp<span class="sub">+2 to every stat on fight night, risk of injury</span></button></div>`
+        : o.camp ? `<p class="camp-note">🏕 ${esc(o.camp.text)}</p>` : ""}
+      ${o.cutReady ? `<div class="label">⚖️ Fight week — your weight cut</div><div class="tones">
+        <button class="btn" data-cut="easy">🥗 Easy<span class="sub">${esc(o.cuts.easy)}</span></button>
+        <button class="btn" data-cut="standard">⚖️ Standard<span class="sub">${esc(o.cuts.standard)}</span></button>
+        <button class="btn primary" data-cut="extreme">🧖 Extreme<span class="sub">${esc(o.cuts.extreme)}</span></button></div>`
+        : o.cut ? `<p class="camp-note">⚖️ ${esc(o.cuts[o.cut])}</p>` : o.weeks > 1 ? `<p class="muted" style="font-size:12px">⚖️ The weight cut starts in fight week.</p>` : ""}
       ${s.card ? `<div class="btn-row" style="margin:6px 0"><button class="btn small" data-card>📋 ${esc(s.card.name)} card · ${s.card.bouts.find((b) => b.player).slot}</button>
         ${s.card.media ? (s.card.media.ready ? `<button class="btn small gold" data-media>🎤 Media day</button>` : s.card.media.done ? `<span class="muted" style="font-size:12px;align-self:center">🎤 Media day done</span>` : `<span class="muted" style="font-size:12px;align-self:center">🎤 Media day in fight week</span>`) : ""}</div>` : ""}
       <button class="btn small" data-talk="opponent" ${s.canTalk ? "" : "disabled"}>🎤 Talk to the press${s.canTalk ? "" : " (done this week)"}</button>
@@ -705,7 +721,12 @@ function renderPromotions() {
           <div class="offer-name">${nm(p.name)}</div>
           <div class="offer-meta">${p.current ? "✅ Your promotion" : need(p.need)}</div>
         </div></div>
-        ${offer ? `<div class="offer-money">Contract: ${offer.fights} fights · ${money(offer.bonus)} to sign · purses ×${offer.pay}</div>
+        ${offer ? `<div class="offer-money">Contract: ${offer.fights} fights · ${money(offer.bonus)} to sign · purses ×${offer.pay}
+            ${offer.terms && offer.terms.ppv ? " · 📺 $1/PPV buy" : ""}${offer.terms && offer.terms.titleClause ? " · 🏆 title-shot clause" : ""}</div>
+          ${offer.negotiated ? `<div class="muted" style="font-size:12px">Final offer.</div>` : `<div class="btn-row" style="margin:4px 0"><span class="muted" style="font-size:12px;align-self:center">Negotiate:</span>
+            <button class="btn small ghost" data-nego="money" data-org="${p.id}">💰 More money</button>
+            <button class="btn small ghost" data-nego="ppv" data-org="${p.id}">📺 PPV points</button>
+            <button class="btn small ghost" data-nego="title" data-org="${p.id}">🏆 Title-shot clause</button></div>`}
           <button class="btn gold small" data-promo="${p.id}" ${s.scheduled ? "disabled" : ""}>${p.current ? "Re-sign" : "Sign contract"}</button>
           ${!p.current && s.gfc && s.contractFights ? `<span class="muted" style="font-size:12px"> · buying out your current deal costs ${money(Math.round(offer.bonus * 0.4))}</span>` : ""}` : ""}
       </div>`;
@@ -897,6 +918,8 @@ function renderModal() {
     }
   } else if (modal.kind === "place") {
     renderPlace(body);
+  } else if (modal.kind === "legacy") {
+    renderLegacyModal(body);
   } else if (modal.kind === "card") {
     renderCardModal(body);
   } else if (modal.kind === "media") {
@@ -1291,7 +1314,7 @@ function phoneApp(app, s, L) {
     ].filter(Boolean);
     if (!sub) {
       return `<div class="msg-list">${chats.map((c) => {
-        const T = c.id === "rival" ? [] : M[c.id] || [];
+        const T = M[c.id] || [];
         const last = T[T.length - 1];
         return `<button class="msg-row" data-phoneapp="messages:${c.id}"><span class="msg-av">${c.av}</span>
           <span class="msg-mid"><b>${nm(c.name)}</b><span class="muted">${last ? esc(last.text) : c.id === "rival" ? "Talk your trash…" : "No messages yet"}</span></span>
@@ -1300,10 +1323,10 @@ function phoneApp(app, s, L) {
     }
     const c = chats.find((x) => x.id === sub);
     if (!c) return `<p class="muted">This conversation is gone.</p>`;
-    const T = sub === "rival" ? [] : M[sub] || [];
+    const T = M[sub] || [];
     let thread = T.map((m) => m.from === "call" ? `<div class="msg-call">${esc(m.text)} · ${esc(m.date)}</div>` : `<div class="bubble ${m.from === "me" ? "me" : "them"}">${esc(m.text)}</div>`).join("");
     if (sub === "rival" && s.lastMeet && s.rival && s.lastMeet.id === s.rival.id) {
-      thread = `<div class="bubble me">${esc(s.lastMeet.you)}</div><div class="bubble them">${esc(s.lastMeet.them)}</div>`;
+      thread += `<div class="bubble me">${esc(s.lastMeet.you)}</div><div class="bubble them">${esc(s.lastMeet.them)}</div>`;
     }
     const actions = {
       partner: `${lifeBtn("text", "Send a sweet text ❤️", "", "primary small")} ${lifeBtn("call", "📞 Call", 'data-who="partner"', "small")}`,
@@ -1400,6 +1423,41 @@ function phoneApp(app, s, L) {
   return "";
 }
 
+// ------------------------------------------------------------------ retirement: legacy and coaching
+
+const legacySeen = new Set();
+
+function renderLegacyModal(body) {
+  const L = state.legacyReel;
+  if (!L) return closeModal();
+  body.innerHTML = `
+    <div class="card-poster legacy-poster"><div class="cp-org">${L.inducted ? "HALL OF FAME · CLASS OF YEAR " + state.year : "CAREER RETROSPECTIVE"}</div>
+      <h1>${nm(state.fighter.displayName)}</h1><div class="cp-main">${esc(L.tier)} <span>·</span> legacy ${L.score}</div></div>
+    ${L.speech ? `<div class="label">🎤 Induction speech</div>${L.speech.map((t) => `<div class="quote">"${esc(t)}"</div>`).join("")}` : ""}
+    <div class="label">🎬 Highlight reel</div>
+    ${L.highlights.length ? L.highlights.map((h) => `<div class="cb"><div class="cb-top"><span class="cb-slot">${esc(h.date)}</span></div>
+      <div class="cb-res">${esc(h.text)} ${h.canWatch ? `<button class="btn small ghost" data-watch="h${h.id}">▶ Watch</button>` : ""}</div></div>`).join("") : `<p class="muted">No wins to show.</p>`}
+    <div class="label">📊 Career records</div>
+    <div class="kv">${L.records.map(([k, v]) => `<span>${esc(k)}</span><b>${esc(String(v))}</b>`).join("")}</div>`;
+}
+
+function coachingHtml(s) {
+  const C = s.coaching;
+  if (!C) return `<div class="offer contender" style="margin-top:10px"><b>🏫 Open your own gym</b>
+    <p class="muted" style="font-size:13px;margin:4px 0">Recruit prospects, train them, corner them in their fights and send the best to the GFC.</p>
+    <button class="btn primary small" data-gymopen>Open the gym</button></div>`;
+  return `<div class="label">🏫 ${esc(C.name)} · earned ${money(C.earnings)}${C.graduates.length ? " · " + C.graduates.length + " sent to the GFC" : ""}</div>
+    ${C.last ? `<div class="camp-note">Last fight: ${nm(C.last.name)} ${esc(C.last.text)} <button class="btn small ghost" data-watch="c">▶ Watch</button></div>` : ""}
+    ${C.prospects.map((p) => `<div class="cb"><div class="cb-top"><span class="cb-slot">${nm(p.displayName)}</span><span class="muted">${esc(p.style)} · ${p.record} · OVR ${p.overall}</span></div>
+      <div class="btn-row" style="margin:4px 0">
+        <select data-coachstat="${p.i}">${Object.entries(STAT_LABELS).map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select>
+        <button class="btn small" data-coachtrain="${p.i}">🏋️ Train (1 week)</button>
+        ${p.rest ? `<span class="muted" style="font-size:12px;align-self:center">Fights again in ${p.rest}w</span>`
+          : `<select data-coachplan="${p.i}">${PLANS.map((x) => `<option value="${x.id}">${x.name}</option>`).join("")}</select><button class="btn small primary" data-coachfight="${p.i}">🥊 Corner a fight</button>`}
+      </div></div>`).join("")}
+    ${C.prospects.length < 4 ? `<button class="btn small" data-coachrecruit>➕ Recruit a prospect ($3,000)</button>` : ""}`;
+}
+
 // ------------------------------------------------------------------ event cards
 
 /** One bout as a line on the card: names, records, division, and the result once it's in. */
@@ -1407,7 +1465,7 @@ function boutRow(b, compact = false) {
   const r = b.result;
   const side = (x, won) => `<span class="cb-f ${won ? "won" : r && r.winner !== "draw" ? "lost" : ""}">${x.rank === 0 ? "🏆 " : x.rank > 0 ? `<em>#${x.rank}</em> ` : ""}${nm(x.name)}${compact ? "" : ` <small>${esc(x.record)}</small>`}</span>`;
   return `<div class="cb ${b.player ? "you" : ""} ${b.title ? "title" : ""}">
-    <div class="cb-top"><span class="cb-slot">${b.slot}${b.title ? " · 🏆 Title" : ""}</span><span class="muted">${esc(b.division)} · ${b.rounds} rds</span></div>
+    <div class="cb-top"><span class="cb-slot">${b.slot}${b.title ? " · 🏆 Title" : ""}${b.rival ? " · ⚔ Your rival" : ""}</span><span class="muted">${esc(b.division)} · ${b.rounds} rds</span></div>
     <div class="cb-names">${side(b.a, r && r.winner === "a")}<span class="cb-vs">vs</span>${side(b.b, r && r.winner === "b")}</div>
     ${r ? `<div class="cb-res">${r.winner === "draw" ? "Draw" : nm((r.winner === "a" ? b.a : b.b).last) + " wins"} · ${esc(r.method)} · R${r.round} ${esc(r.time)}
       ${b.canWatch ? `<button class="btn small ghost" data-watch="${b.id}">▶ Watch</button>` : ""}</div>`
@@ -1491,9 +1549,9 @@ function renderMediaModal(body) {
 
 let watching = null; // { f, stop }
 
-async function watchBout(f) {
-  if (!stage || state.fight) return;
-  watching = { f, stop: false };
+async function watchBout(f, back = "card") {
+  if (!stage || (state.fight && !state.fight.finished)) return;
+  watching = { f, stop: false, back };
   const screen = $("fightScreen");
   screen.classList.remove("hidden");
   screen.classList.add("spectating");
@@ -1528,12 +1586,14 @@ async function watchBout(f) {
 }
 
 async function stopWatching() {
+  const back = watching ? watching.back : "card";
   watching = null;
   $("fightScreen").classList.remove("spectating");
   await api("card/watch", { id: "" });
+  if (!state.fight) $("fightScreen").classList.add("hidden");
   render();
   updateMusic();
-  openModal("card");
+  if (back) openModal(back);
 }
 
 // ------------------------------------------------------------------ fight screen
@@ -1735,7 +1795,7 @@ function renderFightHead(f) {
   const corner = (c, side) => `
     <div class="corner ${side}">
       <div class="cn">${nm(c.name)}</div>
-      <div class="cm">${c.record} · Sig <span class="sig">${c.sig}</span> · TD ${c.td}${c.kd ? " · KD " + c.kd : ""}</div>
+      <div class="cm">${c.record} · Sig <span class="sig">${c.sig}</span> · TD ${c.td}${c.kd ? " · KD " + c.kd : ""}${c.cut ? ` · <span class="cutmark">${"🩸".repeat(c.cut)} cut</span>` : ""}</div>
       <div class="bl">HEALTH</div>${bar(c.health, healthColor(c.health), "lg")}
       <div class="bl">STAMINA</div>${bar(c.stamina, "var(--gold)")}
     </div>`;
@@ -1852,6 +1912,8 @@ function renderFightControls(f) {
       <div class="rd"><b>${esc(f.method)}</b> · R${f.endRound} ${esc(f.endTime)}${f.cards ? " · " + f.cards.join(", ") : ""}</div>
       <div class="rd">Paid <b>${money(r.pay || 0)}</b>${r.perfBonus ? ` (incl. ${money(r.perfBonus)} in bonuses)` : ""} · Fame ${r.fameDelta >= 0 ? "+" : ""}${r.fameDelta} · Record <b>${esc(r.record)}</b></div>
       ${(r.bonuses || []).map((b) => `<div class="rd bonus-win">${b.icon} ${esc(b.award)}! +${money(b.amount)}</div>`).join("")}
+      ${r.ppv ? `<div class="rd">📺 ${r.ppv.buys.toLocaleString("en-US")} pay-per-view buys${r.ppv.share ? ` · your share <b>${money(r.ppv.share)}</b>` : " · no PPV points in your contract"}</div>` : ""}
+      ${r.weighIn && !r.weighIn.made ? `<div class="rd" style="color:var(--red)">⚖️ Missed weight (${esc(r.weighIn.weight)} lbs)</div>` : ""}
       ${r.careerNote ? `<div class="rd" style="margin-top:4px;color:var(--gold)"><b style="color:inherit">${esc(r.careerNote)}</b></div>` : ""}
       ${r.injuryNote ? `<div class="rd" style="color:var(--red)">${esc(r.injuryNote)}</div>` : ""}
     </div>
@@ -1944,6 +2006,24 @@ document.addEventListener("click", async (ev) => {
   }
   if (d.closefight !== undefined) return act("fight/close");
   if (d.card !== undefined) return openModal("card");
+  if (d.camp) return act("camp", { kind: d.camp });
+  if (d.cut) return act("cut", { kind: d.cut });
+  if (d.nego) {
+    if (await api("negotiate", { org: d.org, ask: d.nego })) render();
+    return;
+  }
+  if (d.legacy !== undefined) return openModal("legacy");
+  if (d.gymopen !== undefined) {
+    const name = prompt("Name your gym:", state.fighter.name.split(" ").pop() + " MMA");
+    if (name !== null) act("gym/open", { name });
+    return;
+  }
+  if (d.coachrecruit !== undefined) return act("coach", { action: "recruit" });
+  if (d.coachtrain !== undefined) return act("coach", { action: "train", i: d.coachtrain, extra: document.querySelector(`[data-coachstat="${d.coachtrain}"]`).value });
+  if (d.coachfight !== undefined) {
+    if (await api("coach", { action: "fight", i: d.coachfight, extra: document.querySelector(`[data-coachplan="${d.coachfight}"]`).value })) render();
+    return;
+  }
   if (d.media !== undefined) return openModal("media", { picks: [] });
   if (d.mediaans) {
     modal.picks.push(d.mediaans);
@@ -1954,8 +2034,9 @@ document.addEventListener("click", async (ev) => {
     return;
   }
   if (d.watch !== undefined) {
+    const back = /^h/.test(d.watch) ? "legacy" : d.watch === "c" ? null : "card";
     if (await api("card/watch", { id: d.watch })) {
-      if (state.watch) watchBout(state.watch);
+      if (state.watch) watchBout(state.watch, back);
       else toast("That bout can't be replayed right now.", true);
     }
     return;
