@@ -498,9 +498,16 @@ function renderFightCard() {
     el.innerHTML = `
       <h2>Next fight</h2>
       <div class="fight-night">
-        <h3>FIGHT NIGHT</h3>
+        <h3>FIGHT NIGHT${s.card ? " · " + esc(s.card.name) : ""}</h3>
         <p>${o.title ? (o.kind === "interim" ? `🏆 For the interim ${esc(state.orgShort)} title — ` : o.kind === "unify" ? `🏆 To unify the ${esc(state.orgShort)} belts — ` : `🏆 For the ${esc(state.orgShort)} title — `) : o.kind === "eliminator" ? "🎯 Title eliminator — " : o.kind === "main" ? "★ Main event — " : ""}vs <b>${esc(o.opponent.displayName)}</b></p>
       </div>
+      ${s.card && s.card.media && s.card.media.ready ? `<button class="btn gold" data-media style="margin-bottom:8px">🎤 Media day (last chance, skipping costs a fine)</button>` : ""}
+      ${s.card ? (() => {
+        const done = s.card.bouts.filter((b) => b.result && !b.player);
+        return `<div class="label">${done.length ? "Earlier tonight" : "On the card"}</div>
+          ${(done.length ? done : s.card.bouts.filter((b) => !b.player).slice(-3)).slice(-4).map((b) => boutRow(b, true)).join("")}
+          <button class="btn small ghost" data-card style="margin:4px 0 10px">📋 Full card</button>`;
+      })() : ""}
       <button class="btn primary big" data-startfight>Walk out to the cage</button>`;
     return;
   }
@@ -514,6 +521,8 @@ function renderFightCard() {
       </div>
       ${offerHtml(o, false)}
       ${o.oppBonus > 0 ? `<p class="badge red" style="display:inline-block">Opponent fired up: +${o.oppBonus} to all stats</p>` : ""}
+      ${s.card ? `<div class="btn-row" style="margin:6px 0"><button class="btn small" data-card>📋 ${esc(s.card.name)} card · ${s.card.bouts.find((b) => b.player).slot}</button>
+        ${s.card.media ? (s.card.media.ready ? `<button class="btn small gold" data-media>🎤 Media day</button>` : s.card.media.done ? `<span class="muted" style="font-size:12px;align-self:center">🎤 Media day done</span>` : `<span class="muted" style="font-size:12px;align-self:center">🎤 Media day in fight week</span>`) : ""}</div>` : ""}
       <button class="btn small" data-talk="opponent" ${s.canTalk ? "" : "disabled"}>🎤 Talk to the press${s.canTalk ? "" : " (done this week)"}</button>
       <div class="label">Tale of the tape <span style="float:right">You · Them</span></div>
       ${taleOfTape(o.opponent)}`;
@@ -884,6 +893,10 @@ function renderModal() {
     }
   } else if (modal.kind === "place") {
     renderPlace(body);
+  } else if (modal.kind === "card") {
+    renderCardModal(body);
+  } else if (modal.kind === "media") {
+    renderMediaModal(body);
   } else if (modal.kind === "phone") {
     renderPhone(body);
   } else if (modal.kind === "divisions") {
@@ -1380,6 +1393,131 @@ function phoneApp(app, s, L) {
   return "";
 }
 
+// ------------------------------------------------------------------ event cards
+
+/** One bout as a line on the card: names, records, division, and the result once it's in. */
+function boutRow(b, compact = false) {
+  const r = b.result;
+  const side = (x, won) => `<span class="cb-f ${won ? "won" : r && r.winner !== "draw" ? "lost" : ""}">${x.rank === 0 ? "🏆 " : x.rank > 0 ? `<em>#${x.rank}</em> ` : ""}${nm(x.name)}${compact ? "" : ` <small>${esc(x.record)}</small>`}</span>`;
+  return `<div class="cb ${b.player ? "you" : ""} ${b.title ? "title" : ""}">
+    <div class="cb-top"><span class="cb-slot">${b.slot}${b.title ? " · 🏆 Title" : ""}</span><span class="muted">${esc(b.division)} · ${b.rounds} rds</span></div>
+    <div class="cb-names">${side(b.a, r && r.winner === "a")}<span class="cb-vs">vs</span>${side(b.b, r && r.winner === "b")}</div>
+    ${r ? `<div class="cb-res">${r.winner === "draw" ? "Draw" : nm((r.winner === "a" ? b.a : b.b).last) + " wins"} · ${esc(r.method)} · R${r.round} ${esc(r.time)}
+      ${b.canWatch ? `<button class="btn small ghost" data-watch="${b.id}">▶ Watch</button>` : ""}</div>`
+      : `<div class="cb-res muted">${b.player ? "Your fight" : state.card && state.card.simmed ? "Later tonight" : "Fight night"}</div>`}
+  </div>`;
+}
+
+function awardsHtml(card) {
+  if (!card.awards || !card.awards.length) return "";
+  return `<div class="label">Bonuses</div><div class="awards">${card.awards.map((a) => `
+    <div class="award"><span class="aw-ico">${a.icon}</span><div><b>${a.award}</b><div>${a.winners.map(nm).join(" & ")}</div>
+      <div class="muted">${money(a.amount)}${a.both ? " each" : ""}</div></div></div>`).join("")}</div>`;
+}
+
+function renderCardModal(body) {
+  const c = state.card;
+  if (!c) return closeModal();
+  const main = c.bouts.filter((b) => b.slot !== "Prelims"), pre = c.bouts.filter((b) => b.slot === "Prelims");
+  body.innerHTML = `
+    <div class="card-poster"><div class="cp-org">${esc(c.org)}</div><h1>${esc(c.name)}</h1>
+      <div class="cp-main">${nm(c.bouts[0].a.last)} <span>vs</span> ${nm(c.bouts[0].b.last)}</div></div>
+    ${c.done ? awardsHtml(c) : ""}
+    ${c.media && c.media.ready ? `<button class="btn gold big" data-media>🎤 Fight-week media day</button>` : ""}
+    <div class="label">Main card</div>${main.map((b) => boutRow(b)).join("")}
+    ${pre.length ? `<div class="label">Prelims</div>${pre.map((b) => boutRow(b)).join("")}` : ""}`;
+}
+
+/** Media day: the whole card faces the press, then you take questions and face off. */
+function renderMediaModal(body) {
+  const c = state.card, M = c && c.media;
+  if (!M) return closeModal();
+  if (M.done && M.result) {
+    const R = M.result;
+    body.innerHTML = `<h1>🎤 ${esc(c.name)} media day</h1>
+      ${R.lines.map((l) => `<div class="mq">${esc(l.q)}</div>
+        <div class="quote"><span class="who">${nm(state.fighter.displayName)}</span>"${esc(l.you)}"</div>
+        <div class="quote them"><span class="who">${nm(state.scheduled ? state.scheduled.opponent.displayName : "")}</span>"${esc(l.them)}"</div>`).join("")}
+      <div class="faceoff">🥊 FACE-OFF · ${esc(R.faceText)}</div>
+      <ul class="news">${R.effects.map((e) => `<li>${esc(e)}</li>`).join("")}</ul>
+      <button class="btn primary big" data-closemodal>Done</button>`;
+    return;
+  }
+  const picks = modal.picks || (modal.picks = []);
+  const step = picks.length;
+  const quotes = M.quotes.map((q) => `<div class="mquote ${q.tone}"><b>${nm(q.who)}</b> on ${nm(q.vs)}: "${esc(q.text)}"</div>`).join("");
+  let ask;
+  if (step < M.questions.length) {
+    const Q = M.questions[step];
+    ask = `<div class="mq">Question ${step + 1}/${M.questions.length} — <b>${esc(Q.q)}</b></div>
+      <div class="tones">
+        <button class="btn" data-mediaans="respect">🤝 Respectful<span class="sub">"${esc(Q.respect)}"</span></button>
+        <button class="btn" data-mediaans="confident">😎 Confident<span class="sub">"${esc(Q.confident)}"</span></button>
+        <button class="btn primary" data-mediaans="trash">🔥 Trash talk<span class="sub">"${esc(Q.trash)}"</span></button>
+      </div>`;
+  } else {
+    ask = `<div class="mq"><b>The face-off.</b> You and ${nm(state.scheduled.opponent.displayName)} step up, nose to nose.</div>
+      <div class="tones">
+        <button class="btn" data-faceoff="nod">🤜🤛 Touch fists<span class="sub">Respect, +1 fame</span></button>
+        <button class="btn" data-faceoff="stare">👁️ Death stare<span class="sub">Don't blink, +2 fame</span></button>
+        <button class="btn primary" data-faceoff="shove">💢 Shove<span class="sub">Huge hype, they get fired up, might be fined</span></button>
+      </div>`;
+  }
+  body.innerHTML = `<h1>🎤 ${esc(c.name)} media day</h1>
+    <p class="muted">Every fighter on the card is here. The cameras are rolling.</p>
+    <div class="mquotes">${quotes}</div>
+    ${ask}`;
+}
+
+// ---------- watching another bout on the card
+
+let watching = null; // { f, stop }
+
+async function watchBout(f) {
+  if (!stage || state.fight) return;
+  watching = { f, stop: false };
+  const screen = $("fightScreen");
+  screen.classList.remove("hidden");
+  screen.classList.add("spectating");
+  closeModal();
+  stage.show($("arenaStage"), "arena");
+  stage.arena.load({ ...f, logs: [], round: 0, finished: false }, { playerLook: f.player.look, weightClass: f.wc, sponsors: [] });
+  const fresh = (c) => ({ ...c, health: 100, stamina: 100, sig: 0, td: 0, kd: 0 });
+  renderFightHead({ ...f, round: 1, player: fresh(f.player), opponent: fresh(f.opponent) });
+  $("fightLog").innerHTML = `<div class="ev round">${esc(f.cardName)} · ${esc(f.slot)} · ${esc(f.division)}</div>`;
+  $("fightControls").innerHTML = `<div class="btn-row" style="justify-content:center"><button class="btn big" data-skipwatch>Skip ▶▶</button><button class="btn big ghost" data-stopwatch>✕ Back to the card</button></div>`;
+  caption({ text: `${f.cardName}: ${f.player.name} vs ${f.opponent.name}`, side: "n", type: "round" });
+  audio.music("fight", 0.8);
+  for (const e of f.logs.flat()) {
+    if (!watching || watching.f !== f) return;
+    $("fightLog").appendChild(eventEl(e, !watching.stop));
+    if (watching.stop) continue;
+    caption(e);
+    const pause = stage.arena.play(e, f);
+    updateFightBars(e);
+    scrollLog();
+    await new Promise((r) => setTimeout(r, pause / speed));
+  }
+  if (!watching || watching.f !== f) return;
+  stage.arena.restore(f);
+  updateFightBars(f.logs.flat().slice(-1)[0] || {});
+  scrollLog();
+  audio.music(null);
+  const w = f.winner === "player" ? f.player.name : f.winner === "opponent" ? f.opponent.name : null;
+  $("fightControls").innerHTML = `<div class="result-banner"><div class="rw W" style="font-size:22px">${w ? nm(w) + " wins" : "Draw"}</div>
+    <div class="rd"><b>${esc(f.method)}</b> · R${f.endRound} ${esc(f.endTime)}</div></div>
+    <button class="btn primary big" data-stopwatch>Back to the card</button>`;
+}
+
+async function stopWatching() {
+  watching = null;
+  $("fightScreen").classList.remove("spectating");
+  await api("card/watch", { id: "" });
+  render();
+  updateMusic();
+  openModal("card");
+}
+
 // ------------------------------------------------------------------ fight screen
 
 function allEvents(f) {
@@ -1387,6 +1525,7 @@ function allEvents(f) {
 }
 
 function renderFightScreen() {
+  if (watching) return;
   const f = state.fight;
   const screen = $("fightScreen");
   if (!f) {
@@ -1693,11 +1832,13 @@ function renderFightControls(f) {
     <div class="result-banner">
       <div class="rw ${r.result}">${word}</div>
       <div class="rd"><b>${esc(f.method)}</b> · R${f.endRound} ${esc(f.endTime)}${f.cards ? " · " + f.cards.join(", ") : ""}</div>
-      <div class="rd">Paid <b>${money(r.pay || 0)}</b>${r.perfBonus ? " (incl. $50,000 bonus)" : ""} · Fame ${r.fameDelta >= 0 ? "+" : ""}${r.fameDelta} · Record <b>${esc(r.record)}</b></div>
+      <div class="rd">Paid <b>${money(r.pay || 0)}</b>${r.perfBonus ? ` (incl. ${money(r.perfBonus)} in bonuses)` : ""} · Fame ${r.fameDelta >= 0 ? "+" : ""}${r.fameDelta} · Record <b>${esc(r.record)}</b></div>
+      ${(r.bonuses || []).map((b) => `<div class="rd bonus-win">${b.icon} ${esc(b.award)}! +${money(b.amount)}</div>`).join("")}
       ${r.careerNote ? `<div class="rd" style="margin-top:4px;color:var(--gold)"><b style="color:inherit">${esc(r.careerNote)}</b></div>` : ""}
       ${r.injuryNote ? `<div class="rd" style="color:var(--red)">${esc(r.injuryNote)}</div>` : ""}
     </div>
-    <button class="btn primary big" data-closefight>Continue</button>`;
+    <div class="btn-row" style="justify-content:center">${state.card ? `<button class="btn" data-card>📋 ${esc(state.card.name)} results & bonuses</button>` : ""}
+    <button class="btn primary big" data-closefight>Continue</button></div>`;
 }
 
 // ------------------------------------------------------------------ events
@@ -1784,6 +1925,25 @@ document.addEventListener("click", async (ev) => {
     return;
   }
   if (d.closefight !== undefined) return act("fight/close");
+  if (d.card !== undefined) return openModal("card");
+  if (d.media !== undefined) return openModal("media", { picks: [] });
+  if (d.mediaans) {
+    modal.picks.push(d.mediaans);
+    return renderModal();
+  }
+  if (d.faceoff) {
+    if (await api("card/media", { answers: modal.picks.join(","), faceoff: d.faceoff })) { modal.picks = null; render(); }
+    return;
+  }
+  if (d.watch !== undefined) {
+    if (await api("card/watch", { id: d.watch })) {
+      if (state.watch) watchBout(state.watch);
+      else toast("That bout can't be replayed right now.", true);
+    }
+    return;
+  }
+  if (d.skipwatch !== undefined) { if (watching) watching.stop = true; return; }
+  if (d.stopwatch !== undefined) return stopWatching();
   if (d.hof !== undefined) return openModal("hof");
   if (d.saves !== undefined) return openModal("saves");
   if (d.newsave !== undefined) {

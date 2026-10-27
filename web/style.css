@@ -542,3 +542,30 @@ input:focus, select:focus { outline: 2px solid var(--red); outline-offset: 1px; 
 .act-btn kbd { font: 600 10px ui-monospace, monospace; padding: 1px 4px; border-radius: 4px; background: rgba(255,255,255,.12); margin-left: 2px; }
 .act-btn.queued { outline: 2px solid var(--gold); background: rgba(244,185,66,.18); }
 @media (max-width: 560px) { .act-btn kbd, .rt-hint { display: none; } }
+
+/* ---------- event cards ---------- */
+.card-poster { text-align: center; padding: 18px 12px; margin: -6px -6px 12px; border-radius: 12px;
+  background: radial-gradient(120% 100% at 50% 0%, #7f1d1d, #111 70%); }
+.card-poster h1 { margin: 2px 0 6px; font-size: 30px; letter-spacing: .02em; }
+.cp-org { color: var(--gold); font-weight: 800; letter-spacing: .2em; font-size: 12px; }
+.cp-main { font: 900 italic 20px system-ui; text-transform: uppercase; } .cp-main span { color: var(--gold); font-size: 14px; margin: 0 6px; }
+.cb { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; margin-bottom: 6px; background: var(--bg); }
+.cb.you { border-color: var(--red); box-shadow: inset 3px 0 0 var(--red); }
+.cb.title { border-color: var(--gold); }
+.cb-top { display: flex; justify-content: space-between; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+.cb-slot { color: var(--gold); font-weight: 700; }
+.cb-names { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 4px 0; font-size: 14px; }
+.cb-f small { color: var(--muted); } .cb-f em { color: var(--muted); font-style: normal; font-size: 12px; }
+.cb-f.won { color: #4ade80; font-weight: 700; } .cb-f.lost { opacity: .6; }
+.cb-vs { color: var(--muted); font-size: 12px; }
+.cb-res { font-size: 12.5px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.awards { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; margin-bottom: 10px; }
+.award { display: flex; gap: 10px; align-items: center; border: 1px solid var(--gold); border-radius: 10px; padding: 10px; background: rgba(244,185,66,.08); font-size: 13px; }
+.aw-ico { font-size: 26px; }
+.bonus-win { color: var(--gold); font-weight: 800; font-size: 15px; }
+.mquotes { max-height: 210px; overflow-y: auto; margin-bottom: 10px; border: 1px solid var(--line); border-radius: 10px; padding: 6px 8px; }
+.mquote { font-size: 13px; padding: 5px 0; border-bottom: 1px solid var(--line); }
+.mquote:last-child { border-bottom: 0; } .mquote.trash b { color: #f87171; } .mquote.respect b { color: #4ade80; }
+.mq { margin: 10px 0 6px; font-size: 14.5px; }
+.faceoff { margin: 12px 0; padding: 12px; text-align: center; font-weight: 800; border-radius: 10px; background: linear-gradient(90deg, rgba(214,40,40,.25), rgba(47,111,237,.25)); }
+#fightScreen.spectating .round-box::after { content: "REPLAY"; display: block; font-size: 10px; letter-spacing: .15em; color: var(--gold); }

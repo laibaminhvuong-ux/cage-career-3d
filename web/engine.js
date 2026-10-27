@@ -309,6 +309,28 @@ const MEET = {
   ],
 };
 
+// fight-week media day: questions for you ({o} = your opponent, {m} = you), with three ways to answer
+const MEDIA_Q = [
+  { q: "How do you see this fight going?", respect: "{o} is tough. I expect a war and I've prepared for every second of it.",
+    confident: "I see my hand getting raised. However it happens, it happens.", trash: "{o} goes to sleep early. Book your flights home tonight, folks." },
+  { q: "{o} says you're overrated. Your response?", respect: "Everyone's entitled to an opinion. I'll show mine in the cage.",
+    confident: "Overrated fighters don't get booked on cards like this. I earned it.", trash: "{o} has been rated by nobody, for nothing, ever." },
+  { q: "What does a win on this card mean for you?", respect: "Everything. My team sacrificed a lot to get me here.",
+    confident: "It puts me in the title picture. Simple as that.", trash: "It means {o} becomes a highlight on my reel." },
+  { q: "Anything to say to {o} directly?", respect: "Good luck. Let's give the fans a show.",
+    confident: "Enjoy the walk out. It's the best part of your night.", trash: "Look at me when I'm talking to you, {o}. Saturday you won't be able to." },
+  { q: "Who's next after this one?", respect: "One fight at a time. {o} deserves my full focus.",
+    confident: "Whoever the promotion puts in front of me. I'm fighting for the belt next.", trash: "{o} isn't even a fight to me. Get me a real name next." },
+  { q: "There were rumors of a tough weight cut. How are you feeling?", respect: "Feeling great. Long camp, smart cut. Ready.",
+    confident: "Never felt better. I'll make weight easy and I'll be the bigger fighter in there.", trash: "Worry about {o}. I've seen the cut — it's ugly." },
+];
+// what the rest of the card says at media day ({o} = their opponent, {m} = them)
+const MEDIA_NPC = {
+  respect: ["{o} is a great fighter. It's an honor to share the cage.", "Big respect to {o}'s team. Should be a fun one.", "Nothing personal. Just two people chasing a dream."],
+  confident: ["I'm the better fighter everywhere. You'll see it Saturday.", "This is my moment. I'm not letting {o} take it.", "I've been finishing people all year. {o} is next."],
+  trash: ["{o} is a tomato can with a good manager.", "I'm going to break {o}'s face and their heart in the same night.", "{o} talks a lot for someone who's about to get finished."],
+};
+
 const fill = (line, target, me) => line.replaceAll("{o}", target).replaceAll("{m}", me);
 
 // ------------------------------------------------------------------ fight engine
@@ -1943,6 +1965,8 @@ export class Career {
     if (!this.rel) this.rel = {};
     if (!this.otherDivs && this.me) this.ensureDivs();
     if (!this.orgDivs && this.me) this.ensureOrgs();
+    if (this.scheduled && !this.scheduled.card && this.me) this.buildCard(this.scheduled);
+    if (this.scheduled && this.scheduled.card && this.scheduled.weeks <= 0) this.simulateCard();
   }
 
   /** The divisions this fighter competes in: men's or women's. */
@@ -2198,6 +2222,7 @@ export class Career {
     if (this.injuryWeeks >= o.weeks) throw new GameError("You won't be healed in time for that fight.");
     this.scheduled = o;
     this.offers = [];
+    this.buildCard(o);
     this.log("Booked: " + (o.title ? "TITLE FIGHT " : o.opp === this.rival ? "GRUDGE MATCH " : "") + "vs " + o.opp.displayName() + " in " + o.weeks + " weeks.");
     return "Fight booked! Get to work — fight night is in " + o.weeks + " weeks.";
   }
@@ -2755,6 +2780,292 @@ export class Career {
     });
   }
 
+  // ---------------------------------------------------------------- event cards
+  // Like a UFC event: your fight is one bout on a numbered card (main event, co-main, main card,
+  // prelims). Every other bout is a real simulated fight between ranked fighters that moves the
+  // rankings and can change belts. Fight week brings a media day with the whole card; after the
+  // main event the promotion hands out Fight of the Night, KO of the Night and Submission of the
+  // Night bonuses.
+
+  cardOrg() {
+    const s = this.scheduled;
+    if (s && s.contender) return "Contender Series";
+    return this.gfc ? this.orgShort() : "Iron Cage";
+  }
+
+  /** Builds the card around your booked fight. */
+  buildCard(o) {
+    const me = this.me, org = this.cardOrg();
+    this.eventNum ||= {};
+    const num = (this.eventNum[org] = (this.eventNum[org] || { GFC: 212, "Contender Series": 0, "Iron Cage": 36 }[org] || 40 + nextInt(30)) + 1);
+    const name = org === "Contender Series" ? "Contender Series: Week " + num : org + " " + num;
+    const big = this.gfc && !o.contender;
+    const total = o.contender ? 5 : !this.gfc ? 6 : this.orgShort() === "GFC" ? 12 : 10;
+    const mainCount = o.contender ? 5 : !this.gfc ? 3 : 5;
+    // where you sit on the card
+    const r = big ? this.rankings.indexOf(me) : -1;
+    let slot = o.title || o.kind === "main" ? 0 : big && r > 0 && r <= 5 ? 1 : big && r > 0 && r <= 12 ? 2 + nextInt(mainCount - 2) : mainCount + nextInt(total - mainCount);
+    if (!big) slot = o.contender ? nextInt(total) : nextInt(total);
+    const used = new Set([me, o.opp, this.rival].filter(Boolean));
+    const bouts = [];
+    const wcIdx = this.weightClass;
+    const pick = (list, from, to) => {
+      for (let tries = 0; tries < 12; tries++) {
+        const i = from + nextInt(Math.max(1, to - from));
+        const j = Math.min(list.length - 1, i + 1 + nextInt(2));
+        const a = list[i], b = list[j];
+        if (a && b && a !== b && !used.has(a) && !used.has(b)) return [a, b, i];
+      }
+      return null;
+    };
+    for (let k = 0; k < total; k++) {
+      if (k === slot) {
+        bouts.push({ player: true, a: me, b: o.opp, wc: wcIdx, division: this.division(), rounds: o.rounds, title: !!o.title });
+        continue;
+      }
+      let a, b, wc = wcIdx, title = false;
+      if (big) {
+        // ranked fighters from across the promotion; the top of the card gets the top names
+        const divs = this.classes().map((name, i) => ({ name, i, list: i === wcIdx ? this.rankings : (this.otherDivs || {})[name] || [] }))
+          .filter((d) => d.list.length > 6);
+        for (let tries = 0; tries < 10 && !a; tries++) {
+          const d = pickOf(divs);
+          const top = k <= 1;
+          const canTitle = top && d.list[0] !== me && !this.heldBelts[d.name] && !(d.i === wcIdx && this.isChamp());
+          const got = canTitle && rnd() < 0.7 ? (used.has(d.list[0]) ? null : (() => {
+            const c = d.list.slice(1, 4).find((f) => !used.has(f) && f !== me);
+            return c ? [d.list[0], c, 0] : null;
+          })()) : pick(d.list, top ? 1 : k < mainCount ? 2 : 6, top ? 6 : k < mainCount ? 11 : d.list.length - 1);
+          if (got) {
+            [a, b] = got;
+            wc = d.i;
+            title = got[2] === 0 && canTitle;
+          }
+        }
+      }
+      if (!a) {
+        // regional and Contender Series cards: local prospects around your level
+        wc = Math.max(0, Math.min(this.classes().length - 1, wcIdx + nextInt(3) - 1));
+        const lv = me.overall() - 4 + nextInt(8);
+        a = Fighter.generate(lv, this.wcAdj(wc), this.gender || "M");
+        b = Fighter.generate(lv + nextInt(5) - 2, this.wcAdj(wc), this.gender || "M");
+        if (this.npcOverall) { pinFighter(a, this.npcOverall); pinFighter(b, this.npcOverall); }
+      }
+      used.add(a);
+      used.add(b);
+      bouts.push({ player: false, a, b, wc, division: this.classes()[wc], rounds: title || k === 0 ? 5 : 3, title });
+    }
+    for (const bt of bouts) {
+      bt.aRec = bt.a.record();
+      bt.bRec = bt.b.record();
+    }
+    const card = { name, org, mainCount, bouts, media: this.mediaPlan(o, bouts) };
+    o.card = card;
+    this.lastCard = null;
+    this.watching = null;
+    return card;
+  }
+
+  /** Fight night: every other bout on the card is fought (the ones after yours stay hidden until you're done). */
+  simulateCard() {
+    const card = this.scheduled && this.scheduled.card;
+    if (!card || card.simmed) return;
+    card.simmed = true;
+    const planOf = (f) => ({ Striker: "STRIKE", Wrestler: "WRESTLE", "Jiu-Jitsu": "SUBMIT" }[f.style] || "BALANCED");
+    for (const bt of card.bouts) {
+      if (bt.player) continue;
+      const f = new Fight(bt.a, bt.b, bt.rounds, bt.title, 0, 0);
+      f.org = card.org;
+      if (bt.title) f.belt = { kind: "title", label: card.org + " " + bt.division + " championship", champ: "p" };
+      for (let n = 0; !f.finished && n < 6; n++) f.simulateRound(rnd() < 0.7 ? planOf(bt.a) : "BALANCED", true);
+      if (f.winner === "draw" && rnd() < 0.85) {
+        // real draws are rare: a judge leans one way and it becomes a split decision
+        f.winner = rnd() < 0.5 ? "player" : "opponent";
+        f.method = "Split Decision";
+        const last = f.logs[f.logs.length - 1];
+        const fin = last && last[last.length - 1];
+        if (fin) fin.text = fin.text.replace(/This one is a draw!/, "Winner by Split Decision: " + (f.winner === "player" ? bt.a : bt.b).displayName() + "!");
+      }
+      const w = f.winner === "player" ? bt.a : f.winner === "opponent" ? bt.b : null;
+      const l = w === bt.a ? bt.b : w === bt.b ? bt.a : null;
+      if (w) {
+        w.recordResult("W", f.methodType);
+        l.recordResult("L", f.methodType);
+      } else {
+        bt.a.recordResult("D", "DEC");
+        bt.b.recordResult("D", "DEC");
+      }
+      bt.result = { winner: w === bt.a ? "a" : w === bt.b ? "b" : "draw", method: f.method, methodType: f.methodType, round: f.endRound, time: f.endTime,
+        kd: f.p.totKd + f.o.totKd, sig: f.p.totSig + f.o.totSig, split: /Split|Majority/.test(f.method || "") };
+      bt.json = { ...f.toJson(), wc: bt.wc };
+      if (w) this.cardRankings(bt, w, l);
+    }
+  }
+
+  /** A card result moves the rankings: an upset winner jumps the loser; a title fight can crown a new champion. */
+  cardRankings(bt, w, l) {
+    const lists = [[this.division(), this.rankings], ...Object.entries(this.otherDivs || {})];
+    for (const [name, L] of lists) {
+      const wi = L.indexOf(w), li = L.indexOf(l);
+      if (li < 0) continue;
+      if (wi < 0 || wi > li) {
+        removeItem(L, w);
+        L.splice(L.indexOf(l), 0, w);
+      }
+      if (bt.title && li === 0) {
+        const how = "Beat " + l.lastName() + " by " + (bt.result.methodType === "KO" ? "KO/TKO" : bt.result.methodType === "SUB" ? "submission" : "decision") + " at " + (this.scheduled ? this.scheduled.card.name : "");
+        if (L === this.rankings) this.recordChamp(w, how);
+        else (this.lineage[name] ||= []).push({ name: w.displayName(), player: false, date: this.dateLabel(), how, interim: false, defenses: 0 });
+        this.log((this.scheduled ? this.scheduled.card.name : "") + ": NEW " + name.toUpperCase() + " CHAMPION! " + w.displayName() + " def. " + l.lastName() + ".");
+      } else if (bt.title) {
+        if (L === this.rankings) this.addDefense();
+        else {
+          const lin = this.lineage[name] || [];
+          if (lin.length) lin[lin.length - 1].defenses++;
+        }
+      }
+      return;
+    }
+  }
+
+  /** The night's bonuses, from every bout on the card (yours included). Returns your share. */
+  cardAwards(card) {
+    const secs = (b) => (b.result.round - 1) * 300 + (Number(String(b.result.time).split(":")[0]) * 60 + Number(String(b.result.time).split(":")[1] || 0));
+    const done = card.bouts.filter((b) => b.result);
+    const excite = (b) => b.result.sig * 0.6 + b.result.kd * 14 + (b.result.methodType === "DEC" ? (b.result.split ? 18 : 6) + b.rounds * 4 : Math.max(0, 22 - secs(b) / 60)) + (b.title ? 8 : 0) + rnd() * 8;
+    const best = (list, score) => list.reduce((a, b) => (!a || score(b) > score(a) ? b : a), null);
+    const fotn = best(done, excite);
+    const kos = done.filter((b) => b.result.methodType === "KO"), subs = done.filter((b) => b.result.methodType === "SUB");
+    const kotn = best(kos, (b) => -secs(b) + rnd() * 40 + b.result.kd * 20);
+    const sotn = best(subs, (b) => -secs(b) + rnd() * 40);
+    const amount = this.gfc ? Math.round(50000 * ((this.promo() || { pay: 1 }).pay)) : 2500;
+    const name = (b, who) => (who === "a" ? b.a : b.b).displayName();
+    const awards = [];
+    if (fotn) awards.push({ award: "Fight of the Night", icon: "🔥", bout: card.bouts.indexOf(fotn), winners: [name(fotn, "a"), name(fotn, "b")], amount, both: true });
+    if (kotn) awards.push({ award: "KO of the Night", icon: "💥", bout: card.bouts.indexOf(kotn), winners: [name(kotn, kotn.result.winner)], amount });
+    if (sotn) awards.push({ award: "Submission of the Night", icon: "🔒", bout: card.bouts.indexOf(sotn), winners: [name(sotn, sotn.result.winner)], amount });
+    card.awards = awards;
+    const mine = [];
+    for (const a of awards) {
+      const b = card.bouts[a.bout];
+      if (b.player && (a.both || b.result.winner === "a")) mine.push({ award: a.award, icon: a.icon, amount });
+    }
+    for (const a of awards) this.log(card.name + " bonus — " + a.award + ": " + a.winners.join(" & ") + " (" + fmtMoney(amount) + ")");
+    return mine;
+  }
+
+  // ---------------------------------------------------------------- media day
+
+  mediaPlan(o, bouts) {
+    if (o.contender) return null;
+    const qs = shuffle(MEDIA_Q.map((_, i) => i)).slice(0, 3);
+    const quotes = [];
+    for (const bt of bouts) {
+      if (bt.player) continue;
+      for (const [f, them] of [[bt.a, bt.b], [bt.b, bt.a]]) {
+        const tone = rnd() < 0.35 ? "trash" : rnd() < 0.6 ? "confident" : "respect";
+        quotes.push({ who: f.displayName(), vs: them.lastName(), text: fill(pickOf(MEDIA_NPC[tone]), them.lastName(), f.lastName()), tone });
+      }
+    }
+    return { qs, quotes: shuffle(quotes).slice(0, 10), done: false, result: null };
+  }
+
+  mediaReady() {
+    const s = this.scheduled;
+    return !!(s && s.card && s.card.media && !s.card.media.done && s.weeks <= 1 && !this.fight);
+  }
+
+  /** Your answers at media day (one tone per question) and the face-off. */
+  mediaDay(answers, faceoff) {
+    const s = this.scheduled;
+    if (!s || !s.card || !s.card.media) throw new GameError("There's no media day for this fight.");
+    const M = s.card.media;
+    if (M.done) throw new GameError("Media day is already done.");
+    if (s.weeks > 1) throw new GameError("Media day is in fight week.");
+    const tones = (answers || []).slice(0, 3).map((t) => (["respect", "confident", "trash"].includes(t) ? t : "confident"));
+    while (tones.length < 3) tones.push("confident");
+    if (!["nod", "stare", "shove"].includes(faceoff)) faceoff = "stare";
+    const opp = s.opp, them = opp.lastName(), mine = this.me.lastName();
+    const effects = [];
+    const lines = M.qs.map((qi, k) => {
+      const Q = MEDIA_Q[qi], t = tones[k];
+      const reply = fill(pickOf(t === "trash" ? TT.REPLY_ANGRY : t === "respect" ? TT.REPLY_RESPECT : TT.REPLY_CALM), them, mine);
+      return { q: fill(Q.q, them, mine), you: fill(Q[t], them, mine), them: reply, tone: t };
+    });
+    const n = (t) => tones.filter((x) => x === t).length;
+    let fame = n("respect") + 2 * n("confident") + 3 * n("trash") + Math.floor(this.stars("manager") / 2);
+    if (n("trash") >= 2) this.hype(2, 0.15, effects);
+    else if (n("trash") === 1 || n("confident") >= 2) this.hype(1, 0.08, effects);
+    let faceText;
+    if (faceoff === "nod") {
+      faceText = "You touch fists with " + them + " for the cameras. Class.";
+      fame += 1;
+    } else if (faceoff === "stare") {
+      faceText = "Nose to nose. Neither of you blinks. The flashbulbs go crazy.";
+      fame += 2;
+    } else {
+      faceText = "You SHOVE " + them + "! Security floods the stage!";
+      fame += 5;
+      s.oppBonus = Math.min(6, (s.oppBonus || 0) + 1);
+      effects.push("Opponent is fired up (+1 on fight night)");
+      if (rnd() < 0.35) {
+        const fine = Math.max(500, Math.round(s.purse * 0.1));
+        this.money -= fine;
+        effects.push("The commission fines you " + fmtMoney(fine));
+      }
+    }
+    if (opp === this.rival) {
+      this.rivalHeat = Math.min(100, this.rivalHeat + n("trash") * 6 + (faceoff === "shove" ? 10 : 0));
+      effects.push("Rivalry heat rises");
+    }
+    this.fame = clamp(this.fame + fame, 0, 100);
+    effects.unshift("Fame +" + fame);
+    M.done = true;
+    M.result = { lines, faceText, effects };
+    this.log(s.card.name + " media day: " + (faceoff === "shove" ? "a shove at the face-off!" : "the card faces off.") + ' "' + lines[lines.length - 1].you + '"');
+    return null;
+  }
+
+  /** The bout you chose to watch, with everything the arena needs to replay it. */
+  watchJson() {
+    const card = this.scheduled ? this.scheduled.card : this.lastCard;
+    if (this.watching == null || !card) return null;
+    const b = card.bouts[this.watching];
+    const view = this.cardJson(card).bouts[this.watching];
+    if (!b || !b.json || !view || !view.canWatch || (this.fight && !this.fight.finished)) return null;
+    return { ...b.json, cardName: card.name, slot: view.slot, division: b.division };
+  }
+
+  cardJson(card) {
+    if (!card) return null;
+    const pIdx = card.bouts.findIndex((b) => b.player);
+    const playerDone = pIdx >= 0 && !!card.bouts[pIdx].result;
+    const slot = (i) => (i === 0 ? "Main event" : i === 1 ? "Co-main event" : i < card.mainCount ? "Main card" : "Prelims");
+    const side = (f, rec) => {
+      const w = this.whereIs(f);
+      return { name: f.displayName(), last: f.lastName(), record: rec, country: f.country, rank: w.rank, id: f.id };
+    };
+    const M = card.media;
+    return {
+      name: card.name, org: card.org, done: playerDone, awards: playerDone ? card.awards || [] : null, simmed: !!card.simmed,
+      media: M ? { done: M.done, ready: this.mediaReady(), questions: M.qs.map((qi) => ({ q: fill(MEDIA_Q[qi].q, this.scheduled ? this.scheduled.opp.lastName() : "", this.me.lastName()),
+        respect: fill(MEDIA_Q[qi].respect, this.scheduled ? this.scheduled.opp.lastName() : "", this.me.lastName()),
+        confident: fill(MEDIA_Q[qi].confident, this.scheduled ? this.scheduled.opp.lastName() : "", this.me.lastName()),
+        trash: fill(MEDIA_Q[qi].trash, this.scheduled ? this.scheduled.opp.lastName() : "", this.me.lastName()) })),
+        quotes: M.quotes, result: M.result } : null,
+      bouts: card.bouts.map((b, i) => {
+        const show = !!b.result && (b.player || i > pIdx || playerDone);
+        const r = b.result;
+        return {
+          id: i, slot: slot(i), player: b.player, division: b.division, rounds: b.rounds, title: b.title,
+          a: side(b.a, b.aRec), b: side(b.b, b.bRec),
+          result: show ? { winner: r.winner, method: r.method, round: r.round, time: r.time } : null,
+          canWatch: show && !!b.json,
+        };
+      }),
+    };
+  }
+
   // ---------------------------------------------------------------- weight classes
 
   changeDivision(wc) {
@@ -2820,6 +3131,17 @@ export class Career {
     if (this.fight) return null;
     if (!this.fightNight()) throw new GameError("There's no fight tonight.");
     const s = this.scheduled;
+    this.watching = null;
+    if (s.card) {
+      this.simulateCard();
+      if (s.card.media && !s.card.media.done) {
+        // a no-show at media day costs you
+        const fine = Math.max(200, Math.round(s.purse * 0.05));
+        this.money -= fine;
+        s.card.media.done = true;
+        this.log("Skipped " + s.card.name + " media day — fined " + fmtMoney(fine) + ".");
+      }
+    }
     this.pinOthers();
     this.fight = new Fight(this.me, s.opp, s.rounds, s.title, this.npcOverall ? 0 : s.oppBonus, this.stars("head"));
     this.fight.org = s.contender ? "Contender Series" : this.gfc ? this.orgShort() : "Iron Cage";
@@ -2871,8 +3193,19 @@ export class Career {
     opp.recordResult(won ? "L" : lost ? "W" : "D", f.methodType);
 
     let pay = o.purse + (won ? o.winBonus : 0);
-    const perfBonus = won && finish && this.gfc;
-    if (perfBonus) pay += 50000;
+    // your bout joins the card's results, then the bonuses are handed out
+    let bonuses = [];
+    if (o.card) {
+      const bt = o.card.bouts.find((b) => b.player);
+      bt.result = { winner: won ? "a" : lost ? "b" : "draw", method: f.method, methodType: f.methodType, round: f.endRound, time: f.endTime,
+        kd: f.p.totKd + f.o.totKd, sig: f.p.totSig + f.o.totSig, split: /Split|Majority/.test(f.method || "") };
+      bt.json = { ...f.toJson(), wc: this.weightClass };
+      bonuses = this.cardAwards(o.card);
+      for (const b of bonuses) pay += b.amount;
+      this.fame = clamp(this.fame + bonuses.length * 3, 0, 100);
+      this.lastCard = o.card;
+    }
+    const perfBonus = bonuses.reduce((a, b) => a + b.amount, 0);
     this.money += pay;
     this.earnings += pay;
 
@@ -2958,7 +3291,7 @@ export class Career {
         + (vsRival ? " · Grudge" : "") + " · " + this.classes()[this.weightClass],
     });
     this.lastResult = {
-      result: res, method: f.method, pay, perfBonus, fameDelta: this.fame - fameBefore,
+      result: res, method: f.method, pay, perfBonus, bonuses, cardName: o.card ? o.card.name : null, fameDelta: this.fame - fameBefore,
       careerNote: [careerNote, rivalNote, talkNote].join(" ").trim(), injuryNote: injuryNote.trim(), record: me.record(),
     };
     this.scheduled = null;
@@ -3150,6 +3483,7 @@ export class Career {
         this.scheduled = null;
         this.generateOffers();
       }
+      if (this.scheduled && this.scheduled.weeks <= 0) this.simulateCard();
     } else {
       this.offersAge++;
       if (this.offersAge >= 0 && (this.offers.length === 0 || this.offersAge >= 4)) this.generateOffers();
@@ -3473,6 +3807,8 @@ export class Career {
       offers: this.offers.map((o, i) => this.offerJson(o, i)),
       scheduled: this.scheduled ? this.offerJson(this.scheduled, -1) : null,
       fightNight: this.fightNight(),
+      card: this.cardJson(this.scheduled ? this.scheduled.card : this.lastCard),
+      watch: this.watchJson(),
       divisions: this.divisionsJson(PROMOTIONS.some((p) => p.id === this.viewOrg) ? this.viewOrg : this.orgKey()),
       viewOrg: PROMOTIONS.some((p) => p.id === this.viewOrg) ? this.viewOrg : this.orgKey(),
       orgKey: this.orgKey(),
@@ -3675,6 +4011,8 @@ export class Game {
       case "edit": msg = this.need(career).editFighter(p); break;
       case "promo": msg = this.need(career).signPromotion(p.org); break;
       case "fighter/view": this.need(career).viewing = p.id || null; break;
+      case "card/watch": this.need(career).watching = p.id === null || p.id === undefined || p.id === "" ? null : int(p.id); break;
+      case "card/media": msg = this.need(career).mediaDay(String(p.answers || "").split(",").filter(Boolean), p.faceoff); break;
       case "promo/view": this.need(career).viewOrg = p.id || null; break;
       case "fighter/meet": msg = this.need(career).meetFighter(p.id, p.type); break;
       case "save/blank":
