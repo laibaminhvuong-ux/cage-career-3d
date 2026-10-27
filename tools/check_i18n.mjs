@@ -98,7 +98,8 @@ for (const [src, want] of SAMPLES) {
 }
 
 const raw = fs.readFileSync(new URL("../web/index.html", import.meta.url), "utf8");
-assert.ok(/class="brand"[^>]*translate="no"/.test(raw), "the brand mark should stay translate=no");
+assert.ok(/class="brand"[^>]*translate="no"/.test(raw), "the top-bar brand should stay translate=no");
+assert.ok(/class="boot-mark"[^>]*translate="no"/.test(raw), "the boot-screen brand should stay translate=no");
 const body = blankNoTranslate(raw.slice(raw.indexOf("<body")));
 
 const strings = new Set();
@@ -111,11 +112,10 @@ for (const m of body.matchAll(/(?:placeholder|title|aria-label)="([^"]*)"/g)) {
   if (/[A-Za-z]{2}/.test(s)) strings.add(s);
 }
 
-// The boot mark repeats the wordmark but is not marked translate="no" (reported to the
-// integrator); it is the same brand text, so it is exempt here on purpose.
-const BRAND = new Set(["CAGE", "CAREER"]);
-const missing = [...strings].filter((s) => !BRAND.has(s) && !translated(s)).sort();
+// Both brand marks carry translate="no", so blankNoTranslate has already removed them and there
+// is nothing to exempt: every string left has to resolve through the table.
+const missing = [...strings].filter((s) => !translated(s)).sort();
 assert.equal(missing.length, 0, `untranslated shell text (add a row to ROWS in web/i18n.js):\n  ${missing.join("\n  ")}`);
 
 assert.ok(strings.size >= 40, `only ${strings.size} shell strings found — did index.html change shape?`);
-console.log(`PASS: ${keys.size} hand-written rows across ${LANGS.length} built-in languages; ${strings.size} user-visible strings in web/index.html all resolve (${BRAND.size} brand marks exempt)`);
+console.log(`PASS: ${keys.size} hand-written rows across ${LANGS.length} built-in languages; ${strings.size} user-visible strings in web/index.html all resolve`);

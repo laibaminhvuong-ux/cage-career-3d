@@ -76,6 +76,11 @@ On the free plan the server sleeps after 15 idle minutes, so the first visit tak
   weight; champions moving divisions get an immediate superfight for the second belt.
 - **Hall of Fame**: every retired career is recorded across saves (`save/halloffame.dat`);
   a legacy score of 200+ gets you inducted.
+- **Trophies**: 24 milestones unlock as the career goes on — first fight, first win, first
+  finish, KO and submission counts, win streaks, bonuses, the rankings, the belt, title
+  defenses, a second division, fame and career earnings. They are saved with the career and
+  announced on the result panel after the fight that earns them; open the full shelf with
+  🏆 in the top bar.
 
 ## Code layout
 
@@ -101,4 +106,4 @@ On the free plan the server sleeps after 15 idle minutes, so the first visit tak
 - **Corner work:** once per break, recover stamina, treat a cut, or take a tactical boost for the next round only. Existing normal recovery still applies. Replay pauses the corner countdown.
 - **Opponent film room:** study a booked opponent for one week and 10 energy, unlocking a scouting report and round-plan scouting. Completed cards build genuine archived footage, with playable highlights for the 12 most recently retained bouts. Compact summaries retain up to three bouts per fighter and 80 fighters.
 
-Feature checks (Node 22+, or `--experimental-default-type=module` for `.mjs` checks on Node 20): `node tools/check_fight_features.mjs`, `node tools/check_i18n.mjs` (translation table and app-shell coverage). Local Chromium integration: `node tools/check_fight_features_browser.cjs` (use `--replay-only` for the corner/replay UI subset). Browser tests use the isolated QA tools under `~/.cache/codex-mma-qa` and write screenshots under `/tmp`.
+Feature checks (Node 22+, or `--experimental-default-type=module` for `.mjs` checks on Node 20): `node tools/check_fight_features.mjs`, `node tools/check_achievements.mjs` (trophy table, unlock-once, save compatibility), `node tools/check_i18n.mjs` (translation table and app-shell coverage). Local Chromium integration: `node tools/check_fight_features_browser.cjs` (use `--replay-only` for the corner/replay UI subset). Browser tests use the isolated QA tools under `~/.cache/codex-mma-qa` and write screenshots under `/tmp`.

@@ -599,3 +599,15 @@ input:focus, select:focus { outline: 2px solid var(--red); outline-offset: 1px; 
 @media (max-width:520px) { .feature-form { grid-template-columns: 1fr; } .corner-choices { grid-template-columns: 1fr; } .walkout-banner { bottom: 10px; padding: 10px 14px; } }
 
 .arena-tools { flex-wrap: wrap; max-width: calc(100% - 24px); }
+
+/* Trophies */
+.trophy-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; margin: 4px 0 18px; }
+.trophy { position: relative; display: grid; gap: 4px; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel2); }
+.trophy.locked { opacity: .48; }
+.trophy.earned { border-color: var(--gold); background: linear-gradient(180deg, rgba(244,185,66,.12), var(--panel2)); }
+.trophy-icon { font-size: 26px; line-height: 1; }
+.trophy b { font-size: 14px; }
+.trophy small { color: var(--muted); font-size: 12px; line-height: 1.35; }
+.trophy .badge { position: absolute; top: 8px; right: 8px; }
+.trophy-unlock { color: var(--gold); font-weight: 700; }
+@media (max-width: 520px) { .trophy-grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); } }

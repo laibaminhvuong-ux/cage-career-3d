@@ -2,6 +2,7 @@ import { createStage } from "./arena3d.js";
 import { WALKOUT_OPTIONS, highlightClips, tickCornerClock } from "./fightfeatures.js";
 import { createFightPresentation } from "./fightpresentation.js";
 import { featureLinks, walkoutSettingsHtml, filmRoomHtml, cornerPanelHtml, highlightShelfHtml } from "./fightfeatures-ui.js";
+import { trophiesHtml } from "./trophies-ui.js";
 import { getPresentation15Plus, setPresentation15Plus, mountMediaPresenter } from "./ringcard3d.js";
 import * as audio from "./audio.js";
 import { LOOK_OPTIONS, SHORTS_NAMES, TATTOO_REGIONS, lookString, parseLook, randomLook } from "./fighter3d.js";
@@ -811,6 +812,7 @@ function renderModal() {
   if (modal.kind === "walkout") { body.innerHTML = walkoutSettingsHtml(s); return; }
   if (modal.kind === "filmroom") { body.innerHTML = filmRoomHtml(s); return; }
   if (modal.kind === "highlights") { body.innerHTML = highlightShelfHtml(modal.fight); return; }
+  if (modal.kind === "trophies") { body.innerHTML = trophiesHtml(s); return; }
   if (modal.kind === "saves") {
     const full = s.saves.length >= s.maxSaves;
     body.innerHTML = `
@@ -1947,6 +1949,7 @@ function renderFightControls(f) {
       ${r.weighIn && !r.weighIn.made ? `<div class="rd" style="color:var(--red)">⚖️ Missed weight (${esc(r.weighIn.weight)} lbs)</div>` : ""}
       ${r.careerNote ? `<div class="rd" style="margin-top:4px;color:var(--gold)"><b style="color:inherit">${esc(r.careerNote)}</b></div>` : ""}
       ${r.injuryNote ? `<div class="rd" style="color:var(--red)">${esc(r.injuryNote)}</div>` : ""}
+      ${(r.trophies || []).map((t) => `<div class="rd trophy-unlock">${t.icon} Trophy unlocked — <b style="color:inherit">${esc(t.name)}</b>: ${esc(t.desc)}</div>`).join("")}
     </div>
     <div class="btn-row" style="justify-content:center"><button class="btn" data-highlights>📺 Highlights & replays</button>${state.card ? `<button class="btn" data-card>📋 ${esc(state.card.name)} results & bonuses</button>` : ""}
     <button class="btn primary big" data-closefight>Continue</button></div>`;
@@ -1967,6 +1970,7 @@ document.addEventListener("click", async (ev) => {
     if (await api("walkout/save", values)) { closeModal(); render(); } return;
   }
   if (d.filmroom !== undefined) return openModal("filmroom");
+  if (d.trophies !== undefined) return openModal("trophies");
   if (d.studyfilm !== undefined) { if (await api("film/study")) render(); return; }
   if (d.studyfootage !== undefined) { const f = state.features?.film?.footage?.[Number(d.studyfootage)]?.fight; if (f) openModal("highlights", { fight: f }); return; }
   if (d.cornerchoice) { if (await api("fight/corner", { choice: d.cornerchoice })) { if (stage) stage.arena.restore(state.fight); renderFightHead(state.fight); renderFightControls(state.fight); } return; }

@@ -216,6 +216,11 @@ export const ROWS = [
   ["Instant replay (pauses fight)", "Phát lại tức thì (tạm dừng trận)", "Repetición instantánea (pausa la pelea)", "Replay instantâneo (pausa a luta)", "Ralenti instantané (met le combat en pause)"],
   ["Show the full play-by-play", "Xem toàn bộ diễn biến", "Mostrar el relato completo", "Mostrar o relato completo", "Afficher tout le déroulé"],
   ["Replay", "Phát lại", "Repetición", "Replay", "Ralenti"],
+
+  // Trophies
+  ["Trophies", "Cúp", "Trofeos", "Troféus", "Trophées"],
+  ["Earned", "Đã đạt", "Conseguido", "Conquistado", "Obtenu"],
+  ["Locked", "Chưa mở", "Bloqueado", "Bloqueado", "Verrouillé"],
 ];
 
 // ~130 world languages: [code, name in that language]

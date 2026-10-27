@@ -4,6 +4,7 @@
 
 import { specialEventFor } from "./eventstyle.js";
 import { FeatureError, walkoutPreferences, saveWalkout, cornerState, chooseCorner, beginFeatureRound, archiveCardFootage, studyOpponent, applyFilmStudy, careerFeatures } from "./fightfeatures.js";
+import { evaluateTrophies, trophiesJson } from "./achievements.js";
 
 export class GameError extends Error {}
 function featureAction(handler, career, input) {
@@ -2018,6 +2019,7 @@ export class Career {
       this.promoAge = 0;
     }
     if (!this.lineage) this.lineage = {};
+    if (!this.trophies) this.trophies = [];
     if (this.interim === undefined) this.interim = null;
     if (this.champOut === undefined) this.champOut = this.champOutStart = 0;
     if (this.nextInLine === undefined) this.nextInLine = false;
@@ -2291,6 +2293,7 @@ export class Career {
     if (this.retired) throw new GameError("You're already retired.");
     if (this.fight) throw new GameError("Finish your fight first.");
     this.endCareer(this.me.displayName() + " announces retirement at " + this.me.age + " with a record of " + this.me.record() + ".");
+    evaluateTrophies(this); // the retirement and Hall of Fame trophies
     return "You hang up the gloves. Legacy: " + this.legacyTier() + ".";
   }
 
@@ -3642,6 +3645,8 @@ export class Career {
       result: res, method: f.method, pay, perfBonus, bonuses, ppv, weighIn: o.weighIn || null, cardName: o.card ? o.card.name : null, fameDelta: this.fame - fameBefore,
       careerNote: [careerNote, rivalNote, talkNote].join(" ").trim(), injuryNote: injuryNote.trim(), record: me.record(),
     };
+    // the trophies this fight just earned, recorded on the career and handed to the result panel
+    this.lastResult.trophies = evaluateTrophies(this);
     this.scheduled = null;
     this.offersAge = this.gfc ? -4 : -2; // post-fight layoff before new offers arrive
     this.advanceWeek();
@@ -4194,6 +4199,7 @@ export class Career {
       history: this.history,
       fight: this.fight ? this.fight.toJson() : null,
       lastResult: this.lastResult,
+      trophies: trophiesJson(this),
       life: this.lifeJson(),
     };
   }
