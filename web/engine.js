@@ -3,8 +3,13 @@
 // Every action returns the same state object the Java API returned.
 
 import { specialEventFor } from "./eventstyle.js";
+import { FeatureError, walkoutPreferences, saveWalkout, cornerState, chooseCorner, beginFeatureRound, archiveCardFootage, studyOpponent, applyFilmStudy, careerFeatures } from "./fightfeatures.js";
 
 export class GameError extends Error {}
+function featureAction(handler, career, input) {
+  try { return handler(career, input); }
+  catch (error) { if (error instanceof FeatureError) throw new GameError(error.message); throw error; }
+}
 
 // ------------------------------------------------------------------ random helpers
 
@@ -508,6 +513,7 @@ export class Fight {
   /** The opening of a round, shared by both modes. */
   simulateOpening(touch) {
     if (this.finished) throw new GameError("The fight is over.");
+    beginFeatureRound(this);
     this.round++;
     let opening = "Round " + this.round + " — touch gloves and let's go!", gloves = this.round === this.rounds && this.rounds > 1 ? "both" : null;
     if (this.round === 1) {
@@ -1146,6 +1152,7 @@ export class Fight {
       player: this.p.toJson(), opponent: this.o.toJson(), logs: this.logs, belt: this.belt || null,
       referee: this.referee || "Mario Delgado", touch: this.touch || null, org: this.org || "GFC",
       specialEvent: this.specialEvent || null,
+      walkout: this.walkout || null, corner: cornerState(this),
       cards: this.finished ? this.cards() : null,
       scout: this.coachStars >= 3 && !this.finished ? this.oppNext : null,
       oppFiredUp: this.o.bonus > 0,
@@ -3479,6 +3486,8 @@ export class Career {
     this.fight.org = s.contender ? "Contender Series" : this.gfc ? this.orgShort() : "Iron Cage";
     const weighNote = this.weighIn();
     this.fight.specialEvent = s.card ? s.card.specialEvent || null : null;
+    this.fight.walkout = walkoutPreferences(this.walkoutPreferences);
+    applyFilmStudy(this, this.fight);
     if (s.title) {
       const kind = s.kind || "title";
       const holder = (f) => this.rankings[0] === f || (kind === "interim" && this.interim === f);
@@ -3538,6 +3547,7 @@ export class Career {
       for (const b of bonuses) pay += b.amount;
       this.fame = clamp(this.fame + bonuses.length * 3, 0, 100);
       this.lastCard = o.card;
+      archiveCardFootage(this, o.card);
     }
     const perfBonus = bonuses.reduce((a, b) => a + b.amount, 0);
     this.bonusCount = (this.bonusCount || 0) + bonuses.length;
@@ -4116,6 +4126,7 @@ export class Career {
     }
     return {
       fighter: this.me.toJson(),
+      features: careerFeatures(this),
       weightClass: this.classes()[this.weightClass],
       gender: this.gender || "M", classes: this.classes(),
       weightClassIndex: this.weightClass,
@@ -4347,6 +4358,9 @@ export class Game {
       case "action": msg = this.need(career).act(p.type, p.stat); break;
       case "accept": msg = this.need(career).accept(int(p.index)); break;
       case "upgrade": msg = this.need(career).upgradeGym(); break;
+      case "walkout/save": msg = featureAction(saveWalkout, this.need(career), p); break;
+      case "fight/corner": msg = featureAction(chooseCorner, this.need(career), p.choice); break;
+      case "film/study": msg = featureAction(studyOpponent, this.need(career)); break;
       case "fight/start": msg = this.need(career).startFight(); break;
       case "fight/round": this.need(career).fightRound(p.plan, p.touch !== false && p.touch !== "false"); break;
       case "fight/close": this.need(career).closeFight(); break;

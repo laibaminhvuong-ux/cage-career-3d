@@ -1,4 +1,7 @@
 import { createStage } from "./arena3d.js";
+import { WALKOUT_OPTIONS, highlightClips, tickCornerClock } from "./fightfeatures.js";
+import { createFightPresentation } from "./fightpresentation.js";
+import { featureLinks, walkoutSettingsHtml, filmRoomHtml, cornerPanelHtml, highlightShelfHtml } from "./fightfeatures-ui.js";
 import { getPresentation15Plus, setPresentation15Plus, mountMediaPresenter } from "./ringcard3d.js";
 import * as audio from "./audio.js";
 import { LOOK_OPTIONS, SHORTS_NAMES, TATTOO_REGIONS, lookString, parseLook, randomLook } from "./fighter3d.js";
@@ -44,6 +47,11 @@ try {
 } catch (e) {
   console.warn("3D disabled:", e);
 }
+const presentation = createFightPresentation({
+  getState: () => state, getStage: () => stage, getSpeed: () => speed, getLive: () => rt, isPlaying: () => playing,
+  renderControls: renderFightControls, renderHead: renderFightHead, updateBars: updateFightBars, caption, render3d, updateMusic, toast,
+  resumeLive: realtimeLoop, introductions: f => audio.say(introCall(f, (state.life?.sponsors || []).map(s => s.name))),
+});
 // settings kept on this device: frame rate cap (0 = max) and the FPS counter
 const gfx = { fps: 60, meter: false };
 try { Object.assign(gfx, JSON.parse(localStorage.getItem("cc3d_gfx") || "{}")); } catch { /* defaults */ }
@@ -311,6 +319,7 @@ function render3d() {
 }
 
 function updateMusic() {
+  if (presentation.walkout || presentation.replaying) return;
   const f = state && state.fight;
   const fightOpen = f && !$("fightScreen").classList.contains("hidden");
   if (!fightOpen) {
@@ -559,6 +568,7 @@ function renderActions() {
   const hurt = s.injuryWeeks > 0;
   $("actionsCard").innerHTML = `
     <h2>This week</h2>
+    ${featureLinks(s)}
     <div class="energy-row">
       <div class="lbl"><span>Energy</span><b>${s.energy}/100</b></div>
       ${bar(s.energy, s.energy > 50 ? "var(--green)" : s.energy > 25 ? "var(--orange)" : "var(--red)", "lg")}
@@ -798,6 +808,9 @@ function renderModal() {
   el.classList.toggle("phone-mode", modal.kind === "phone");
   const body = $("modalBody");
   const s = state;
+  if (modal.kind === "walkout") { body.innerHTML = walkoutSettingsHtml(s); return; }
+  if (modal.kind === "filmroom") { body.innerHTML = filmRoomHtml(s); return; }
+  if (modal.kind === "highlights") { body.innerHTML = highlightShelfHtml(modal.fight); return; }
   if (modal.kind === "saves") {
     const full = s.saves.length >= s.maxSaves;
     body.innerHTML = `
@@ -1563,6 +1576,9 @@ async function watchBout(f, back = "card") {
   $("fightLog").innerHTML = `<div class="ev round">${esc(f.cardName)} · ${esc(f.slot)} · ${esc(f.division)}</div>`;
   $("fightControls").innerHTML = `<div class="btn-row" style="justify-content:center"><button class="btn big" data-skipwatch>Skip ▶▶</button><button class="btn big ghost" data-stopwatch>✕ Back to the card</button></div>`;
   caption({ text: `${f.cardName}: ${f.player.name} vs ${f.opponent.name}`, side: "n", type: "round" });
+  await presentation.runWalkouts(f, true);
+  if (!watching || watching.f !== f) return;
+  $("fightControls").innerHTML = `<div class="btn-row" style="justify-content:center"><button class="btn big" data-skipwatch>Skip ▶▶</button><button class="btn big ghost" data-stopwatch>✕ Back</button></div>`;
   audio.music("fight", 0.8);
   for (const e of f.logs.flat()) {
     if (!watching || watching.f !== f) return;
@@ -1586,6 +1602,7 @@ async function watchBout(f, back = "card") {
 }
 
 async function stopWatching() {
+  presentation.cancelWalkouts();
   const back = watching ? watching.back : "card";
   watching = null;
   $("fightScreen").classList.remove("spectating");
@@ -1603,7 +1620,7 @@ function allEvents(f) {
 }
 
 function renderFightScreen() {
-  if (watching) return;
+  if (watching || presentation.replaying) return;
   const f = state.fight;
   const screen = $("fightScreen");
   if (!f) {
@@ -1619,9 +1636,6 @@ function renderFightScreen() {
   if (opening) {
     // fresh walkout or page reload mid-fight: show everything so far instantly
     loadArena(f);
-    if (f.round === 0) {
-      audio.say(introCall(f, (state.life ? state.life.sponsors : []).map((d) => d.name)));
-    }
     caption(null);
     $("fightLog").innerHTML = f.round === 0 ? introHtml(f) : "";
     events.forEach((e) => { if (!e.quiet) $("fightLog").appendChild(eventEl(e, false)); });
@@ -1631,6 +1645,7 @@ function renderFightScreen() {
     renderFightHead(f);
     renderFightControls(f);
     scrollLog();
+    if (f.round === 0) presentation.runWalkouts(f);
     return;
   }
   playEvents(events.slice(fightShown), f);
@@ -1830,9 +1845,11 @@ function cornerLeft() {
 function startCorner(f) {
   if (corner && corner.round === f.round) return;
   if (corner) clearInterval(corner.timer);
-  corner = { round: f.round, until: performance.now() + CORNER_SECONDS * 1000 };
+  corner = { round: f.round, until: performance.now() + CORNER_SECONDS * 1000, lastTick: performance.now() };
   corner.timer = setInterval(async () => {
     const cur = state && state.fight;
+    tickCornerClock(corner, performance.now(), presentation.replaying);
+    if (presentation.replaying) return;
     if (!cur || cur.finished || cur.manual || cur.round !== corner.round || fightMode !== "manual" || $("fightScreen").classList.contains("hidden")) {
       clearInterval(corner.timer);
       return;
@@ -1874,10 +1891,22 @@ function manualPanel(f) {
 }
 
 function renderFightControls(f) {
+  const replayButton = $("instantReplayBtn");
+  if (replayButton) replayButton.classList.toggle("hidden", !(f?.manual && !f.finished && !presentation.walkout && !presentation.replaying && highlightClips(f).length));
   const el = $("fightControls");
+  const specialControls = presentation.controlsHtml();
+  if (specialControls) { el.innerHTML = specialControls; return; }
   if (f && f.manual && !f.finished) {
-    // a live round: the controls stay up the whole time
-    el.innerHTML = manualPanel(f);
+    // Keep live buttons mounted between beats so pointer clicks are not interrupted.
+    const signature = JSON.stringify([f.round, f.manual.where, f.manual.range, f.manual.pos, rt.paused]);
+    if (el.dataset.manualSignature === signature && el.querySelector(".rt-head")) {
+      const left = Math.max(0, 300 - (f.clock || 0));
+      el.querySelector(".rt-head b").textContent = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`;
+      el.querySelectorAll("[data-turn]").forEach(button => button.classList.toggle("queued", button.dataset.turn === rt.pending));
+    } else {
+      el.innerHTML = manualPanel(f);
+      el.dataset.manualSignature = signature;
+    }
     return;
   }
   if (playing) {
@@ -1896,6 +1925,8 @@ function renderFightControls(f) {
       <div class="prompt">${f.round === 0 ? (fightMode === "manual" ? "You call every move: attack, dodge or move, one exchange at a time." : "Choose your game plan for round 1") : fightMode === "manual" ? `Corner advice between rounds. Ready for round ${f.round + 1}?` : `Corner advice between rounds — game plan for round ${f.round + 1}?`}
         ${f.scout ? `<br><span class="scout">🧠 Coach: "They're going to ${esc(PLAN_NAMES[f.scout])} this round."</span>` : ""}
         ${f.oppFiredUp && f.round === 0 ? `<br><span style="color:#ff6b6e">Your opponent is fired up after the trash talk.</span>` : ""}</div>
+      ${cornerPanelHtml(f)}
+      ${f.round > 0 && highlightClips(f).length ? '<button class="btn small" data-highlights>📺 Round highlights</button>' : ""}
       ${f.round === 0 ? `<div class="touch-row"><span>Before the bell:</span>
         <button class="btn small ${touchGloves ? "gold" : ""}" data-touch="1">🤜🤛 Touch gloves</button>
         <button class="btn small ${touchGloves ? "" : "primary"}" data-touch="0">🙅 Refuse</button></div>` : ""}
@@ -1917,7 +1948,7 @@ function renderFightControls(f) {
       ${r.careerNote ? `<div class="rd" style="margin-top:4px;color:var(--gold)"><b style="color:inherit">${esc(r.careerNote)}</b></div>` : ""}
       ${r.injuryNote ? `<div class="rd" style="color:var(--red)">${esc(r.injuryNote)}</div>` : ""}
     </div>
-    <div class="btn-row" style="justify-content:center">${state.card ? `<button class="btn" data-card>📋 ${esc(state.card.name)} results & bonuses</button>` : ""}
+    <div class="btn-row" style="justify-content:center"><button class="btn" data-highlights>📺 Highlights & replays</button>${state.card ? `<button class="btn" data-card>📋 ${esc(state.card.name)} results & bonuses</button>` : ""}
     <button class="btn primary big" data-closefight>Continue</button></div>`;
 }
 
@@ -1927,13 +1958,28 @@ document.addEventListener("click", async (ev) => {
   const b = ev.target.closest("button, [data-fighter]");
   if (!b || b.disabled) return;
   const d = b.dataset;
+  if (d.skipwalkout !== undefined) { presentation.skipWalkouts(); return; }
+  if (d.stopreplay !== undefined) { presentation.stopReplay(); return; }
+  if (d.replayrate) { presentation.setReplayRate(d.replayrate); return; }
+  if (d.walkoutsettings !== undefined) return openModal("walkout");
+  if (d.savewalkout !== undefined) {
+    const values = Object.fromEntries(Object.keys(WALKOUT_OPTIONS).map(key => [key, $("walkout-" + key).value]));
+    if (await api("walkout/save", values)) { closeModal(); render(); } return;
+  }
+  if (d.filmroom !== undefined) return openModal("filmroom");
+  if (d.studyfilm !== undefined) { if (await api("film/study")) render(); return; }
+  if (d.studyfootage !== undefined) { const f = state.features?.film?.footage?.[Number(d.studyfootage)]?.fight; if (f) openModal("highlights", { fight: f }); return; }
+  if (d.cornerchoice) { if (await api("fight/corner", { choice: d.cornerchoice })) { if (stage) stage.arena.restore(state.fight); renderFightHead(state.fight); renderFightControls(state.fight); } return; }
+  if (d.highlights !== undefined) { const f = state.fight || state.features?.lastFight; if (f) openModal("highlights", { fight: f }); return; }
+  if (d.replayclip || d.reel !== undefined) { const f = modal?.fight; if (f) { const clips = highlightClips(f); const chosen = d.reel !== undefined ? clips : clips.filter(clip => clip.id === d.replayclip); closeModal(); presentation.playReplay(f, chosen); } return; }
+  if (d.instantreplay !== undefined) { const f = state.fight; if (f) { const clip = highlightClips(f).slice(-1)[0]; if (clip) presentation.playReplay(f, [clip]); } return; }
   if (d.train) return act("action", { type: "train", stat: d.train });
   if (d.action) return act("action", { type: d.action });
   if (d.accept !== undefined) return act("accept", { index: d.accept });
   if (d.upgrade !== undefined) return act("upgrade");
   if (d.startfight !== undefined) return act("fight/start");
   if (d.plan) {
-    if (playing) return;
+    if (playing || presentation.walkout || presentation.replaying) return;
     if (rt.running) {
       // finishing a live round on autopilot: let the current beat end first
       rt.stop = true;
@@ -1950,7 +1996,7 @@ document.addEventListener("click", async (ev) => {
     return renderFightControls(state.fight);
   }
   if (d.manual !== undefined) {
-    if (playing) return;
+    if (playing || presentation.walkout || presentation.replaying) return;
     if (await api("fight/manual", { touch: touchGloves })) render();
     return;
   }
@@ -2214,6 +2260,7 @@ document.addEventListener("click", async (ev) => {
 
 /** Switching careers mid-fight must not replay the old fight's log. */
 function resetFightScreen() {
+  presentation.cancelAll();
   $("fightScreen").classList.add("hidden");
 }
 
@@ -2223,6 +2270,7 @@ $("modal").addEventListener("click", (ev) => {
 
 // real-time fight controls on the keyboard
 document.addEventListener("keydown", (ev) => {
+  if (presentation.walkout || presentation.replaying) return;
   const f = state && state.fight;
   if (!f || !f.manual || f.finished || $("fightScreen").classList.contains("hidden")) return;
   if (/INPUT|TEXTAREA|SELECT/.test((ev.target && ev.target.tagName) || "")) return;

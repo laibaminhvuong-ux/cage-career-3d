@@ -337,7 +337,28 @@ const FIGHT = {
   },
 };
 
-const TRACKS = { camp: CAMP, fight: FIGHT };
+const WALKOUT_ANTHEM = { bpm: 104, swing: 0, play(step, t, I, dest) {
+  const s = step % 16, root = [38, 34, 41, 36][Math.floor(step / 16) % 4], sd = 60 / this.bpm / 4;
+  if (s % 4 === 0) kick(t, 0.9, dest);
+  if (s === 4 || s === 12) snare(t, 0.6, dest);
+  if (s === 0) pad(t, [root + 24, root + 31, root + 36], sd * 15, 0.09, dest, 1800);
+  if (s % 2 === 0) bassNote(t, root, sd * 1.6, 0.35, dest);
+} };
+const WALKOUT_THUNDER = { bpm: 120, swing: 0, play(step, t, I, dest) {
+  const s = step % 16;
+  if ([0, 3, 6, 8, 10, 14].includes(s)) kick(t, 1, dest);
+  if (s === 4 || s === 12) snare(t, 0.9, dest);
+  if (s % 2 === 0) hat(t, 0.15, dest);
+  if (s === 0) crash(t, 0.25, dest);
+} };
+const WALKOUT_NEON = { bpm: 128, swing: 0, play(step, t, I, dest) {
+  const s = step % 16, root = [45, 41, 48, 43][Math.floor(step / 16) % 4], sd = 60 / this.bpm / 4;
+  if (s % 4 === 0) kick(t, 0.8, dest);
+  if (s === 4 || s === 12) snare(t, 0.5, dest);
+  if (s % 2) hat(t, 0.12, dest);
+  pluck(t, root + [24, 31, 36, 31][s % 4], sd * 1.3, 0.12, dest, "triangle");
+} };
+const TRACKS = { camp: CAMP, fight: FIGHT, "walkout-anthem": WALKOUT_ANTHEM, "walkout-thunder": WALKOUT_THUNDER, "walkout-neon": WALKOUT_NEON };
 
 function startTrack(name, intensity) {
   if (!ctx) return;

@@ -8,6 +8,7 @@ import { WorldView } from "./world3d.js";
 import { RoomEnvironment } from "./vendor/RoomEnvironment.js";
 import { createPost } from "./post3d.js";
 import { RingCardPresenter } from "./ringcard3d.js";
+import { WalkoutDirector } from "./walkout3d.js";
 import { commentary, cornerCall, finishShout, interviewCall, reaction, resultCall, roundCall } from "./announcer.js";
 
 const R = 4.4; // cage radius to the fence posts
@@ -577,6 +578,7 @@ function buildCrowd(scene) {
     for (let i = 0; i < n; i++) {
       if (Math.random() < 0.08) continue;
       const a = (i / n) * TAU + row * 0.2;
+      if (Math.sin(a) * r < -R && Math.abs(Math.cos(a) * r) < 2.2) continue;
       seats.push({ x: Math.sin(a) * r, y, z: Math.cos(a) * r, a, phase: Math.random() * TAU, s: 0.9 + Math.random() * 0.25 });
     }
   }
@@ -840,6 +842,7 @@ class ArenaView {
     this.eventBorder.rotation.x = -Math.PI / 2; this.eventBorder.rotation.z = Math.PI / 8;
     this.eventBorder.position.y = 0.005; this.eventBorder.visible = false; scene.add(this.eventBorder);
     this.presenter = new RingCardPresenter(); scene.add(this.presenter.root);
+    this.walkouts = new WalkoutDirector(this);
     this.cornerSpot = {
       p: corners.red.clone().multiplyScalar(0.8),
       o: corners.blue.clone().multiplyScalar(0.8),
@@ -938,6 +941,8 @@ class ArenaView {
       }
       for (const s of [this.P, this.O, this.ref]) this.scene.add(s.f.root);
     }
+    this.P.fighterName = f.player.name; this.O.fighterName = f.opponent.name;
+    this.O.fighterStyle = f.opponent.style;
     this.restore(f);
   }
 
@@ -999,6 +1004,7 @@ class ArenaView {
 
   /** Jump straight to where the fight currently stands (opening the screen, reloading mid-fight). */
   restore(f) {
+    this.walkouts.stop(false);
     this.presenter.hide();
     this.timers = [];
     this.slowUntil = 0;
@@ -1053,6 +1059,10 @@ class ArenaView {
   }
 
   setPresentation15Plus(enabled) { this.presenter.setOutfit(enabled); }
+
+  startWalkouts(preferences, onPhase, onDone) { this.walkouts.start(preferences, onPhase, onDone); this.snapCamera(); }
+  skipWalkouts() { if (this.walkouts.active) this.walkouts.stop(true); }
+  setReplayMode(enabled) { this.replayMode = !!enabled; }
 
   setSpeed(x) {
     this.speed = x;
@@ -1126,7 +1136,7 @@ class ArenaView {
             this.excite = 0.7;
             const n = Number((e.text.match(/Round (\d+)/) || [])[1]) || f.round;
             // round one waits for the introductions to finish
-            audio.say(roundCall(n, f), n === 1);
+            if (!this.replayMode) audio.say(roundCall(n, f), n === 1);
           }
           ms = 2300;
         } else {
@@ -1281,7 +1291,7 @@ class ArenaView {
         const completed = Number((e.text.match(/round (\d+)/i) || [])[1]) || f.round;
         if (completed < f.rounds) this.presenter.show(completed + 1);
         else this.presenter.hide();
-        if (!instant && !f.finished) setTimeout(() => audio.say(cornerCall(f), true), 1800);
+        if (!instant && !this.replayMode && !f.finished) setTimeout(() => { if (!this.replayMode) audio.say(cornerCall(f), true); }, 1800);
         this.mode = "corners";
         this.top = this.down = null;
         for (const s of [this.P, this.O]) {
@@ -1303,7 +1313,7 @@ class ArenaView {
         break;
     }
 
-    if (!instant) {
+    if (!instant && !this.replayMode) {
       // the big moments always get called (cutting into whatever was being said); otherwise the
       // commentary team keeps talking through the fight whenever nobody's mid-sentence
       const call = reaction(e, f);
@@ -1467,7 +1477,7 @@ class ArenaView {
     const type = f.methodType;
     const result = f.winner === "player" ? "W" : f.winner === "opponent" ? "L" : "D";
     const doctor = /doctor/i.test(this.lastInfo || "");
-    if (!instant) {
+    if (!instant && !this.replayMode) {
       audio.music(null);
       audio.roar(1);
       this.excite = 1;
@@ -1483,20 +1493,22 @@ class ArenaView {
         // a draw leaves the belt with the champion
         const keeper = W || (f.belt && this.side(f.belt.champ));
         if (f.belt && keeper) keeper.f.setBelt("waist");
-        if (W) this.ref.f.setBase("refRaise");
+        if (W) { this.ref.f.setBase("refRaise"); if (!instant) this.celebrate(W, f); }
       };
       if (instant) go();
       else {
-        audio.sfx("bell3");
-        audio.say(resultCall(f, W ? W.tag : null));
-        if (W) audio.say(interviewCall(f, W.tag), true);
+        if (!this.replayMode) {
+          audio.sfx("bell3");
+          audio.say(resultCall(f, W ? W.tag : null));
+          if (W) audio.say(interviewCall(f, W.tag), true);
+        }
         this.later(1.2, go);
       }
       return 4200;
     }
 
     if (type === "SUB") {
-      if (!instant) {
+      if (!instant && !this.replayMode) {
         const base = L.f.base;
         L.f.play(SEQUENCES.tap(base), base);
         audio.sfx("tap");
@@ -1518,7 +1530,7 @@ class ArenaView {
       if (instant) this.knockDown(L, true);
       else this.later(0.15, () => this.knockDown(L, false));
     }
-    if (!instant) {
+    if (!instant && !this.replayMode) {
       audio.say([{ t: finishShout(f, W.tag, doctor), mood: "call", roar: 1 }]);
       audio.say(resultCall(f, W.tag), true);
       audio.say(interviewCall(f, W.tag), true);
@@ -1540,10 +1552,18 @@ class ArenaView {
     this.ended = { W, L, spot, lPos: L.pos.clone(), lYaw: L.yaw };
     L.f.setBase(loserBase);
     W.f.setBase("victory");
-    if (!instant) W.f.play(SEQUENCES.celebrate, "victory");
+    if (!instant) this.celebrate(W, f);
     if (f && f.belt) {
       W.f.setBelt("waist");
     }
+  }
+
+  celebrate(winner, fight) {
+    const style = winner === this.P ? fight?.walkout?.celebration : "triumph";
+    const custom = (base, values) => { const p = Object.fromEntries(Object.entries(base).map(([k, v]) => [k, v.slice()])); for (const [k, v] of Object.entries(values)) p[k] = v; return p; };
+    if (style === "bow") winner.f.play([[custom(POSES.relaxed, { spine: [0.65, 0, 0], neck: [-0.2, 0, 0] }), 1.4, 6], [POSES.victory, 1, 6]], "victory");
+    else if (style === "dance") winner.f.play([[custom(POSES.victory, { hips: [0, 0.5, 0.12] }), 0.45, 8], [custom(POSES.victory, { hips: [0, -0.5, -0.12] }), 0.45, 8], [custom(POSES.victory, { hips: [0, 0.5, 0.12] }), 0.45, 8], [POSES.victory, 0.5, 8]], "victory");
+    else winner.f.play(SEQUENCES.celebrate, "victory");
   }
 
   // ------------------------------------------------------------ positions
@@ -1551,6 +1571,7 @@ class ArenaView {
   layout(dt) {
     const P = this.P, O = this.O, ref = this.ref;
     const t = this.t;
+    if (this.walkouts.active) { this.walkouts.update(dt); return; }
     for (const s of [P, O]) s.fixedYaw = null;
     switch (this.mode) {
       case "intro":
@@ -1713,6 +1734,10 @@ class ArenaView {
         }
       }
     }
+    if (this.walkouts.active) {
+      focus = this.walkouts.side.pos.clone(); focus.y = 1.05;
+      dist = 3.6; h = 0.65; yaw = Math.PI / 2; rate = 8;
+    }
     if (this.presenter.root.visible && (this.mode === "intro" || this.mode === "corners")) {
       focus = this.presenter.root.position.clone(); focus.y = 1.2;
       dist = 4.5; h = 0.65; rate = 2;
@@ -1730,7 +1755,7 @@ class ArenaView {
     cam.position.set(c.focus.x + Math.sin(c.yaw) * c.dist, c.focus.y + c.h, c.focus.z + Math.cos(c.yaw) * c.dist);
     // stay inside the cage (except for the wide between-rounds shot) and hide the fence panel right in front of the lens
     const flat = Math.hypot(cam.position.x, cam.position.z);
-    const lim = this.mode === "corners" && !c.close && !this.presenter.root.visible ? R + 4 : R - 0.45;
+    const lim = this.walkouts.active ? R + 12 : this.mode === "corners" && !c.close && !this.presenter.root.visible ? R + 4 : R - 0.45;
     if (flat > lim) {
       cam.position.x *= lim / flat;
       cam.position.z *= lim / flat;
@@ -1739,8 +1764,9 @@ class ArenaView {
     for (let i = 0; i < this.panels.length; i++) {
       const p = this.panels[i];
       const front = p.position.x * cam.position.x + p.position.z * cam.position.z > 0.35 * Math.hypot(p.position.x, p.position.z) * Math.hypot(cam.position.x, cam.position.z);
-      p.visible = !(this.presenter.root.visible && front) && (p.position.distanceTo(cam.position) > 1.6 || flat < R - 1.6);
-      this.cage.rails[i].visible = !(this.presenter.root.visible && front);
+      const gate = this.walkouts.active && p.position.x < -R * 0.75;
+      p.visible = !gate && !((this.presenter.root.visible || this.walkouts.active) && front) && (p.position.distanceTo(cam.position) > 1.6 || flat < R - 1.6);
+      this.cage.rails[i].visible = !gate && !((this.presenter.root.visible || this.walkouts.active) && front);
     }
     if (c.shake > 0.001) {
       cam.position.x += (Math.random() - 0.5) * c.shake;
@@ -1762,7 +1788,7 @@ class ArenaView {
 
     this.layout(sdt);
     for (const s of [this.P, this.O, this.ref]) {
-      s.rate = this.mode === "ground" ? 7 : 4;
+      s.rate = this.walkouts.active ? 40 : this.mode === "ground" ? 7 : 4;
       this.place(s, sdt);
       s.f.update(sdt);
     }
