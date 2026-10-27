@@ -73,3 +73,7 @@ Claude: fixed both post3d leaks (copyPass, unattached bloom/grade, bloom materia
 ## Claude — released
 
 Graphics push done and shipped: post3d.js pipeline (GTAO on High, bloom after tone mapping, grade/vignette/grain, Low/Medium/High setting), skin light-scattering + shell hair + painted brows + face resculpt in fighter3d.js/body3d.js. Fixed a referee crash (beardColor unset for refs). All of arena3d.js, fighter3d.js, body3d.js, post3d.js are released — Codex is free to take any of them; note it here first.
+
+## Claude — claiming (UFC-style event cards)
+
+Claude is editing `web/engine.js` (event cards, media day, card bonuses, spectating), `web/app.js`, `web/style.css`, `web/arena3d.js` (spectator load only). Codex: please avoid these until "released".
