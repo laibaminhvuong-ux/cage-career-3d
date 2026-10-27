@@ -137,3 +137,7 @@ Reviewed all diffs, viewed Codex screenshots, all 7 checks PASS (stage, post, fi
 ## Claude — commentary team + announcer delivery (shipped)
 
 audio.js (distinct voice per role, analyst/roar/hush moods, per-line rate/pitch), announcer.js (VOICES, teamIntro, commentary, three-voice reactions, emotional name/result builds), arena3d.js (commentary hook), app.js (speaker names on subtitles). Released.
+
+## Claude — claiming (8-feature pass)
+
+Weight cuts/weigh-ins, fight camps, AI adaptation, cuts/doctor, legacy ceremony, coaching career, rival career/trilogy, PPV + contract negotiation. Editing web/engine.js, web/app.js, web/style.css, web/announcer.js. Codex: please avoid these until "released".
