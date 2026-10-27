@@ -7,6 +7,7 @@ import * as audio from "./audio.js";
 import { WorldView } from "./world3d.js";
 import { RoomEnvironment } from "./vendor/RoomEnvironment.js";
 import { createPost } from "./post3d.js";
+import { RingCardPresenter } from "./ringcard3d.js";
 import { cornerCall, finishShout, interviewCall, reaction, resultCall, roundCall } from "./announcer.js";
 
 const R = 4.4; // cage radius to the fence posts
@@ -315,7 +316,7 @@ class PreviewView {
     const looks = list.map((d) => (d.look ? parseLook(d.look) : lookFromName(d.name || "x")));
     if (looks.length === 2 && looks[0].shorts === looks[1].shorts) looks[1].shorts = (looks[1].shorts + 3) % 8;
     this.fighters = list.map((d, i) => {
-      const f = new Fighter3D({ look: looks[i], weightClass: d.weightClass, style: d.style, glove: i ? BLUE : RED, org: d.org, tattooText: d.ink, faceSeed: d.name || "", female: !!d.female });
+      const f = new Fighter3D({ look: looks[i], weightClass: d.weightClass, style: d.style, glove: i ? BLUE : RED, org: d.org, eventGloves: d.eventGloves, tattooText: d.ink, faceSeed: d.name || "", female: !!d.female });
       f.setBelt(d.belt || null);
       f.setInjured(!!d.injured);
       this.scene.add(f.root);
@@ -483,7 +484,7 @@ function buildCage(scene) {
   const fenceMat = new THREE.MeshStandardMaterial({ map: link, transparent: true, alphaTest: 0.3, side: THREE.DoubleSide, roughness: 0.35, metalness: 0.25, depthWrite: false });
   const pad = new THREE.MeshStandardMaterial({ color: "#0b0b0d", roughness: 0.4, metalness: 0.05 });
   const corners = [];
-  const panels = [];
+  const panels = [], rails = [];
   for (let i = 0; i < 8; i++) {
     const a0 = (i / 8) * TAU + Math.PI / 8, a1 = ((i + 1) / 8) * TAU + Math.PI / 8;
     const p0 = new THREE.Vector3(Math.sin(a0) * R, 0, Math.cos(a0) * R);
@@ -499,6 +500,7 @@ function buildCage(scene) {
     rail.position.set(mid.x, H + 0.14, mid.z);
     rail.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), p1.clone().sub(p0).normalize());
     scene.add(rail);
+    rails.push(rail);
     const base = new THREE.Mesh(new THREE.BoxGeometry(side, 0.18, 0.14), pad);
     base.position.set(mid.x, 0.09, mid.z);
     base.lookAt(0, 0.09, 0);
@@ -563,7 +565,7 @@ function buildCage(scene) {
   skirt.rotation.y = Math.PI / 8;
   skirt.position.y = -0.465;
   scene.add(skirt);
-  return { red: corners[1], blue: corners[5], panels };
+  return { red: corners[1], blue: corners[5], panels, rails, floor, skirt };
 }
 
 function buildCrowd(scene) {
@@ -832,7 +834,12 @@ class ArenaView {
       scene.add(b);
     }
     const corners = buildCage(scene);
+    this.cage = corners;
     this.panels = corners.panels;
+    this.eventBorder = new THREE.Mesh(new THREE.RingGeometry(R - 0.28, R - 0.17, 8), new THREE.MeshBasicMaterial({ color: "#ffffff", toneMapped: false }));
+    this.eventBorder.rotation.x = -Math.PI / 2; this.eventBorder.rotation.z = Math.PI / 8;
+    this.eventBorder.position.y = 0.005; this.eventBorder.visible = false; scene.add(this.eventBorder);
+    this.presenter = new RingCardPresenter(); scene.add(this.presenter.root);
     this.cornerSpot = {
       p: corners.red.clone().multiplyScalar(0.8),
       o: corners.blue.clone().multiplyScalar(0.8),
@@ -897,19 +904,26 @@ class ArenaView {
     const ol = f.opponent.look ? parseLook(f.opponent.look) : lookFromName(f.opponent.realName || f.opponent.name);
     if (ol.shorts === pl.shorts) ol.shorts = (ol.shorts + 3) % 8;
     const org = String(f.org || "GFC");
-    const key = JSON.stringify([f.player.name, f.opponent.name, pl, ol, info.weightClass, org]);
+    const key = JSON.stringify([f.player.name, f.opponent.name, pl, ol, info.weightClass, org, f.specialEvent?.id || "standard"]);
     const shortName = (c) => String(c.realName || c.name).split(" ").pop().toUpperCase();
     const billing = f.belt ? f.belt.label.toUpperCase() : f.rounds === 5 ? "MAIN EVENT · 5 ROUNDS" : "3 ROUNDS";
     const sp = info.sponsors && info.sponsors.length ? "  ·  PRESENTED BY " + info.sponsors.slice(0, 2).join(" & ").toUpperCase() : "";
     this.extras.drawScreen(shortName(f.player), shortName(f.opponent), billing + sp, org);
-    this.drawCenterLogo(org);
+    const edition = f.specialEvent || null;
+    this.specialEvent = edition;
+    this.cage.floor.material.color.set(edition ? edition.tint : "#ffffff");
+    this.cage.skirt.material.color.set(edition ? edition.tint : "#ffffff");
+    this.eventBorder.visible = !!edition;
+    if (edition) this.eventBorder.material.color.set(edition.accent);
+    this.presenter.configure(org, edition);
+    this.drawCenterLogo(org, edition);
     if (key !== this.key) {
       this.key = key;
       for (const s of [this.P, this.O]) if (s) { s.f.dispose(); s.ring.removeFromParent(); }
       if (this.ref) this.ref.f.dispose();
       const ink = (c) => c.nickname || String(c.realName || c.name).split(" ").pop();
-      this.P = new Side("p", new Fighter3D({ look: pl, weightClass: info.weightClass, style: f.player.style, glove: RED, org, tattooText: ink(f.player), faceSeed: f.player.realName || f.player.name, female: f.player.gender === "F" }));
-      this.O = new Side("o", new Fighter3D({ look: ol, weightClass: info.weightClass, style: f.opponent.style, glove: BLUE, org, tattooText: ink(f.opponent), faceSeed: f.opponent.realName || f.opponent.name, female: f.opponent.gender === "F" }));
+      this.P = new Side("p", new Fighter3D({ look: pl, weightClass: info.weightClass, style: f.player.style, glove: RED, org, eventGloves: edition?.gloves, tattooText: ink(f.player), faceSeed: f.player.realName || f.player.name, female: f.player.gender === "F" }));
+      this.O = new Side("o", new Fighter3D({ look: ol, weightClass: info.weightClass, style: f.opponent.style, glove: BLUE, org, eventGloves: edition?.gloves, tattooText: ink(f.opponent), faceSeed: f.opponent.realName || f.opponent.name, female: f.opponent.gender === "F" }));
       this.ref = new Side("r", new Fighter3D({ ref: true, look: { skin: 1, hair: 0, hairColor: 5, beard: 0, shorts: 2 } }));
       this.ref.f.setBase("ref");
       for (const s of [this.P, this.O]) {
@@ -928,9 +942,10 @@ class ArenaView {
   }
 
   /** The promotion's logo painted in the middle of the canvas. */
-  drawCenterLogo(org) {
-    if (this.logoOrg === org) return;
-    this.logoOrg = org;
+  drawCenterLogo(org, edition = null) {
+    const key = org + "|" + (edition?.id || "standard");
+    if (this.logoOrg === key) return;
+    this.logoOrg = key;
     if (!this.logo) {
       this.logoCanvas = document.createElement("canvas");
       this.logoCanvas.width = this.logoCanvas.height = 512;
@@ -945,11 +960,16 @@ class ArenaView {
     const g = this.logoCanvas.getContext("2d");
     g.clearRect(0, 0, 512, 512);
     // worn canvas around the logo
-    g.fillStyle = "#c9c4b8";
+    g.fillStyle = edition ? edition.canvas : "#c9c4b8";
     g.beginPath();
     g.arc(256, 256, 255, 0, TAU);
     g.fill();
-    drawOrgLogo(g, org, 256, 256, 228);
+    drawOrgLogo(g, org, 256, edition ? 210 : 256, edition ? 174 : 228);
+    if (edition) {
+      g.fillStyle = edition.accent; g.font = "900 34px Arial";
+      g.textAlign = "center"; g.textBaseline = "middle";
+      g.fillText(edition.name.toUpperCase(), 256, 435, 450);
+    }
     this.logoTex.needsUpdate = true;
   }
 
@@ -979,6 +999,7 @@ class ArenaView {
 
   /** Jump straight to where the fight currently stands (opening the screen, reloading mid-fight). */
   restore(f) {
+    this.presenter.hide();
     this.timers = [];
     this.slowUntil = 0;
     this.cam.shake = 0;
@@ -1026,8 +1047,12 @@ class ArenaView {
       this.place(s, 0);
       s.f.lastPos.copy(s.f.root.position);
     }
+    if (f.round === 0 && !f.finished) this.presenter.show(1);
+    if (f.finished) this.presenter.hide();
     this.snapCamera();
   }
+
+  setPresentation15Plus(enabled) { this.presenter.setOutfit(enabled); }
 
   setSpeed(x) {
     this.speed = x;
@@ -1077,6 +1102,7 @@ class ArenaView {
     switch (e.type) {
       case "info":
         if (e.side === "n") {
+          this.presenter.hide();
           // round start: back to the middle, touch gloves
           this.mode = "stand";
           this.top = this.down = null;
@@ -1251,7 +1277,10 @@ class ArenaView {
         break;
       }
 
-      case "round":
+      case "round": {
+        const completed = Number((e.text.match(/round (\d+)/i) || [])[1]) || f.round;
+        if (completed < f.rounds) this.presenter.show(completed + 1);
+        else this.presenter.hide();
         if (!instant && !f.finished) setTimeout(() => audio.say(cornerCall(f), true), 1800);
         this.mode = "corners";
         this.top = this.down = null;
@@ -1267,7 +1296,9 @@ class ArenaView {
         }
         break;
 
+      }
       case "finish":
+        this.presenter.hide();
         ms = this.finish(e, f, instant, act);
         break;
     }
@@ -1676,22 +1707,35 @@ class ArenaView {
         }
       }
     }
+    if (this.presenter.root.visible && (this.mode === "intro" || this.mode === "corners")) {
+      focus = this.presenter.root.position.clone(); focus.y = 1.2;
+      dist = 4.5; h = 0.65; rate = 2;
+    }
     const k = snap ? 1 : damp(rate, dt);
     c.yaw = angleLerp(c.yaw, yaw, k);
     c.dist += (dist - c.dist) * k;
     c.h += (h - c.h) * k;
     c.focus.lerp(focus, snap ? 1 : damp(rate * 1.5, dt));
     const cam = this.camera;
+    const baseFov = this.presenter.root.visible ? 50 : 42;
+    const portraitScale = Math.max(1, 0.95 / cam.aspect);
+    const fov = Math.min(85, THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(baseFov / 2)) * portraitScale)));
+    if (Math.abs(cam.fov - fov) > 0.01) { cam.fov = fov; cam.updateProjectionMatrix(); }
     cam.position.set(c.focus.x + Math.sin(c.yaw) * c.dist, c.focus.y + c.h, c.focus.z + Math.cos(c.yaw) * c.dist);
     // stay inside the cage (except for the wide between-rounds shot) and hide the fence panel right in front of the lens
     const flat = Math.hypot(cam.position.x, cam.position.z);
-    const lim = this.mode === "corners" && !c.close ? R + 4 : R - 0.45;
+    const lim = this.mode === "corners" && !c.close && !this.presenter.root.visible ? R + 4 : R - 0.45;
     if (flat > lim) {
       cam.position.x *= lim / flat;
       cam.position.z *= lim / flat;
       cam.position.y += (flat - lim) * 0.35;
     }
-    for (const p of this.panels) p.visible = p.position.distanceTo(cam.position) > 1.6 || flat < R - 1.6;
+    for (let i = 0; i < this.panels.length; i++) {
+      const p = this.panels[i];
+      const front = p.position.x * cam.position.x + p.position.z * cam.position.z > 0.35 * Math.hypot(p.position.x, p.position.z) * Math.hypot(cam.position.x, cam.position.z);
+      p.visible = !(this.presenter.root.visible && front) && (p.position.distanceTo(cam.position) > 1.6 || flat < R - 1.6);
+      this.cage.rails[i].visible = !(this.presenter.root.visible && front);
+    }
     if (c.shake > 0.001) {
       cam.position.x += (Math.random() - 0.5) * c.shake;
       cam.position.y += (Math.random() - 0.5) * c.shake;
@@ -1718,6 +1762,12 @@ class ArenaView {
     }
     this.excite += (0.25 - this.excite) * damp(0.35, dt);
     this.crowd.update(this.real, this.excite);
+    if (this.presenter.root.visible) {
+      const a = this.real * 0.14;
+      this.presenter.root.position.set(Math.sin(a) * 1.7, 0, Math.cos(a) * 1.7);
+      this.presenter.root.rotation.y = Math.atan2(this.camera.position.x - this.presenter.root.position.x, this.camera.position.z - this.presenter.root.position.z);
+      this.presenter.update(dt);
+    }
     for (const d of this.drops) {
       if (!d.live) continue;
       d.v.y -= 9.8 * sdt;

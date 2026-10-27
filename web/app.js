@@ -1,4 +1,5 @@
 import { createStage } from "./arena3d.js";
+import { getPresentation15Plus, setPresentation15Plus, mountMediaPresenter } from "./ringcard3d.js";
 import * as audio from "./audio.js";
 import { LOOK_OPTIONS, SHORTS_NAMES, TATTOO_REGIONS, lookString, parseLook, randomLook } from "./fighter3d.js";
 import { Game, GameError } from "./engine.js";
@@ -33,6 +34,7 @@ let skipPlayback = false;
 let touchGloves = true; // the choice before round one
 let headSnapshot = null; // fight json shown in the header while a round plays out
 let modal = null;        // { kind: "saves" | "market" | "talk" | "talkResult" | "division" | "hof", target?, code? }
+let mediaPresenterPreview = null;
 const PLAN_NAMES = Object.fromEntries(PLANS.map((p) => [p.id, p.name]));
 
 // 3D stage (null when the device has no WebGL: the game still works from the text log)
@@ -334,11 +336,11 @@ function showcaseFighters() {
   const s = state;
   const champ = s.rank === 0 || (s.belt && (s.belt.interimIsMe || s.belt.held.length > 0));
   const org = s.gfc ? s.orgShort : "Iron Cage";
-  const me = { org, look: s.fighter.look, name: s.fighter.name, weightClass: s.weightClassIndex, style: s.fighter.style, female: s.gender === "F", belt: champ && !s.retired ? "waist" : null, injured: s.injuryWeeks > 0,
+  const me = { org, eventGloves: s.card?.specialEvent?.gloves, look: s.fighter.look, name: s.fighter.name, weightClass: s.weightClassIndex, style: s.fighter.style, female: s.gender === "F", belt: champ && !s.retired ? "waist" : null, injured: s.injuryWeeks > 0,
     ink: s.fighter.nickname || s.fighter.name.split(" ").pop() };
   const o = s.scheduled && !s.retired ? s.scheduled : null;
   const opp = o ? o.opponent : null;
-  return opp ? [me, { org, look: opp.look, name: opp.name, weightClass: s.weightClassIndex, style: opp.style, female: opp.gender === "F", belt: o.oppRank === 0 ? "shoulder" : null }] : [me];
+  return opp ? [me, { org, eventGloves: s.card?.specialEvent?.gloves, look: opp.look, name: opp.name, weightClass: s.weightClassIndex, style: opp.style, female: opp.gender === "F", belt: o.oppRank === 0 ? "shoulder" : null }] : [me];
 }
 
 function renderShowcaseCaption() {
@@ -762,6 +764,7 @@ function closeModal() {
 }
 
 function renderModal() {
+  if (mediaPresenterPreview) { mediaPresenterPreview.dispose(); mediaPresenterPreview = null; }
   const el = $("modal");
   if (!modal) {
     el.classList.add("hidden");
@@ -972,6 +975,9 @@ function renderModal() {
       ${slider("sfx", "Sound effects")}
       ${slider("crowd", "Crowd")}
       ${slider("voice", "Commentary voice")}
+      <div class="label">Event presentation</div>
+      <label class="set-row"><span>15+ presentation</span><input type="checkbox" id="presentation15Plus" ${getPresentation15Plus() ? "checked" : ""}></label>
+      <p class="muted" style="font-size:12px">Adult ring-card presenters wear sports bras and shorts by default. Turn on for bikini outfits at media day and between rounds. Saved on this device.</p>
       <div class="label">🖥️ Graphics</div>
       <div class="set-row"><span>Graphics quality</span><div class="btn-row" style="margin:0">
         ${[["low", "Low"], ["medium", "Medium"], ["high", "High"]].map(([q, l]) => `<button class="btn small ${stage && stage.getQuality() === q ? "gold" : "ghost"}" data-quality="${q}">${l}</button>`).join("")}
@@ -1421,11 +1427,20 @@ function renderCardModal(body) {
   const main = c.bouts.filter((b) => b.slot !== "Prelims"), pre = c.bouts.filter((b) => b.slot === "Prelims");
   body.innerHTML = `
     <div class="card-poster"><div class="cp-org">${esc(c.org)}</div><h1>${esc(c.name)}</h1>
+      ${c.specialEvent ? `<div class="event-edition">✦ ${esc(c.specialEvent.name)} · exclusive gloves & octagon</div>` : ""}
       <div class="cp-main">${nm(c.bouts[0].a.last)} <span>vs</span> ${nm(c.bouts[0].b.last)}</div></div>
     ${c.done ? awardsHtml(c) : ""}
     ${c.media && c.media.ready ? `<button class="btn gold big" data-media>🎤 Fight-week media day</button>` : ""}
     <div class="label">Main card</div>${main.map((b) => boutRow(b)).join("")}
     ${pre.length ? `<div class="label">Prelims</div>${pre.map((b) => boutRow(b)).join("")}` : ""}`;
+}
+
+function mediaPresenterHtml() {
+  return `<div class="media-presenter" id="mediaPresenterStage" role="img" aria-label="Adult ring-card presenter with a media day sign"></div>`;
+}
+function showMediaPresenter(card) {
+  const host = $("mediaPresenterStage");
+  if (host) mediaPresenterPreview = mountMediaPresenter(host, { org: card.org, event: card.specialEvent || null });
 }
 
 /** Media day: the whole card faces the press, then you take questions and face off. */
@@ -1434,13 +1449,14 @@ function renderMediaModal(body) {
   if (!M) return closeModal();
   if (M.done && M.result) {
     const R = M.result;
-    body.innerHTML = `<h1>🎤 ${esc(c.name)} media day</h1>
+    body.innerHTML = `<h1>🎤 ${esc(c.name)} media day</h1>${mediaPresenterHtml()}
       ${R.lines.map((l) => `<div class="mq">${esc(l.q)}</div>
         <div class="quote"><span class="who">${nm(state.fighter.displayName)}</span>"${esc(l.you)}"</div>
         <div class="quote them"><span class="who">${nm(state.scheduled ? state.scheduled.opponent.displayName : "")}</span>"${esc(l.them)}"</div>`).join("")}
       <div class="faceoff">🥊 FACE-OFF · ${esc(R.faceText)}</div>
       <ul class="news">${R.effects.map((e) => `<li>${esc(e)}</li>`).join("")}</ul>
       <button class="btn primary big" data-closemodal>Done</button>`;
+    showMediaPresenter(c);
     return;
   }
   const picks = modal.picks || (modal.picks = []);
@@ -1463,10 +1479,11 @@ function renderMediaModal(body) {
         <button class="btn primary" data-faceoff="shove">💢 Shove<span class="sub">Huge hype, they get fired up, might be fined</span></button>
       </div>`;
   }
-  body.innerHTML = `<h1>🎤 ${esc(c.name)} media day</h1>
+  body.innerHTML = `<h1>🎤 ${esc(c.name)} media day</h1>${mediaPresenterHtml()}
     <p class="muted">Every fighter on the card is here. The cameras are rolling.</p>
     <div class="mquotes">${quotes}</div>
     ${ask}`;
+  showMediaPresenter(c);
 }
 
 // ---------- watching another bout on the card
@@ -2151,6 +2168,12 @@ document.addEventListener("input", (ev) => {
   if (out) out.textContent = ev.target.value + "%";
 });
 document.addEventListener("change", (ev) => {
+  if (ev.target.id === "presentation15Plus") {
+    const enabled = setPresentation15Plus(ev.target.checked);
+    if (stage) stage.arena.setPresentation15Plus(enabled);
+    renderModal();
+    return;
+  }
   if (ev.target.id === "langSelect") {
     setLang(ev.target.value);
     renderModal();

@@ -109,3 +109,27 @@ Also tested your completed event-card engine read-only: 12 regional events / 72 
 ## Claude — integrated Codex belts
 
 Reviewed belt3d.js + fighter3d.js diff, visually checked all 7 belts on fighters (distinct, no errors). All checks PASS: stage, post, fighter_dispose, belts (needs `node --experimental-default-type=module tools/check_belts.mjs` under plain Node 20 — the header comment now says so). Committed as Codex's work, rebuilt from committed sources, deployed.
+
+## Codex — claiming special events + ring-card presentation (new user request)
+
+User requests special-event gloves/octagon branding and an adult ring girl at media day and before each round, plus Settings `15+ presentation`: OFF by default = sports bra and shorts; ON = bikini. Claiming engine.js metadata/save propagation, arena3d.js visuals/presenter timing, fighter3d.js + body3d.js presenter outfit/glove overrides, app.js/style.css settings/media preview, and new eventstyle.js/ringcard3d.js/tests. Please avoid rebuilding or overlapping these files until Codex releases this pass. No deployment by Codex planned.
+
+## Codex — released: special-event presentation + 15+ outfit setting
+
+Requested feature complete and ready for Claude review/integration/rebuild. Released engine.js, arena3d.js, fighter3d.js, body3d.js, app.js, style.css and new eventstyle.js/ringcard3d.js. No generated dist changes or deployment by Codex.
+
+- Special-event editions assigned at card creation: anniversary every 25th numbered event; ice every 10th; neon every 5th; other title cards use championship gold. Contender Series remains standard. All bouts on a card share the edition. Custom gloves preserve red/blue wrist identification. Canvas tint, octagon border and central promotion/event wordmark change; normal events restore standard materials.
+- Metadata travels through card/fight JSON, saved careers, results, and spectator replays. Existing saves without metadata stay standard.
+- Adult ring-card presenter (explicit age 26) holds Round 1 before the fight and upcoming round during corner breaks, hides during combat/stoppages, and appears on media day. Presenter camera avoids foreground rails and keeps all card corners in frame. Replay and restore edge cases covered.
+- Settings checkbox `15+ presentation`, OFF by default: sports bra and shorts. ON: opaque bikini cups/straps and high-cut briefs. Saved on this device under cc3d_presentation15plus; in-memory fallback if storage blocked. Applies immediately to the arena and on media preview creation. Not an age verification flow. No nudity.
+- Media day uses a disposable independent preview so it does not steal the world/fight canvas. Preview is destroyed when rerendered/closed, including GPU resources/observer/animation loop.
+
+Validation: native event edition/save/replay test PASS; outfit preference/blocked-storage test PASS; prior stage/post/fighter-disposal/belt regressions PASS; full app esbuild bundle PASS; source diff whitespace PASS. Real Chromium/SwiftShader full UI test PASS: default OFF, checkbox click, persistence across reload, media model, advancing questions with exactly one replacement canvas, no page/console errors. Real arena test PASS: special gloves/cage, card 1 -> 2, combat hide, bikini live toggle, standard-event reset, restored active-fight hide, completed-fight spectator round cards, and projected card-corner bounds.
+
+New checks: tools/check_events.mjs, tools/check_presentation.mjs, tools/check_event_presentation_browser.cjs (supports --arena-only). Use isolated Node 22 at /home/laptop_usd/.cache/codex-mma-qa/node-v22.14.0-linux-x64/bin/node; mjs checks require --experimental-default-type=module on Node 20. Browser test uses cached Playwright and Chromium with isolated libs, supports env overrides. Screenshots: /tmp/codex-mma-special-event-round1.png, /tmp/codex-mma-special-event-round2.png, /tmp/codex-mma-presentation-settings.png, /tmp/codex-mma-media-day-presenter.png. Initial outfit comparison /tmp/codex-mma-presenter-outfits.png predates the final brief/strap refinement; prefer the latest Round 2/media screenshots.
+
+Please review, commit and ship this finished pass when appropriate. Codex has finished editing the claimed files.
+
+## Claude — integrated special events + ring-card presenter
+
+Reviewed all diffs, viewed Codex screenshots, all 7 checks PASS (stage, post, fighter_dispose, belts, events, presentation; browser test covered by Claude's own event-flow run). Committed as Codex's work and deployed.

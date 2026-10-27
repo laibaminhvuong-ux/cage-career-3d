@@ -1053,7 +1053,7 @@ export class Fighter3D {
     const wc = opts.weightClass ?? 3;
     const styleW = { Wrestler: 0.05, "Jiu-Jitsu": 0.01, Striker: -0.03 }[opts.style] || 0;
     // referees and people around town wear clothes instead of fight shorts and gloves
-    const civ = opts.ref || opts.casual;
+    const civ = opts.ref || opts.casual || opts.presenter;
     const width = opts.ref ? 0.98 : 0.9 + wc * 0.035 + styleW;
     const female = !!opts.female && !opts.ref;
     this.female = female;
@@ -1064,9 +1064,10 @@ export class Fighter3D {
     this.skinM = skin;
     this.skinBase = skin.color.clone();
     const hairM = addDetail(mat(LOOK_OPTIONS.hairColor[look.hairColor], { roughness: 0.62, envMapIntensity: 0.5 }), "hair");
-    const shortsM = addDetail(mat(civ ? opts.pants || "#3c3f46" : LOOK_OPTIONS.shorts[look.shorts], { roughness: 0.62 }), "cloth");
+    const shortsM = addDetail(mat(opts.presenter ? opts.outfit || "#b91c38" : civ ? opts.pants || "#3c3f46" : LOOK_OPTIONS.shorts[look.shorts], { roughness: 0.62 }), "cloth");
     // each promotion has its own glove: the body, the knuckle panel and (for some) a fixed strap color
-    const GS = orgStyle(opts.org).gloves;
+    const GS = { ...orgStyle(opts.org).gloves, ...(opts.eventGloves || {}) };
+    this.gloveStyle = GS;
     const gloveM = addDetail(mat(GS.body, { roughness: 0.36, envMapIntensity: 0.6 }), "leather");
     const panelM = addDetail(mat(GS.panel, { roughness: 0.32, envMapIntensity: 0.7, metalness: GS.metal || 0.02 }), "leather");
     const bandM = mat(opts.glove || "#c8102e", { roughness: 0.5 });
@@ -1107,8 +1108,8 @@ export class Fighter3D {
     const bones = { ...this.j, head };
     for (const [k, r] of Object.entries(BIND_POSE)) bones[k].rotation.set(...r);
     root.updateMatrixWorld(true);
-    const kind = opts.ref ? "ref" : opts.casual ? "casual" : "fighter";
-    const body = buildBody(bones, order, width, kind, { body: look.body, abs: look.abs, female, step: opts.detail === "low" ? 0.022 : undefined });
+    const kind = opts.presenter ? "presenter" : opts.ref ? "ref" : opts.casual ? "casual" : "fighter";
+    const body = buildBody(bones, order, width, kind, { body: look.body, abs: look.abs, female, bikini: !!opts.bikini, step: opts.detail === "low" ? 0.022 : undefined });
     // Body geometry is cached across fighters; only the vertex-painted skin is private.
     this.sharedGeometry = new Set(Object.values(body).filter((g) => g && g.isBufferGeometry));
     const skeleton = new THREE.Skeleton(order.map((n) => bones[n]));

@@ -355,10 +355,11 @@ const cache = new Map();
  * Returns { skin, shorts?, shirt?, pants? } geometries (shared between fighters with the same build).
  */
 export function buildBody(bones, order, w, kind, opts = {}) {
-  const key = [w.toFixed(3), kind, opts.body ?? 1, opts.abs ?? 1, opts.step || 0, opts.female ? "F" : "M"].join("|");
+  const key = [w.toFixed(3), kind, opts.body ?? 1, opts.abs ?? 1, opts.step || 0, opts.female ? "F" : "M", opts.bikini ? "bikini" : "sport"].join("|");
   if (cache.has(key)) return cache.get(key);
-  const civ = kind !== "fighter";
-  const shapes = prepare(bodyShapes(w, { ...opts, feet: !civ, hands: civ }), bones);
+  const presenter = kind === "presenter";
+  const civ = kind !== "fighter" && !presenter;
+  const shapes = prepare(bodyShapes(w, { ...opts, feet: !civ, hands: civ || presenter }), bones);
   const boneIndex = Object.fromEntries(order.map((n, i) => [n, i]));
   const step = opts.step || (civ ? 0.016 : 0.0105);
   const min = new THREE.Vector3(-0.62, -0.06, -0.3), max = new THREE.Vector3(0.62, 1.82, 0.3);
@@ -380,7 +381,17 @@ export function buildBody(bones, order, w, kind, opts = {}) {
     return g;
   };
   const torsoBones = new Set(["hips", "spine", "chest"]);
-  if (!civ) {
+  if (presenter && opts.bikini) {
+    // Adult presenter swimwear: opaque briefs and two fitted cups, independently skinned.
+    const hips = sub((p) => p.bone === "hips" || p.tag === "leg");
+    const briefField = fastField(hips, min, max);
+    // A high-cut V along each leg, rather than a horizontal shorts/skirt hem.
+    out.shorts = polygonize((x, y, z) => Math.max(briefField(x, y, z) - 0.009, hipY - 0.055 + Math.abs(x) * 0.62 - y, y - hipY - 0.11), min, max, step);
+    skin(out.shorts, shapes, boneIndex, near);
+    bakeOcclusion(out.shorts, (x, y, z) => briefField(x, y, z) - 0.009, [0.01, 0.025]);
+    const chestY = bones.chest.getWorldPosition(L).y;
+    out.top = clothes(sub((p) => p.tag === "breast"), 0.012, chestY + 0.065, chestY + 0.205);
+  } else if (!civ) {
     // loose fight shorts: from the waist to mid-thigh
     const shortsParts = sub((p) => p.bone === "hips" || p.bone === "spine" || p.tag === "leg");
     const hem = kneeY + (hipY - kneeY) * 0.42;

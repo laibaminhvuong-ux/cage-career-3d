@@ -2,6 +2,8 @@
 // Career and the API in Main), so the whole game runs in the browser with no server.
 // Every action returns the same state object the Java API returned.
 
+import { specialEventFor } from "./eventstyle.js";
+
 export class GameError extends Error {}
 
 // ------------------------------------------------------------------ random helpers
@@ -1094,6 +1096,7 @@ export class Fight {
       methodType: this.methodType, method: this.method, endRound: this.endRound, endTime: this.endTime,
       player: this.p.toJson(), opponent: this.o.toJson(), logs: this.logs, belt: this.belt || null,
       referee: this.referee || "Mario Delgado", touch: this.touch || null, org: this.org || "GFC",
+      specialEvent: this.specialEvent || null,
       cards: this.finished ? this.cards() : null,
       scout: this.coachStars >= 3 && !this.finished ? this.oppNext : null,
       oppFiredUp: this.o.bonus > 0,
@@ -2859,7 +2862,7 @@ export class Career {
       bt.aRec = bt.a.record();
       bt.bRec = bt.b.record();
     }
-    const card = { name, org, mainCount, bouts, media: this.mediaPlan(o, bouts) };
+    const card = { name, org, mainCount, bouts, specialEvent: specialEventFor(org, num, !!o.title), media: this.mediaPlan(o, bouts) };
     o.card = card;
     this.lastCard = null;
     this.watching = null;
@@ -2876,6 +2879,7 @@ export class Career {
       if (bt.player) continue;
       const f = new Fight(bt.a, bt.b, bt.rounds, bt.title, 0, 0);
       f.org = card.org;
+      f.specialEvent = card.specialEvent || null;
       if (bt.title) f.belt = { kind: "title", label: card.org + " " + bt.division + " championship", champ: "p" };
       for (let n = 0; !f.finished && n < 6; n++) f.simulateRound(rnd() < 0.7 ? planOf(bt.a) : "BALANCED", true);
       if (f.winner === "draw" && rnd() < 0.85) {
@@ -3047,7 +3051,7 @@ export class Career {
     };
     const M = card.media;
     return {
-      name: card.name, org: card.org, done: playerDone, awards: playerDone ? card.awards || [] : null, simmed: !!card.simmed,
+      name: card.name, org: card.org, specialEvent: card.specialEvent || null, done: playerDone, awards: playerDone ? card.awards || [] : null, simmed: !!card.simmed,
       media: M ? { done: M.done, ready: this.mediaReady(), questions: M.qs.map((qi) => ({ q: fill(MEDIA_Q[qi].q, this.scheduled ? this.scheduled.opp.lastName() : "", this.me.lastName()),
         respect: fill(MEDIA_Q[qi].respect, this.scheduled ? this.scheduled.opp.lastName() : "", this.me.lastName()),
         confident: fill(MEDIA_Q[qi].confident, this.scheduled ? this.scheduled.opp.lastName() : "", this.me.lastName()),
@@ -3145,6 +3149,7 @@ export class Career {
     this.pinOthers();
     this.fight = new Fight(this.me, s.opp, s.rounds, s.title, this.npcOverall ? 0 : s.oppBonus, this.stars("head"));
     this.fight.org = s.contender ? "Contender Series" : this.gfc ? this.orgShort() : "Iron Cage";
+    this.fight.specialEvent = s.card ? s.card.specialEvent || null : null;
     if (s.title) {
       const kind = s.kind || "title";
       const holder = (f) => this.rankings[0] === f || (kind === "interim" && this.interim === f);

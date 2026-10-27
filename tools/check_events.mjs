@@ -1,0 +1,28 @@
+// Node 22+: node tools/check_events.mjs (Node 20: --experimental-default-type=module).
+import assert from "node:assert/strict";
+import { SPECIAL_EVENTS, specialEventFor } from "../web/eventstyle.js";
+import { Game, packCareer, unpackCareer } from "../web/engine.js";
+assert.equal(specialEventFor("GFC", 213), null);
+assert.equal(specialEventFor("GFC", 213, true).id, "gold");
+assert.equal(specialEventFor("GFC", 215).id, "neon");
+assert.equal(specialEventFor("GFC", 220).id, "ice");
+assert.equal(specialEventFor("GFC", 250).id, "legacy");
+assert.equal(specialEventFor("Contender Series", 25, true), null);
+const copy = specialEventFor("GFC", 250); copy.gloves.body = "#000000";
+assert.notEqual(copy.gloves.body, SPECIAL_EVENTS.legacy.gloves.body, "Event metadata must not mutate the style registry");
+const store = { kind: "mem", getProfile: async () => null, setProfile() {}, getCareer: async () => null, setCareer() {}, deleteCareer() {}, getHallOfFame: async () => [], addHallOfFame() {} };
+const game = new Game(store); await game.load();
+game.call("new", { name: "Event Edition QA", weightClass: 3, style: "Balanced", country: "USA" });
+const career = game.active(); game.call("accept", { index: 0 });
+career.eventNum[career.cardOrg()] = 24; career.buildCard(career.scheduled);
+assert.equal(career.scheduled.card.specialEvent.id, "legacy");
+career.scheduled.weeks = 0; career.simulateCard();
+assert(career.scheduled.card.bouts.filter(b => !b.player).every(b => b.json.specialEvent.id === "legacy"), "Every spectator bout must use the edition");
+game.call("fight/start");
+assert.equal(career.fight.toJson().specialEvent.id, "legacy");
+const restored = unpackCareer(packCareer(career));
+assert.equal(restored.fight.toJson().specialEvent.id, "legacy");
+assert.equal(restored.cardJson(restored.scheduled.card).specialEvent.id, "legacy");
+for (let r = 0; r < 6 && !career.fight.finished; r++) game.call("fight/round", { plan: "BALANCED" });
+assert(career.fight.finished); assert.equal(career.lastCard.specialEvent.id, "legacy");
+console.log("PASS: standard/title/milestone editions, immutable glove presets, fight/card/save/replay metadata, completed event persistence");
