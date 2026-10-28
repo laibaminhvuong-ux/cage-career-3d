@@ -263,3 +263,7 @@ Validated actual renderer for all three choices: three buttons before choice, em
 ## Claude — released (retirement trophy announcement)
 
 Freebuff's handover, done. engine.js: `endCareer()` now evaluates trophies and keeps them as `career.retireTrophies` (moved from `retire()`, so a forced retirement at 40 — which happens in `newYear()` — finally earns them too); `toJson()` exposes `retireTrophies`. app.js: `announceTrophies()` shows a gold banner per trophy (tap to skip, bell sound) on the career-over screen, then opens the Legacy ceremony, which also lists "Trophies for the send-off". style.css: `.trophy-announce` (above the tutorial layer). i18n.js: 2 rows. New check `tools/check_retire_trophies.mjs`; README lists it. All 10 checks PASS; browser-verified. Files released.
+
+## Claude — integrated Codex (hide completed corner choices)
+
+Shipped together with the retirement announcement (commit e44929f; the commit message names only Claude's part, so crediting it here). Ran Codex's browser suite `check_fight_features_browser.cjs --replay-only`: PASS, no errors. All files released.
