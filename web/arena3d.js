@@ -161,20 +161,31 @@ export function createStage() {
   // frame rate: capped at 30 or 60, or as fast as the screen allows (0); onFps reports the measured rate
   let fpsCap = 0, lastFrame = 0, frames = 0, fpsSince = performance.now(), onFps = null;
   // Auto quality: a ladder from the richest look to the lightest. Each step is an effects level
-  // plus a render resolution (fewer pixels is often the biggest saving). The game watches its
-  // own frame rate and steps down when it can't keep up, and back up when there's headroom.
+  // plus a share of the screen's sharpest resolution (fewer pixels is often the biggest saving), so
+  // every screen, 1x laptops included, can keep High effects at slightly fewer pixels. The game
+  // watches its own frame rate and steps down when it can't keep up, and back up when there's
+  // headroom. Phones start at Medium and never climb past it; the settled step is remembered.
   const maxPr = Math.min(window.devicePixelRatio || 1, 1.75);
-  const LADDER = [["high", maxPr], ["high", Math.min(maxPr, 1.25)], ["medium", Math.min(maxPr, 1.25)], ["medium", 1], ["low", 1], ["low", 0.8], ["low", 0.65]]
-    .filter((s, i, a) => i === 0 || s[0] !== a[i - 1][0] || s[1] !== a[i - 1][1]);
+  const LADDER = [["high", 1], ["high", 0.85], ["medium", 1], ["medium", 0.85], ["low", 1], ["low", 0.85], ["low", 0.7]];
+  const STEP_KEY = "cc3d_autostep";
   const small = typeof screen !== "undefined" && typeof matchMedia === "function" && (Math.min(screen.width, screen.height) < 700 || matchMedia("(pointer: coarse)").matches);
-  const auto = { step: Math.min(LADDER.length - 1, small ? Math.max(0, LADDER.findIndex((s) => s[0] === "medium" && s[1] <= 1)) : 1), sum: 0, n: 0, since: 0, calm: 0, fails: {} };
+  const ceiling = small ? 2 : 0; // the richest step this device may climb to
+  let saved = NaN;
+  try { saved = parseInt(localStorage.getItem(STEP_KEY), 10); } catch { /* storage blocked */ }
+  const auto = { step: saved >= ceiling && saved < LADDER.length ? saved : ceiling, sum: 0, n: 0, since: 0, calm: 0, held: 0, fails: {} };
   const applyStep = () => {
-    const [level, pr] = LADDER[auto.step];
+    const [level, share] = LADDER[auto.step];
+    const pr = share * maxPr;
     if (post) post.setLevel(level);
     if (Math.abs(renderer.getPixelRatio() - pr) > 0.01) {
       renderer.setPixelRatio(pr);
       resize();
     }
+  };
+  const moveStep = (to) => {
+    auto.step = to;
+    auto.calm = auto.held = 0;
+    applyStep();
   };
   const autoOn = () => !!post && post.getQuality() === "auto";
   /** Called every rendered frame with the time since the last one. */
@@ -188,19 +199,16 @@ export function createStage() {
     auto.sum = auto.n = 0;
     auto.since = now;
     const target = fpsCap ? fpsCap * 0.9 : 55;
+    // a step that has held for ~10 s is this device's level: start there next time (a passing
+    // stutter, like a scene loading, is not remembered)
+    if (++auto.held === 5) try { localStorage.setItem(STEP_KEY, String(auto.step)); } catch { /* ignore */ }
     if (fps < target * 0.82 && auto.step < LADDER.length - 1) {
       // too slow: step down (two steps when it's struggling badly), and remember that the richer step didn't hold up
       auto.fails[auto.step] = (auto.fails[auto.step] || 0) + 1;
-      auto.step = Math.min(LADDER.length - 1, auto.step + (fps < target * 0.45 ? 2 : 1));
-      auto.calm = 0;
-      applyStep();
-    } else if (fps >= target * 0.97 && auto.step > 0) {
+      moveStep(Math.min(LADDER.length - 1, auto.step + (fps < target * 0.45 ? 2 : 1)));
+    } else if (fps >= target * 0.97 && auto.step > ceiling) {
       // smooth for a while: try one step richer (unless that step already failed twice)
-      if (++auto.calm >= 6 && (auto.fails[auto.step - 1] || 0) < 2) {
-        auto.step--;
-        auto.calm = 0;
-        applyStep();
-      }
+      if (++auto.calm >= 6 && (auto.fails[auto.step - 1] || 0) < 2) moveStep(auto.step - 1);
     } else auto.calm = 0;
   };
   renderer.setAnimationLoop((now) => {
@@ -242,8 +250,11 @@ export function createStage() {
   const getQuality = () => (post ? post.getQuality() : "low");
   /** What Auto is doing right now, for the Settings screen. */
   const getAutoStatus = () => (post ? { level: post.getLevel(), scale: Math.round((renderer.getPixelRatio() / maxPr) * 100) } : null);
+  // for checks: feed the tuner a frame directly, and read where it stands
+  const autoTick = (now, ms) => autoTune(now, ms);
+  const autoStep = () => ({ index: auto.step, level: LADDER[auto.step][0], scale: Math.round(LADDER[auto.step][1] * 100), ceiling, ladder: LADDER.map((r) => [...r]) });
   if (autoOn()) applyStep();
-  return { preview, arena, world, show, setFps, watchFps, setQuality, getQuality, getAutoStatus };
+  return { preview, arena, world, show, setFps, watchFps, setQuality, getQuality, getAutoStatus, autoTick, autoStep };
 }
 
 /** A promotion's logo: its badge shape in its colors with the wordmark across it. r = radius. */
