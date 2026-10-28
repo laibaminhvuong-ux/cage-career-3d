@@ -81,6 +81,14 @@ On the free plan the server sleeps after 15 idle minutes, so the first visit tak
   defenses, a second division, fame and career earnings. They are saved with the career and
   announced on the result panel after the fight that earns them; open the full shelf with
   🏆 in the top bar.
+- **Bonus objectives**: when a bout is booked the promotion posts one or two targets (finish
+  inside two rounds, win by KO or submission, land takedowns or volume, don't get knocked
+  down, out-land them two to one), paid on top of the purse if you win and hit them.
+- **Dynasty**: once a career is in the Hall of Fame, a new fighter can start as that legend's
+  protégé: some inherited fame, 25% off gym moves, and the mentor's legacy score as the mark
+  to beat, with a moment when you pass it.
+- **Your rival's fights**: when your rival fights away from your cards it's a real bout, and
+  the Rival panel lets you watch the latest one.
 
 ## Code layout
 
@@ -106,4 +114,4 @@ On the free plan the server sleeps after 15 idle minutes, so the first visit tak
 - **Corner work:** once per break, recover stamina, treat a cut, or take a tactical boost for the next round only. Existing normal recovery still applies. Replay pauses the corner countdown.
 - **Opponent film room:** study a booked opponent for one week and 10 energy, unlocking a scouting report and round-plan scouting. Completed cards build genuine archived footage, with playable highlights for the 12 most recently retained bouts. Compact summaries retain up to three bouts per fighter and 80 fighters.
 
-Feature checks (Node 22+, or `--experimental-default-type=module` for `.mjs` checks on Node 20): `node tools/check_fight_features.mjs`, `node tools/check_achievements.mjs` (trophy table, unlock-once, save compatibility), `node tools/check_retire_trophies.mjs` (retirement / Hall of Fame trophies announced on voluntary and forced retirement), `node tools/check_i18n.mjs` (translation table and app-shell coverage). Local Chromium integration: `node tools/check_fight_features_browser.cjs` (use `--replay-only` for the corner/replay UI subset). Browser tests use the isolated QA tools under `~/.cache/codex-mma-qa` and write screenshots under `/tmp`.
+Feature checks (Node 22+, or `--experimental-default-type=module` for `.mjs` checks on Node 20): `node tools/check_fight_features.mjs`, `node tools/check_achievements.mjs` (trophy table, unlock-once, save compatibility), `node tools/check_retire_trophies.mjs` (retirement / Hall of Fame trophies announced on voluntary and forced retirement), `node tools/check_objectives.mjs` (bonus objectives and the rival's watchable fights), `node tools/check_dynasty.mjs` (protégé careers), `node tools/check_auto_quality.mjs` (the Auto graphics ladder), `node tools/check_i18n.mjs` (translation table and app-shell coverage). Local Chromium integration: `node tools/check_fight_features_browser.cjs` (use `--replay-only` for the corner/replay UI subset). Browser tests use the isolated QA tools under `~/.cache/codex-mma-qa` and write screenshots under `/tmp`.

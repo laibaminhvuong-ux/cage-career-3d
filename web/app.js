@@ -403,7 +403,18 @@ function fillWeightClasses() {
   $("wcSelect").innerHTML = list.map((w, i) => `<option value="${i}" ${i === (female ? 1 : 3) ? "selected" : ""}>${esc(w)}${female ? " (women's)" : ""}</option>`).join("");
 }
 
+/** The Hall of Fame legends a new fighter can train under (refreshed: the Hall grows). */
+function fillMentors() {
+  const L = state.legends || [];
+  $("mentorRow").classList.toggle("hidden", !L.length);
+  const keep = $("mentorSelect").value;
+  $("mentorSelect").innerHTML = `<option value="">No mentor: start from nothing</option>` +
+    L.map((x) => `<option value="${x.i}">${esc(x.name)} · ${esc(x.record)} · ${esc(x.legacy)} (legacy ${x.legacyScore})</option>`).join("");
+  if ([...$("mentorSelect").options].some((o) => o.value === keep)) $("mentorSelect").value = keep;
+}
+
 function fillCreateForm() {
+  fillMentors();
   const wc = $("wcSelect");
   if (wc.options.length) return;
   fillWeightClasses();
@@ -445,6 +456,7 @@ function renderFighter() {
       <div class="ovr"><b>${f.overall}</b><span>OVR</span></div>
     </div>
     <div class="record">${f.record} <small>${f.koWins} KO · ${f.subWins} SUB · ${f.decWins} DEC</small></div>
+    ${s.mentor ? `<div class="mentor-line">🎓 Protégé of <b>${nm(s.mentor.name)}</b> · legacy ${s.legacyScore} / ${s.mentor.legacyScore} to beat${s.mentor.passed ? ' <span class="badge gold">Passed your mentor!</span>' : ""}</div>` : ""}
     <div class="badges">${badges.join("")}</div>
     ${Object.entries(f.stats).map(([k, v]) => `
       <div class="stat"><span>${STAT_LABELS[k]}</span>${bar(v, statColor(v))}<b>${Math.floor(v)}</b></div>`).join("")}`;
@@ -492,6 +504,13 @@ function taleOfTape(opp) {
   }).join("");
 }
 
+/** The promotion's bonus objectives for a bout; after the fight, each marked hit or missed. */
+function objectivesHtml(list, after = false) {
+  if (!list || !list.length) return "";
+  return `<div class="objectives"><div class="label">💰 Bonus objectives${after ? "" : " · paid only if you win"}</div>
+    ${list.map((x) => `<div class="obj ${after ? (x.done ? "hit" : "miss") : ""}">${after ? (x.done ? "✅" : "❌") : x.icon} ${esc(x.text)} <b>+${money(x.pay)}</b></div>`).join("")}</div>`;
+}
+
 function renderFightCard() {
   const s = state;
   const el = $("fightCard");
@@ -528,6 +547,7 @@ function renderFightCard() {
           ${(done.length ? done : s.card.bouts.filter((b) => !b.player).slice(-3)).slice(-4).map((b) => boutRow(b, true)).join("")}
           <button class="btn small ghost" data-card style="margin:4px 0 10px">📋 Full card</button>`;
       })() : ""}
+      ${objectivesHtml(o.objectives)}
       <button class="btn primary big" data-startfight>Walk out to the cage</button>`;
     return;
   }
@@ -541,6 +561,7 @@ function renderFightCard() {
       </div>
       ${offerHtml(o, false)}
       ${o.oppBonus > 0 ? `<p class="badge red" style="display:inline-block">Opponent fired up: +${o.oppBonus} to all stats</p>` : ""}
+      ${objectivesHtml(o.objectives)}
       ${o.campReady ? `<div class="label">🏕 Fight camp — how do you prepare for ${nm(o.opponent.displayName)}?</div><div class="tones">
         <button class="btn" data-camp="tapes">🎞 Study tapes<span class="sub">Your coach reads their game plan every round</span></button>
         <button class="btn" data-camp="partners">🥊 Sparring partners<span class="sub">Partners who fight like them: blunt their best weapon (costs money)</span></button>
@@ -708,6 +729,8 @@ function renderRival() {
     <div class="lbl" style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px"><span>Heat</span><b>${heatLabel} · ${r.heat}</b></div>
     <div class="heat"><i style="width:${r.heat}%"></i></div>
     <p class="muted" style="font-size:12px">At 60+ heat a grudge match (1.5× purse) shows up in your offers.</p>
+    ${r.lastFight ? `<div class="camp-note">📺 Last fight (${esc(r.lastFight.date)}): ${r.lastFight.won ? "beat" : "lost to"} ${nm(r.lastFight.opp)} · ${esc(r.lastFight.method)}
+      <button class="btn small ghost" data-watch="r">▶ Watch</button></div>` : ""}
     <div class="btn-row">
       <button class="btn small" data-talk="rival" ${s.canTalk && !s.retired ? "" : "disabled"}>🎤 Call them out${s.canTalk ? "" : " (done this week)"}</button>
       <button class="btn small ghost" data-fighter="${r.id}">👤 Profile</button>
@@ -1611,7 +1634,7 @@ async function watchBout(f, back = "card") {
   const fresh = (c) => ({ ...c, health: 100, stamina: 100, sig: 0, td: 0, kd: 0 });
   renderFightHead({ ...f, round: 1, player: fresh(f.player), opponent: fresh(f.opponent) });
   $("fightLog").innerHTML = `<div class="ev round">${esc(f.cardName)} · ${esc(f.slot)} · ${esc(f.division)}</div>`;
-  $("fightControls").innerHTML = `<div class="btn-row" style="justify-content:center"><button class="btn big" data-skipwatch>Skip ▶▶</button><button class="btn big ghost" data-stopwatch>✕ Back to the card</button></div>`;
+  $("fightControls").innerHTML = `<div class="btn-row" style="justify-content:center"><button class="btn big" data-skipwatch>Skip ▶▶</button><button class="btn big ghost" data-stopwatch>✕ ${back === "card" ? "Back to the card" : "Back"}</button></div>`;
   caption({ text: `${f.cardName}: ${f.player.name} vs ${f.opponent.name}`, side: "n", type: "round" });
   await presentation.runWalkouts(f, true);
   if (!watching || watching.f !== f) return;
@@ -1635,7 +1658,7 @@ async function watchBout(f, back = "card") {
   const w = f.winner === "player" ? f.player.name : f.winner === "opponent" ? f.opponent.name : null;
   $("fightControls").innerHTML = `<div class="result-banner"><div class="rw W" style="font-size:22px">${w ? nm(w) + " wins" : "Draw"}</div>
     <div class="rd"><b>${esc(f.method)}</b> · R${f.endRound} ${esc(f.endTime)}</div></div>
-    <button class="btn primary big" data-stopwatch>Back to the card</button>`;
+    <button class="btn primary big" data-stopwatch>${watching && watching.back !== "card" ? "Back" : "Back to the card"}</button>`;
 }
 
 async function stopWatching() {
@@ -1963,6 +1986,7 @@ function renderFightControls(f) {
         ${f.scout ? `<br><span class="scout">🧠 Coach: "They're going to ${esc(PLAN_NAMES[f.scout])} this round."</span>` : ""}
         ${f.oppFiredUp && f.round === 0 ? `<br><span style="color:#ff6b6e">Your opponent is fired up after the trash talk.</span>` : ""}</div>
       ${cornerPanelHtml(f)}
+      ${f.round === 0 ? objectivesHtml(state.scheduled && state.scheduled.objectives) : ""}
       ${f.round > 0 && highlightClips(f).length ? '<button class="btn small" data-highlights>📺 Round highlights</button>' : ""}
       ${f.round === 0 ? `<div class="touch-row"><span>Before the bell:</span>
         <button class="btn small ${touchGloves ? "gold" : ""}" data-touch="1">🤜🤛 Touch gloves</button>
@@ -1978,7 +2002,8 @@ function renderFightControls(f) {
     <div class="result-banner">
       <div class="rw ${r.result}">${word}</div>
       <div class="rd"><b>${esc(f.method)}</b> · R${f.endRound} ${esc(f.endTime)}${f.cards ? " · " + f.cards.join(", ") : ""}</div>
-      <div class="rd">Paid <b>${money(r.pay || 0)}</b>${r.perfBonus ? ` (incl. ${money(r.perfBonus)} in bonuses)` : ""} · Fame ${r.fameDelta >= 0 ? "+" : ""}${r.fameDelta} · Record <b>${esc(r.record)}</b></div>
+      <div class="rd">Paid <b>${money(r.pay || 0)}</b>${r.perfBonus || r.objectivePay ? ` (incl. ${money((r.perfBonus || 0) + (r.objectivePay || 0))} in bonuses)` : ""} · Fame ${r.fameDelta >= 0 ? "+" : ""}${r.fameDelta} · Record <b>${esc(r.record)}</b></div>
+      ${objectivesHtml(r.objectives, true)}
       ${(r.bonuses || []).map((b) => `<div class="rd bonus-win">${b.icon} ${esc(b.award)}! +${money(b.amount)}</div>`).join("")}
       ${r.ppv ? `<div class="rd">📺 ${r.ppv.buys.toLocaleString("en-US")} pay-per-view buys${r.ppv.share ? ` · your share <b>${money(r.ppv.share)}</b>` : " · no PPV points in your contract"}</div>` : ""}
       ${r.weighIn && !r.weighIn.made ? `<div class="rd" style="color:var(--red)">⚖️ Missed weight (${esc(r.weighIn.weight)} lbs)</div>` : ""}
@@ -2119,7 +2144,7 @@ document.addEventListener("click", async (ev) => {
     return;
   }
   if (d.watch !== undefined) {
-    const back = /^h/.test(d.watch) ? "legacy" : d.watch === "c" ? null : "card";
+    const back = /^h/.test(d.watch) ? "legacy" : d.watch === "c" || d.watch === "r" ? null : "card";
     if (await api("card/watch", { id: d.watch })) {
       if (state.watch) watchBout(state.watch, back);
       else toast("That bout can't be replayed right now.", true);

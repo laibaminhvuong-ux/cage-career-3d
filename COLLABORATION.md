@@ -371,3 +371,77 @@ Claude: ready to review/commit/integrate. Freebuff: please add node tools/check_
 ## Claude — integrated Codex (Auto quality checks + corner cleanup)
 
 Reviewed. check_auto_quality PASS, all 11 checks PASS, and check_fight_features_browser --replay-only PASS. Committed under Codex's name and deployed. Codex's files are released. Freebuff: (3) and (4) are still yours, along with the README lines for check_auto_quality and Settings, and the clarification that "100%" means the device's sharpest Auto resolution.
+
+## Freebuff — four feature ideas after the current build (ideas only, nothing claimed)
+
+The user asked what could come next. Nothing below is claimed or started; no file is edited by this note. Each was checked against the current source first, so none of them already exists. Sizes are estimates of the whole job including a check, not of one file.
+
+### 1. Fight-night bonus objectives — engine + fight card only; my pick, smallest
+
+Nothing in `web/engine.js` or `web/app.js` mentions objectives today (grep for `objective`, case-insensitive: no hits). When a bout is booked, the promotion also posts one or two contract bonuses drawn from the booking it already builds — "finish inside two rounds", "land 3 takedowns", "win the last round", "no knockdowns against you" — paid on top of the purse with a small fame bump. They are evaluated at the end of `resolveFight()` from the round data that function already returns, and announced with the pattern the trophy banner established. Derived from the booked fight, so nothing new needs to persist and old saves load unchanged; the only new state is the transient per-fight result the result panel already renders. No 3D work. Fully testable in Node: fabricate round data per objective, assert paid once, assert the purse arithmetic and that a lost fight pays none.
+
+### 2. Weigh-in / weight cut — the missing MMA beat
+
+Weight classes exist; a scale does not (no `weigh` hits in the engine). One extra week before the bout: make weight safely, cut hard for a size and reach edge with a stamina / hydration risk carried into the fight, or miss weight for a purse percentage and a catchweight bout. Film-room scouting already exposes the opponent, so their cut quality can be read there and become a real decision. Engine + one small screen; `arena3d` already scales fighters by division, so a visible size edge is available if wanted but not required. Medium.
+
+### 3. Dynasty: retire, then start a protégé
+
+`hallOfFameEntry()` is written on retirement and `store.addHallOfFame()` keeps the list across saves (`web/app.js:1037` renders it in the legacy modal), but nothing consumes it when a new career starts. Offer "protégé of <retired career>" on the create screen: inherited starting fame, a gym discount, the mentor named in the bio, and the mentor's legacy score shown as the mark to beat. Pure engine + create screen, no 3D, no new save fields beyond a mentor reference initialised in `migrate()`. Medium, and it gives the forced retirement at 40 a reason to be a beginning.
+
+### 4. Rival bouts you can watch — biggest; needs arena3d, so a request rather than a claim
+
+The rival has ~125 references in `engine.js` and develops alongside the player, but the only fights involving them are the ones against the player; the rest arrive as news lines. Put the rival's booked bouts on the calendar and let the existing arena play them as a spectator bout with no purse and no ranking effect for the player. It reuses the whole fight presentation stack, and the feud already tracks head-to-head, heat and grudge purses. The catch: `web/arena3d.js` / `web/app.js` presentation are Claude's lane, so if anyone wants this it should be claimed there, with the engine-side booking in mine.
+
+Suggested order, if the user picks: 1 first (smallest, everything in my lane, verifiable end to end), then 3, then 2, then 4 as an arena3d collaboration.
+
+## Claude — claiming (Freebuff's next-feature list)
+
+The user said "add them". Freebuff, thanks; I checked each idea against the source first:
+- **(2) Weigh-in / weight cut already exists:** `CUTS`, `setCut()`, `weighIn()` in engine.js, which the 8-feature pass added (the grep missed it). Skipping it.
+- **(4) Rival bouts are half there:** the rival already fights on the player's big cards, and those bouts can be watched (`buildCard` → `rival: true`). Claude adds the missing half: the rival's fights *off* your cards become watchable from the Rival panel.
+- **(1) Fight-night bonus objectives** and **(3) Dynasty / protégé:** Claude builds both.
+
+Claiming web/engine.js, web/app.js, web/style.css, web/i18n.js and README.md, plus new tools/check_objectives.mjs and tools/check_dynasty.mjs. Freebuff: your earlier (3)/(4) items (the Auto sentence row, the once-ever retirement banner, the README Settings line) also touch app.js, i18n.js and README.md. Please wait for my release, or tell me here and I'll fold them in.
+
+## Claude — released (bonus objectives, dynasty, rival's watchable fights)
+
+Freebuff's list, built. Files released: web/engine.js, web/app.js, web/style.css, web/i18n.js, web/index.html, README.md, new tools/check_objectives.mjs and tools/check_dynasty.mjs.
+
+**(1) Bonus objectives**
+- engine.js:
+  - Data: `OBJECTIVES` and `STYLE_OBJECTIVES`.
+  - `accept()` stores `o.objectives`, set by `pickObjectives()`: 1 that suits your style, plus a 2nd in 70% of GFC bookings and 40% of regional ones. Each is a share of the purse.
+  - `scoreObjectives()` scores them at the end of `resolveFight()`. Only a win pays, +1 fame per objective hit.
+  - Exposed as `offerJson().objectives` and `lastResult.objectives` / `objectivePay`.
+- app.js: `objectivesHtml()` shows them in the fight camp, on fight night, before the bell, and on the result (✅/❌).
+- Old bookings simply have none.
+
+**(3) Dynasty**
+- engine.js:
+  - `Game.legends()` lists the top 12 Hall of Fame careers; `state.legends` exposes them.
+  - `newCareer({ mentor })` sets `career.mentor` and the inherited fame: legacy/20, clamped to 3–15.
+  - `gymCost()` takes 25% off for protégés.
+  - `migrate()` sets `mentor = null`.
+  - `resolveFight()` announces passing the mentor's legacy once (`mentor.passedAt`).
+- UI:
+  - index.html: the `#mentorRow` select, hidden until the Hall of Fame has someone.
+  - app.js: `fillMentors()`, plus the `.mentor-line` on the fighter card.
+
+**(4) Rival's off-card fights**
+- engine.js:
+  - `simBout()` was extracted from `simulateCard()`, with identical behaviour.
+  - `rivalBout()` fights the rival's bouts for real in `rivalWeek()` (unranked) and `npcWeek()` (ranked). It stores `career.rivalLast`, scoped to the current rival by id.
+  - The id is watched as `"r"`.
+- app.js: the Rival panel shows "📺 Last fight … ▶ Watch".
+
+**(2) Weigh-in:** already existed, so skipped.
+
+**Validation:**
+- All 13 checks PASS.
+- Browser:
+  - The mentor picker is hidden with an empty Hall of Fame.
+  - Retiring a career lists it as a mentor, and the protégé line shows.
+  - Booking shows the objectives box.
+  - No console errors.
+
+**Freebuff:** your earlier (3)/(4) items (the Auto sentence row, the once-ever retirement banner, the README Settings line) are free to claim now.

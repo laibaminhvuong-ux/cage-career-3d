@@ -224,6 +224,22 @@ export const ROWS = [
   ["Locked", "Chưa mở", "Bloqueado", "Bloqueado", "Verrouillé"],
   ["Trophy unlocked", "Mở khóa cúp", "Trofeo desbloqueado", "Troféu desbloqueado", "Trophée débloqué"],
   ["Trophies for the send-off", "Cúp cho ngày giải nghệ", "Trofeos de despedida", "Troféus da despedida", "Trophées d'adieu"],
+
+  // Dynasty, bonus objectives
+  ["🎓 Train under a legend", "🎓 Tập dưới trướng huyền thoại", "🎓 Entrena con una leyenda", "🎓 Treine com uma lenda", "🎓 S'entraîner auprès d'une légende"],
+  ["A protégé starts with some of the legend's fame, 25% off every gym move, and the legend's legacy score as the mark to beat.",
+    "Học trò bắt đầu với một phần danh tiếng của huyền thoại, giảm 25% mỗi lần chuyển phòng tập, và điểm di sản của huyền thoại là mốc cần vượt qua.",
+    "Un protegido empieza con parte de la fama de la leyenda, un 25% menos en cada cambio de gimnasio y el legado de la leyenda como marca a superar.",
+    "Um protegido começa com parte da fama da lenda, 25% de desconto em cada mudança de academia e o legado da lenda como marca a superar.",
+    "Un protégé commence avec une part de la renommée de la légende, 25 % de remise sur chaque changement de salle, et l'héritage de la légende comme record à battre."],
+  ["No mentor: start from nothing", "Không có thầy: bắt đầu từ con số không", "Sin mentor: empieza desde cero", "Sem mentor: comece do zero", "Pas de mentor : partir de rien"],
+  ["Passed your mentor!", "Đã vượt qua thầy!", "¡Superaste a tu mentor!", "Superou seu mentor!", "Mentor dépassé !"],
+  ["Finish them inside two rounds", "Kết liễu trong hai hiệp", "Termínalo en dos asaltos", "Finalize em até dois rounds", "Finir le combat en deux rounds"],
+  ["Win by KO/TKO", "Thắng bằng KO/TKO", "Gana por KO/TKO", "Vença por KO/TKO", "Gagner par KO/TKO"],
+  ["Win by submission", "Thắng bằng khóa siết", "Gana por sumisión", "Vença por finalização", "Gagner par soumission"],
+  ["Land 3 or more takedowns", "Quật ngã từ 3 lần trở lên", "Consigue 3 derribos o más", "Acerte 3 quedas ou mais", "Réussir 3 amenées au sol ou plus"],
+  ["Don't get knocked down", "Không bị đánh ngã", "Que no te derriben", "Não seja derrubado", "Ne pas aller au tapis"],
+  ["Out-land them two to one", "Ra đòn trúng gấp đôi đối thủ", "Conecta el doble que tu rival", "Acerte o dobro do adversário", "Toucher deux fois plus que l'adversaire"],
 ];
 
 // ~130 world languages: [code, name in that language]

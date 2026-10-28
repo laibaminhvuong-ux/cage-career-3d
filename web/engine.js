@@ -324,6 +324,19 @@ const CUTS = {
   extreme: { miss: 0.22, mods: { power: 3, chin: 2, cardio: -3 }, drain: 12, text: "An extreme cut: much bigger on the night, but it drains your tank and you might miss weight.", after: "You look drained on the scale, but you'll be the much bigger fighter." },
 };
 
+// fight-night bonus objectives: the promotion posts one or two when a bout is booked, paid on
+// top of the purse (a share of it) if you win AND hit the target. check(f, rounds) reads the fight.
+const OBJECTIVES = {
+  early: { icon: "⏱", text: "Finish them inside two rounds", share: 0.25, check: (f) => f.methodType !== "DEC" && f.endRound <= 2 },
+  ko: { icon: "💥", text: "Win by KO/TKO", share: 0.2, check: (f) => f.methodType === "KO" },
+  sub: { icon: "🐍", text: "Win by submission", share: 0.2, check: (f) => f.methodType === "SUB" },
+  td: { icon: "🤼", text: "Land 3 or more takedowns", share: 0.12, check: (f) => f.p.totTd >= 3 },
+  volume: { icon: "👊", text: "Land {n} significant strikes", share: 0.12, n: (r) => (r >= 5 ? 70 : 40), check: (f, r) => f.p.totSig >= (r >= 5 ? 70 : 40) },
+  clean: { icon: "🛡", text: "Don't get knocked down", share: 0.1, check: (f) => f.o.totKd === 0 },
+  outland: { icon: "📈", text: "Out-land them two to one", share: 0.15, check: (f) => f.p.totSig >= 20 && f.p.totSig >= 2 * f.o.totSig },
+};
+const STYLE_OBJECTIVES = { Striker: ["ko", "volume", "outland"], Wrestler: ["td", "early", "clean"], "Jiu-Jitsu": ["sub", "td", "early"] };
+
 // fight-week media day: questions for you ({o} = your opponent, {m} = you), with three ways to answer
 const MEDIA_Q = [
   { q: "How do you see this fight going?", respect: "{o} is tough. I expect a war and I've prepared for every second of it.",
@@ -2000,6 +2013,7 @@ export class Career {
 
   /** Older saves predate the belt system and life outside the cage. */
   migrate() {
+    if (this.mentor === undefined) this.mentor = null; // the dynasty: the legend you trained under
     if (!this.lifeState) {
       this.lifeState = {
         happiness: 60, followers: 200 + (this.fame || 0) * (this.fame || 0) * 20, house: 0, cars: [], driving: null, pets: [], partner: null,
@@ -2265,10 +2279,13 @@ export class Career {
     return " Ouch — injured for " + w + ".";
   }
 
+  /** A gym move; a protégé's mentor gets them 25% off. */
+  gymCost(i) { return this.mentor ? Math.round((GYM_COST[i] * 0.75) / 50) * 50 : GYM_COST[i]; }
+
   upgradeGym() {
     if (this.retired) throw new GameError("Your career is over.");
     if (this.gym >= GYM_NAMES.length - 1) throw new GameError("You're already at the best gym in the world.");
-    const cost = GYM_COST[this.gym + 1];
+    const cost = this.gymCost(this.gym + 1);
     if (this.money < cost) throw new GameError("You need $" + commas(cost) + " to move to " + GYM_NAMES[this.gym + 1] + ".");
     this.money -= cost;
     this.gym++;
@@ -2284,9 +2301,30 @@ export class Career {
     if (this.injuryWeeks >= o.weeks) throw new GameError("You won't be healed in time for that fight.");
     this.scheduled = o;
     this.offers = [];
+    o.objectives = this.pickObjectives(o);
     this.buildCard(o);
     this.log("Booked: " + (o.title ? "TITLE FIGHT " : o.opp === this.rival ? "GRUDGE MATCH " : "") + "vs " + o.opp.displayName() + " in " + o.weeks + " weeks.");
     return "Fight booked! Get to work — fight night is in " + o.weeks + " weeks.";
+  }
+
+  /** One or two bonus objectives for a booked bout: one that suits your style, one wild card. */
+  pickObjectives(o) {
+    const keys = Object.keys(OBJECTIVES);
+    const pref = STYLE_OBJECTIVES[this.me.style] || keys;
+    const first = pickOf(pref);
+    const ids = [first];
+    if (rnd() < (this.gfc ? 0.7 : 0.4)) ids.push(pickOf(keys.filter((k) => k !== first)));
+    return ids.map((id) => ({ id, pay: Math.max(100, Math.round((o.purse * OBJECTIVES[id].share) / 50) * 50) }));
+  }
+
+  objectiveJson(x, rounds) {
+    const O = OBJECTIVES[x.id];
+    return { id: x.id, icon: O.icon, text: O.text.replace("{n}", O.n ? O.n(rounds) : ""), pay: x.pay };
+  }
+
+  /** At the final bell: which objectives were hit. Only a win pays. */
+  scoreObjectives(o, f, won) {
+    return (o.objectives || []).filter((x) => OBJECTIVES[x.id]).map((x) => ({ ...this.objectiveJson(x, o.rounds), done: won && OBJECTIVES[x.id].check(f, o.rounds) }));
   }
 
   retire() {
@@ -2417,10 +2455,12 @@ export class Career {
       for (const s of STATS) rival.add(s, gap * 0.25 + gauss() * 0.4);
     }
     if (!this.rankings.includes(rival) && rnd() < 0.12 && (!this.scheduled || this.scheduled.opp !== rival)) {
-      const w = rnd() < 0.65;
-      const r = rnd();
-      rival.recordResult(w ? "W" : "L", r < 0.4 ? "KO" : r < 0.6 ? "SUB" : "DEC");
-      if (w && rnd() < 0.5) this.log("Your rival " + rival.lastName() + " wins again (" + rival.record() + ") and says you're next.");
+      const foe = this.gen(Math.max(25, rival.overall() - 4 + nextInt(5)));
+      const { w, m } = this.rivalBout(foe, "Iron Cage Regional");
+      rival.recordResult(w === rival ? "W" : w ? "L" : "D", m);
+      foe.recordResult(w === foe ? "W" : w ? "L" : "D", m);
+      if (w === rival) this.log("Your rival " + rival.lastName() + " wins again (" + rival.record() + ") and says you're next. Watch it from the Rival panel.");
+      else this.log("Your rival " + rival.lastName() + (w ? " LOSES to " + foe.displayName() : " draws") + ". Watch it from the Rival panel.");
     }
     this.rivalHeat = Math.max(0, this.rivalHeat - 1);
     if (this.rivalHeat >= 50 && rnd() < 0.08) {
@@ -3199,26 +3239,48 @@ export class Career {
   }
 
   /** Fight night: every other bout on the card is fought (the ones after yours stay hidden until you're done). */
+  /** A whole bout between two NPCs, fought out round by round (so it can be watched later). */
+  simBout(a, b, rounds, title, org, specialEvent) {
+    const planOf = (f) => ({ Striker: "STRIKE", Wrestler: "WRESTLE", "Jiu-Jitsu": "SUBMIT" }[f.style] || "BALANCED");
+    const f = new Fight(a, b, rounds, title, 0, 0);
+    f.org = org;
+    f.specialEvent = specialEvent || null;
+    for (let n = 0; !f.finished && n < 6; n++) f.simulateRound(rnd() < 0.7 ? planOf(a) : "BALANCED", true);
+    if (f.winner === "draw" && rnd() < 0.85) {
+      // real draws are rare: a judge leans one way and it becomes a split decision
+      f.winner = rnd() < 0.5 ? "player" : "opponent";
+      f.method = "Split Decision";
+      const last = f.logs[f.logs.length - 1];
+      const fin = last && last[last.length - 1];
+      if (fin) fin.text = fin.text.replace(/This one is a draw!/, "Winner by Split Decision: " + (f.winner === "player" ? a : b).displayName() + "!");
+    }
+    return f;
+  }
+
+  /** Your rival fights away from your cards: a real bout, kept so you can watch it from the Rival panel. */
+  rivalBout(foe, eventName) {
+    const rv = this.rival;
+    const f = this.simBout(rv, foe, 3, false, this.rankings.includes(rv) ? this.orgShort() : "Regional", null);
+    const won = f.winner === "player";
+    const m = f.methodType === "KO" || f.methodType === "SUB" ? f.methodType : "DEC";
+    this.rivalLast = {
+      id: rv.id, date: this.dateLabel(), opp: foe.displayName(), won, method: f.method,
+      json: { ...f.toJson(), wc: this.weightClass, cardName: eventName, slot: "Your rival's fight", division: this.classes()[this.weightClass] },
+    };
+    return { w: won ? rv : f.winner === "opponent" ? foe : null, m };
+  }
+
+  /** Your current rival's last fight away from your cards (a past rival's doesn't count). */
+  rivalLastFight() { return !!(this.rival && this.rivalLast && this.rivalLast.id === this.rival.id); }
+
   simulateCard() {
     const card = this.scheduled && this.scheduled.card;
     if (!card || card.simmed) return;
     card.simmed = true;
-    const planOf = (f) => ({ Striker: "STRIKE", Wrestler: "WRESTLE", "Jiu-Jitsu": "SUBMIT" }[f.style] || "BALANCED");
     for (const bt of card.bouts) {
       if (bt.player) continue;
-      const f = new Fight(bt.a, bt.b, bt.rounds, bt.title, 0, 0);
-      f.org = card.org;
-      f.specialEvent = card.specialEvent || null;
+      const f = this.simBout(bt.a, bt.b, bt.rounds, bt.title, card.org, card.specialEvent);
       if (bt.title) f.belt = { kind: "title", label: card.org + " " + bt.division + " championship", champ: "p" };
-      for (let n = 0; !f.finished && n < 6; n++) f.simulateRound(rnd() < 0.7 ? planOf(bt.a) : "BALANCED", true);
-      if (f.winner === "draw" && rnd() < 0.85) {
-        // real draws are rare: a judge leans one way and it becomes a split decision
-        f.winner = rnd() < 0.5 ? "player" : "opponent";
-        f.method = "Split Decision";
-        const last = f.logs[f.logs.length - 1];
-        const fin = last && last[last.length - 1];
-        if (fin) fin.text = fin.text.replace(/This one is a draw!/, "Winner by Split Decision: " + (f.winner === "player" ? bt.a : bt.b).displayName() + "!");
-      }
       const w = f.winner === "player" ? bt.a : f.winner === "opponent" ? bt.b : null;
       const l = w === bt.a ? bt.b : w === bt.b ? bt.a : null;
       if (w) {
@@ -3366,9 +3428,10 @@ export class Career {
 
   /** The bout you chose to watch, with everything the arena needs to replay it. */
   watchJson() {
-    // "h0".."h2": a highlight-reel win; "c": your prospect's last fight
+    // "h0".."h2": a highlight-reel win; "c": your prospect's last fight; "r": your rival's last fight
     if (typeof this.watching === "string") {
       if (this.watching === "c") return (this.coaching && this.coaching.last && this.coaching.last.json) || null;
+      if (this.watching === "r") return (this.rivalLastFight() && this.rivalLast.json) || null;
       const h = (this.highlights || [])[Number(this.watching.slice(1))];
       return (h && h.json) || null;
     }
@@ -3559,6 +3622,9 @@ export class Career {
     const ppv = this.ppvFor(o, won);
     if (ppv && ppv.share) pay += ppv.share;
     if (won) this.addHighlight(f, o, oppRank, bonuses);
+    const objectives = this.scoreObjectives(o, f, won);
+    const objectivePay = objectives.reduce((a, x) => a + (x.done ? x.pay : 0), 0);
+    pay += objectivePay;
     this.money += pay;
     this.earnings += pay;
 
@@ -3566,6 +3632,7 @@ export class Career {
     if (won) this.fame += (this.gfc ? 5 : 2) + (finish ? 3 : 0) + (o.title ? 12 : 0) + (oppRank > 0 ? Math.floor((RANKED - oppRank) / 3) : 0) + (vsRival ? 5 : 0);
     else if (lost) this.fame -= f.methodType === "KO" ? 5 : 3;
     else this.fame += 1;
+    this.fame += objectives.filter((x) => x.done).length;
     let talkNote = "";
     if (o.talkLevel > 0 && won) {
       this.fame += 2 * o.talkLevel;
@@ -3634,6 +3701,13 @@ export class Career {
       rivalNote = opp.lastName() + " is your new nemesis.";
     }
 
+    // the dynasty: the night the protégé's legacy passes the mentor's
+    if (this.mentor && !this.mentor.passedAt && this.legacyScore() > this.mentor.legacyScore) {
+      this.mentor.passedAt = this.dateLabel();
+      rivalNote = (rivalNote + " Your legacy just passed your mentor " + this.mentor.name + "'s.").trim();
+      this.log("The student passes the master: " + me.displayName() + "'s legacy now tops " + this.mentor.name + "'s.");
+    }
+
     const resultWord = won ? "def." : lost ? "lost to" : "drew with";
     this.log(me.lastName() + " " + resultWord + " " + opp.displayName() + " — " + f.method + (finish ? " (R" + f.endRound + " " + f.endTime + ")" : "") + ".");
 
@@ -3644,7 +3718,7 @@ export class Career {
         + (vsRival ? " · Grudge" : "") + " · " + this.classes()[this.weightClass],
     });
     this.lastResult = {
-      result: res, method: f.method, pay, perfBonus, bonuses, ppv, weighIn: o.weighIn || null, cardName: o.card ? o.card.name : null, fameDelta: this.fame - fameBefore,
+      result: res, method: f.method, pay, perfBonus, bonuses, ppv, objectives, objectivePay, weighIn: o.weighIn || null, cardName: o.card ? o.card.name : null, fameDelta: this.fame - fameBefore,
       careerNote: [careerNote, rivalNote, talkNote].join(" ").trim(), injuryNote: injuryNote.trim(), record: me.record(),
     };
     // the trophies this fight just earned, recorded on the career and handed to the result panel
@@ -3908,9 +3982,16 @@ export class Career {
     if (this.interim === a || this.interim === b || (i === 0 && this.champOut)) return;
     if (this.scheduled && (a === this.scheduled.opp || b === this.scheduled.opp)) return;
     const pa = 1 / (1 + Math.exp((b.overall() - a.overall()) / 5));
-    const w = rnd() < pa ? a : b, l = w === a ? b : a;
+    let w = rnd() < pa ? a : b;
     const r = rnd();
-    const m = r < 0.4 ? "KO" : r < 0.6 ? "SUB" : "DEC";
+    let m = r < 0.4 ? "KO" : r < 0.6 ? "SUB" : "DEC";
+    if (this.rival && (a === this.rival || b === this.rival)) {
+      // your rival's fight is fought for real, so you can watch it
+      const res = this.rivalBout(a === this.rival ? b : a, this.orgShort() + " Fight Night");
+      w = res.w || w;
+      m = res.m;
+    }
+    const l = w === a ? b : a;
     w.recordResult("W", m);
     l.recordResult("L", m);
     if (w === b) this.placeAbove(b, a);
@@ -4116,6 +4197,7 @@ export class Career {
       grudge: o.opp === this.rival, oppBonus: o.oppBonus, oppId: o.opp.id, callout: !!o.callout, trilogy: !!o.trilogy,
       camp: o.camp || null, cut: o.cut || null, cutReady: o.weeks <= 1 && !o.cut, campReady: !o.camp && o.weeks > 0,
       cuts: Object.fromEntries(Object.entries(CUTS).map(([k, v]) => [k, v.text])),
+      objectives: (o.objectives || []).filter((x) => OBJECTIVES[x.id]).map((x) => this.objectiveJson(x, o.rounds)),
     };
   }
 
@@ -4129,7 +4211,8 @@ export class Career {
     let rival = null;
     if (this.rival) {
       rival = { ...this.rival.toJson(), id: this.rival.id, heat: this.rivalHeat, h2hWins: this.rivalWins, h2hLosses: this.rivalLosses,
-        rank: this.gfc ? this.rankings.indexOf(this.rival) : -1 };
+        rank: this.gfc ? this.rankings.indexOf(this.rival) : -1,
+        lastFight: this.rivalLastFight() ? { date: this.rivalLast.date, opp: this.rivalLast.opp, won: this.rivalLast.won, method: this.rivalLast.method } : null };
     }
     return {
       fighter: this.me.toJson(),
@@ -4145,7 +4228,7 @@ export class Career {
       gym: {
         level: gym, name: GYM_NAMES[gym], mult: GYM_MULT[gym], fee: GYM_FEE[gym],
         nextName: gym + 1 < GYM_NAMES.length ? GYM_NAMES[gym + 1] : null,
-        nextCost: gym + 1 < GYM_NAMES.length ? GYM_COST[gym + 1] : null,
+        nextCost: gym + 1 < GYM_NAMES.length ? this.gymCost(gym + 1) : null,
       },
       team,
       teamSalary: this.teamSalary(),
@@ -4170,6 +4253,7 @@ export class Career {
       rank: this.gfc ? this.rankings.indexOf(this.me) : -1,
       regionalWins: this.regionalWins, titlesWon: this.titlesWon, titleDefenses: this.titleDefenses,
       divisionsWon: [...this.divisionsWon], retired: this.retired, legacy: this.legacyTier(), legacyScore: this.legacyScore(),
+      mentor: this.mentor ? { ...this.mentor, passed: !!this.mentor.passedAt } : null,
       goal: this.goal(),
       offers: this.offers.map((o, i) => this.offerJson(o, i)),
       scheduled: this.scheduled ? this.offerJson(this.scheduled, -1) : null,
@@ -4383,7 +4467,7 @@ export class Game {
       case "edit": msg = this.need(career).editFighter(p); break;
       case "promo": msg = this.need(career).signPromotion(p.org); break;
       case "fighter/view": this.need(career).viewing = p.id || null; break;
-      case "card/watch": this.need(career).watching = p.id === null || p.id === undefined || p.id === "" ? null : /^[hc]/.test(String(p.id)) ? String(p.id) : int(p.id); break;
+      case "card/watch": this.need(career).watching = p.id === null || p.id === undefined || p.id === "" ? null : /^[hcr]/.test(String(p.id)) ? String(p.id) : int(p.id); break;
       case "camp": msg = this.need(career).setCamp(p.kind); break;
       case "cut": msg = this.need(career).setCut(p.kind); break;
       case "negotiate": msg = this.need(career).negotiate(p.org, p.ask); break;
@@ -4476,8 +4560,21 @@ export class Game {
     const country = COUNTRIES.includes(p.country) ? p.country : "USA";
     const c = new Career(name, nick, wc, p.style, country, gender);
     if (LOOK.test(p.look || "")) c.me.look = p.look;
+    // the dynasty: start as the protégé of a Hall of Fame career
+    const legends = this.legends();
+    const mi = p.mentor === undefined || p.mentor === null || p.mentor === "" ? -1 : Number(p.mentor);
+    if (mi >= 0) {
+      const L = legends[mi];
+      if (!L) throw new GameError("That legend isn't in the Hall of Fame.");
+      c.mentor = { name: L.name, record: L.record, legacy: L.legacy, legacyScore: L.legacyScore, style: L.style, titlesWon: L.titlesWon || 0 };
+      c.fame = Math.min(15, Math.max(3, Math.round(L.legacyScore / 20)));
+      c.log(c.me.displayName() + " turns pro as the protégé of " + L.name + " (" + L.record + ", legacy " + L.legacyScore + "). The bar is set.");
+    }
     return c;
   }
+
+  /** Who you can train under when you start a career: the Hall of Fame, best legacy first. */
+  legends() { return [...this.hof].sort((a, b) => b.legacyScore - a.legacyScore || String(a.name).localeCompare(String(b.name))).slice(0, 12); }
 
   /** Retired careers go into the Hall of Fame exactly once. */
   induct(career) {
@@ -4503,6 +4600,7 @@ export class Game {
     });
     m.maxSaves = MAX_SLOTS;
     m.hallOfFame = [...this.hof].sort((a, b) => b.legacyScore - a.legacyScore);
+    m.legends = this.legends().map((L, i) => ({ i, name: L.name, record: L.record, legacy: L.legacy, legacyScore: L.legacyScore }));
     m.storage = this.store.kind;
     m.message = msg || this.giftMessage || null;
     this.giftMessage = null;

@@ -629,3 +629,17 @@ input:focus, select:focus { outline: 2px solid var(--red); outline-offset: 1px; 
 .trophy-announce .ta-count { font-size: 12px; color: var(--muted); margin-top: 4px; }
 @keyframes ta-pop { 0% { transform: scale(.4); } 70% { transform: scale(1.15); } 100% { transform: scale(1); } }
 @media (prefers-reduced-motion: reduce) { .trophy-announce, .trophy-announce.show .ta-icon { transition: opacity .3s; animation: none; } }
+
+/* ---------- fight-night bonus objectives */
+.objectives { margin: 8px 0; padding: 8px 12px; border: 1px dashed rgba(244, 185, 66, .45); border-radius: 10px; text-align: left; }
+.objectives .label { margin-top: 0; }
+.objectives .obj { font-size: 13px; padding: 2px 0; }
+.objectives .obj b { color: var(--gold); }
+.objectives .obj.miss { color: var(--muted); }
+.objectives .obj.miss b { color: var(--muted); text-decoration: line-through; }
+.objectives .obj.hit b { color: var(--green); }
+
+/* ---------- dynasty: protégé of a Hall of Fame legend */
+.mentor-note { display: block; font-size: 12px; margin-top: 4px; }
+.mentor-line { font-size: 13px; color: var(--muted); margin: 2px 0 8px; }
+.mentor-line b { color: var(--gold); }
