@@ -222,6 +222,8 @@ export const ROWS = [
   ["Trophies", "Cúp", "Trofeos", "Troféus", "Trophées"],
   ["Earned", "Đã đạt", "Conseguido", "Conquistado", "Obtenu"],
   ["Locked", "Chưa mở", "Bloqueado", "Bloqueado", "Verrouillé"],
+  ["Trophy unlocked", "Mở khóa cúp", "Trofeo desbloqueado", "Troféu desbloqueado", "Trophée débloqué"],
+  ["Trophies for the send-off", "Cúp cho ngày giải nghệ", "Trofeos de despedida", "Troféus da despedida", "Trophées d'adieu"],
 ];
 
 // ~130 world languages: [code, name in that language]

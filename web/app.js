@@ -508,7 +508,8 @@ function renderFightCard() {
       <div class="btn-row"><button class="btn primary big" data-newsave>Start a new career</button><button class="btn big" data-saves>💾 Saves</button></div>`;
     if (s.legacyReel && !legacySeen.has(s.fighter.name)) {
       legacySeen.add(s.fighter.name);
-      setTimeout(() => openModal("legacy"), 400);
+      // the retirement / Hall of Fame trophies get their moment first, then the ceremony
+      announceTrophies(s.retireTrophies || [], () => openModal("legacy"));
     }
     return;
   }
@@ -1446,6 +1447,35 @@ function phoneApp(app, s, L) {
 
 const legacySeen = new Set();
 
+/** A gold on-screen banner for trophies earned outside a fight, one at a time (tap to skip), then `done`. */
+function announceTrophies(list, done) {
+  if (!list.length) return setTimeout(done, 400);
+  let i = 0, timer;
+  const el = document.createElement("div");
+  el.className = "trophy-announce";
+  el.setAttribute("role", "status");
+  const next = () => {
+    clearTimeout(timer);
+    if (i >= list.length) {
+      el.classList.remove("show");
+      setTimeout(() => { el.remove(); done(); }, 300);
+      return;
+    }
+    const t = list[i++];
+    el.classList.remove("show");
+    el.innerHTML = `<div class="ta-label">🏆 Trophy unlocked</div><div class="ta-icon">${t.icon}</div>
+      <div class="ta-name">${esc(t.name)}</div><div class="ta-desc">${esc(t.desc)}</div>
+      ${list.length > 1 ? `<div class="ta-count">${i} / ${list.length}</div>` : ""}`;
+    void el.offsetWidth; // restart the entrance
+    el.classList.add("show");
+    audio.sfx("bell");
+    timer = setTimeout(next, 3400);
+  };
+  el.addEventListener("click", next);
+  document.body.append(el);
+  setTimeout(next, 400);
+}
+
 function renderLegacyModal(body) {
   const L = state.legacyReel;
   if (!L) return closeModal();
@@ -1453,6 +1483,7 @@ function renderLegacyModal(body) {
     <div class="card-poster legacy-poster"><div class="cp-org">${L.inducted ? "HALL OF FAME · CLASS OF YEAR " + state.year : "CAREER RETROSPECTIVE"}</div>
       <h1>${nm(state.fighter.displayName)}</h1><div class="cp-main">${esc(L.tier)} <span>·</span> legacy ${L.score}</div></div>
     ${L.speech ? `<div class="label">🎤 Induction speech</div>${L.speech.map((t) => `<div class="quote">"${esc(t)}"</div>`).join("")}` : ""}
+    ${state.retireTrophies?.length ? `<div class="label">🏆 Trophies for the send-off</div>${state.retireTrophies.map((t) => `<div class="rd trophy-unlock">${t.icon} ${esc(t.name)}: ${esc(t.desc)}</div>`).join("")}` : ""}
     <div class="label">🎬 Highlight reel</div>
     ${L.highlights.length ? L.highlights.map((h) => `<div class="cb"><div class="cb-top"><span class="cb-slot">${esc(h.date)}</span></div>
       <div class="cb-res">${esc(h.text)} ${h.canWatch ? `<button class="btn small ghost" data-watch="h${h.id}">▶ Watch</button>` : ""}</div></div>`).join("") : `<p class="muted">No wins to show.</p>`}

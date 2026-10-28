@@ -23,7 +23,7 @@ export function filmRoomHtml(state) {
 }
 export function cornerPanelHtml(fight) {
   const c = fight?.corner;
-  if (!c) return "";
+  if (!c || c.selected) return "";
   return `<div class="corner-work"><div class="label">Your corner · one choice this break${c.cut ? ` · bleeding level ${c.cut}` : ""}</div><div class="corner-choices">${Object.entries(c.choices).map(([id, choice]) => `<button class="btn ${c.selected === id ? "gold" : ""}" data-cornerchoice="${id}" ${c.selected ? "disabled" : ""}>${choice.icon} ${esc(choice.name)}<span class="sub">${esc(choice.detail)}</span></button>`).join("")}</div>${c.selected ? '<p class="muted">Corner work complete. Your choice is saved.</p>' : '<p class="muted">Choose before the next bell. The normal corner recovery still applies.</p>'}</div>`;
 }
 export function highlightShelfHtml(fight) {

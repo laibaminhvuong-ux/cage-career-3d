@@ -90,7 +90,7 @@ async function saved(page) { return page.evaluate(() => { const p = JSON.parse(l
     ({ ui, context } = await app(packCareer(career)));
     await ui.locator("[data-cornerchoice=cutman]").click();
     assert.equal(JSON.parse(await saved(ui)).data.fight.p.cut, 1); assert.equal(JSON.parse(await saved(ui)).data.fight.p.damage, 17);
-    assert.equal(await ui.locator("[data-cornerchoice]:disabled").count(), 3);
+    assert.equal(await ui.locator(".corner-work").count(), 0, "Corner choices disappear after selecting treatment");
     await ui.screenshot({ path: "/tmp/codex-mma-corner-choice.png" });
     await ui.locator("#fightControls [data-highlights]").first().click(); await ui.locator("[data-replayclip]").first().click();
     await ui.locator(".replay-controls").waitFor(); const replaySave = await saved(ui);

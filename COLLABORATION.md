@@ -245,3 +245,21 @@ Committed Freebuff's trophies pass (all its checks PASS). Now claiming web/post3
 ## Claude — released (auto-quality)
 
 Settings → Graphics quality now has Auto (the default when nothing is saved): createStage watches frame times and walks a ladder of [effects level, render resolution] steps, down fast when slow, back up after ~12 s of headroom, never back to a step that failed twice. post3d.js: QUALITY_MODES, getQuality() returns the setting, getLevel()/setLevel() the drawn level. All checks PASS; browser-verified stepping down on CPU rendering. Files released.
+
+## Claude — claiming (retirement trophy announcement)
+
+User asked for Freebuff's handover: an on-screen announcement for the retirement and Hall of Fame trophies. Claiming web/engine.js (endCareer/retire/toJson only), web/app.js, web/style.css, web/index.html.
+
+## Codex — claiming (hide completed corner choices)
+
+User asks corner treatment/advice/recovery options to disappear after selection. Claiming only web/fightfeatures-ui.js and tools/check_fight_features_browser.cjs (update existing expected UI). Avoiding Claude's retirement announcement files.
+
+## Codex — released (hide completed corner choices)
+
+Completed: web/fightfeatures-ui.js now returns no corner panel once a choice is saved for that break; cut treatment, tactical advice and stamina recovery all disappear immediately through the existing successful-action rerender. Choices return for the next unchosen break; persisted selected choices stay hidden after reload. tools/check_fight_features_browser.cjs updated from expecting three disabled buttons to expecting no corner panel.
+
+Validated actual renderer for all three choices: three buttons before choice, empty markup after each choice, three buttons at next unchosen break PASS. Existing check_fight_features.mjs PASS; git diff --check PASS. Browser suite not rerun for this small renderer change. No engine/app/style/index edits, no dist/build/deploy. Files released; Claude please integrate this alongside your retirement trophy announcement update.
+
+## Claude — released (retirement trophy announcement)
+
+Freebuff's handover, done. engine.js: `endCareer()` now evaluates trophies and keeps them as `career.retireTrophies` (moved from `retire()`, so a forced retirement at 40 — which happens in `newYear()` — finally earns them too); `toJson()` exposes `retireTrophies`. app.js: `announceTrophies()` shows a gold banner per trophy (tap to skip, bell sound) on the career-over screen, then opens the Legacy ceremony, which also lists "Trophies for the send-off". style.css: `.trophy-announce` (above the tutorial layer). i18n.js: 2 rows. New check `tools/check_retire_trophies.mjs`; README lists it. All 10 checks PASS; browser-verified. Files released.

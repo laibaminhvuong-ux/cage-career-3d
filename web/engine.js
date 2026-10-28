@@ -2293,7 +2293,6 @@ export class Career {
     if (this.retired) throw new GameError("You're already retired.");
     if (this.fight) throw new GameError("Finish your fight first.");
     this.endCareer(this.me.displayName() + " announces retirement at " + this.me.age + " with a record of " + this.me.record() + ".");
-    evaluateTrophies(this); // the retirement and Hall of Fame trophies
     return "You hang up the gloves. Legacy: " + this.legacyTier() + ".";
   }
 
@@ -2303,6 +2302,9 @@ export class Career {
     this.offers = [];
     if (this.rival && this.rivalWins + this.rivalLosses > 0) this.rivalries.push(this.rivalSummary());
     this.log(headline);
+    // the retirement and Hall of Fame trophies, kept so the career-over screen can announce them
+    // (also on a forced retirement at 40, which happens in the weekly update, not in retire())
+    this.retireTrophies = evaluateTrophies(this);
   }
 
   requireActive() {
@@ -4173,7 +4175,7 @@ export class Career {
       scheduled: this.scheduled ? this.offerJson(this.scheduled, -1) : null,
       fightNight: this.fightNight(),
       card: this.cardJson(this.scheduled ? this.scheduled.card : this.lastCard),
-      legacyReel: this.legacyJson(), coaching: this.coachingJson(), contract: this.contract || null,
+      legacyReel: this.legacyJson(), retireTrophies: this.retired ? this.retireTrophies || [] : [], coaching: this.coachingJson(), contract: this.contract || null,
       watch: this.watchJson(),
       divisions: this.divisionsJson(PROMOTIONS.some((p) => p.id === this.viewOrg) ? this.viewOrg : this.orgKey()),
       viewOrg: PROMOTIONS.some((p) => p.id === this.viewOrg) ? this.viewOrg : this.orgKey(),
