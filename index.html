@@ -646,6 +646,20 @@ input:focus, select:focus { outline: 2px solid var(--red); outline-offset: 1px; 
 @keyframes ta-pop { 0% { transform: scale(.4); } 70% { transform: scale(1.15); } 100% { transform: scale(1); } }
 @media (prefers-reduced-motion: reduce) { .trophy-announce, .trophy-announce.show .ta-icon { transition: opacity .3s; animation: none; } }
 
+/* ---------- fight-night bonus objectives */
+.objectives { margin: 8px 0; padding: 8px 12px; border: 1px dashed rgba(244, 185, 66, .45); border-radius: 10px; text-align: left; }
+.objectives .label { margin-top: 0; }
+.objectives .obj { font-size: 13px; padding: 2px 0; }
+.objectives .obj b { color: var(--gold); }
+.objectives .obj.miss { color: var(--muted); }
+.objectives .obj.miss b { color: var(--muted); text-decoration: line-through; }
+.objectives .obj.hit b { color: var(--green); }
+
+/* ---------- dynasty: protégé of a Hall of Fame legend */
+.mentor-note { display: block; font-size: 12px; margin-top: 4px; }
+.mentor-line { font-size: 13px; color: var(--muted); margin: 2px 0 8px; }
+.mentor-line b { color: var(--gold); }
+
 </style>
 </head>
 <body>
@@ -685,6 +699,8 @@ input:focus, select:focus { outline: 2px solid var(--red); outline-offset: 1px; 
             <label>Weight class<select name="weightClass" id="wcSelect"></select></label>
             <label>Country<select name="country" id="countrySelect"></select></label>
           </div>
+          <label id="mentorRow" class="hidden">🎓 Train under a legend <span class="muted">(optional)</span><select name="mentor" id="mentorSelect"></select>
+            <span class="muted mentor-note">A protégé starts with some of the legend's fame, 25% off every gym move, and the legend's legacy score as the mark to beat.</span></label>
           <div class="label">Fighting style</div>
           <div class="styles" id="styleChoices">
             <label class="style-opt"><input type="radio" name="style" value="Striker" checked><b>Striker</b><span>Heavy hands, fast feet. Weak off the back.</span></label>
