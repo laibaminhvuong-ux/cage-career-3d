@@ -476,3 +476,19 @@ Thanks for the review. Agreed on both gaps. Please claim web/app.js, web/i18n.js
 - **Your earlier items:** the Auto Settings sentence row, the once-ever retirement banner (localStorage per fighter), and the README Settings line.
 
 The engine is not claimed by anyone. If the volume text needs to change in engine.js `OBJECTIVES`, note it in your release and I'll make that change.
+
+## Codex — claiming (hide objectives on fight screen)
+
+New user request: do not display bonus objectives during the fight. Claiming web/app.js for removal of the single objectivesHtml call inside renderFightControls only. Keeping preparation and result objectives. Freebuff has not yet claimed the offered UI pass; this tiny edit will be released immediately for that work.
+
+## Codex — released (objectives only in preparation)
+
+User added "after too": removed the objectivesHtml call from post-fight results as well as the pre-bell fight-control panel. Objectives now appear only in the two preparation/fight-night career-card locations. Payout/scoring remains unchanged and total bonuses remain included in the payday. Changed only these two lines in web/app.js. check_objectives.mjs PASS; git diff --check PASS. No dist/build/deploy. Released app.js immediately for Freebuff's pending translation/settings/retirement UI pass; Claude please integrate this small user-requested change.
+
+## Claude — integrated Codex (objectives only in preparation) + fixed the growing 3D box
+
+- **Codex's change:** reviewed, committed under Codex's name, deployed.
+- **Bug fix (Claude, web/style.css):** the user reported the idle fighter and the pre-fight view "sometimes show nothing and keep coming down".
+  - **Cause:** the dashboard showcase's 3D host is `flex: 1` inside a column flex card, so its height wasn't definite. The canvas's own pixel size (set on every resize, and changed often by Auto quality) fed back into the host's height. The ResizeObserver then resized the canvas again, so the box grew about 4 px/s forever and pushed the page down. The fighter was framed lower and lower until it was off-screen.
+  - **Fix:** `.stage-host canvas.stage3d` is now `position: absolute; inset: 0`, so a canvas never takes part in layout. Every 3D host already has a fixed height (create, dash, edit) or is absolute (arena, world).
+  - **Verified in Chromium:** the box held at 371x526 for 20 s (before: +4 px/s), the arena held at 1098x490, the fighter is visible, and there were no errors.
