@@ -1986,7 +1986,6 @@ function renderFightControls(f) {
         ${f.scout ? `<br><span class="scout">🧠 Coach: "They're going to ${esc(PLAN_NAMES[f.scout])} this round."</span>` : ""}
         ${f.oppFiredUp && f.round === 0 ? `<br><span style="color:#ff6b6e">Your opponent is fired up after the trash talk.</span>` : ""}</div>
       ${cornerPanelHtml(f)}
-      ${f.round === 0 ? objectivesHtml(state.scheduled && state.scheduled.objectives) : ""}
       ${f.round > 0 && highlightClips(f).length ? '<button class="btn small" data-highlights>📺 Round highlights</button>' : ""}
       ${f.round === 0 ? `<div class="touch-row"><span>Before the bell:</span>
         <button class="btn small ${touchGloves ? "gold" : ""}" data-touch="1">🤜🤛 Touch gloves</button>
@@ -2003,7 +2002,6 @@ function renderFightControls(f) {
       <div class="rw ${r.result}">${word}</div>
       <div class="rd"><b>${esc(f.method)}</b> · R${f.endRound} ${esc(f.endTime)}${f.cards ? " · " + f.cards.join(", ") : ""}</div>
       <div class="rd">Paid <b>${money(r.pay || 0)}</b>${r.perfBonus || r.objectivePay ? ` (incl. ${money((r.perfBonus || 0) + (r.objectivePay || 0))} in bonuses)` : ""} · Fame ${r.fameDelta >= 0 ? "+" : ""}${r.fameDelta} · Record <b>${esc(r.record)}</b></div>
-      ${objectivesHtml(r.objectives, true)}
       ${(r.bonuses || []).map((b) => `<div class="rd bonus-win">${b.icon} ${esc(b.award)}! +${money(b.amount)}</div>`).join("")}
       ${r.ppv ? `<div class="rd">📺 ${r.ppv.buys.toLocaleString("en-US")} pay-per-view buys${r.ppv.share ? ` · your share <b>${money(r.ppv.share)}</b>` : " · no PPV points in your contract"}</div>` : ""}
       ${r.weighIn && !r.weighIn.made ? `<div class="rd" style="color:var(--red)">⚖️ Missed weight (${esc(r.weighIn.weight)} lbs)</div>` : ""}
