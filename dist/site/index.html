@@ -283,7 +283,9 @@ input:focus, select:focus { outline: 2px solid var(--red); outline-offset: 1px; 
 /* ---------- 3D stage */
 .brand sup { font-size: 11px; color: var(--gold); margin-left: 3px; font-style: normal; letter-spacing: .04em; }
 .stage-host { position: relative; overflow: hidden; background: #0f1116; border-radius: 10px; touch-action: pan-y; }
-.stage-host canvas.stage3d { display: block; width: 100%; height: 100%; cursor: grab; }
+/* the canvas sits on top of its host instead of inside the layout: in a flexible box (the dashboard
+   showcase) its own pixel size fed back into the box's height, so the box grew every frame */
+.stage-host canvas.stage3d { position: absolute; inset: 0; display: block; width: 100%; height: 100%; cursor: grab; }
 .stage-host canvas.stage3d:active { cursor: grabbing; }
 .stage-fallback { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: 13px; }
 .stage-host:has(canvas) .stage-fallback { display: none; }

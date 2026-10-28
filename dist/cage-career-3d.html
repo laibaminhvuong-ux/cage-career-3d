@@ -269,7 +269,9 @@ input:focus, select:focus { outline: 2px solid var(--red); outline-offset: 1px; 
 /* ---------- 3D stage */
 .brand sup { font-size: 11px; color: var(--gold); margin-left: 3px; font-style: normal; letter-spacing: .04em; }
 .stage-host { position: relative; overflow: hidden; background: #0f1116; border-radius: 10px; touch-action: pan-y; }
-.stage-host canvas.stage3d { display: block; width: 100%; height: 100%; cursor: grab; }
+/* the canvas sits on top of its host instead of inside the layout: in a flexible box (the dashboard
+   showcase) its own pixel size fed back into the box's height, so the box grew every frame */
+.stage-host canvas.stage3d { position: absolute; inset: 0; display: block; width: 100%; height: 100%; cursor: grab; }
 .stage-host canvas.stage3d:active { cursor: grabbing; }
 .stage-fallback { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: 13px; }
 .stage-host:has(canvas) .stage-fallback { display: none; }
@@ -5729,7 +5731,6 @@ vFurUv = uv;`),sh2.fragmentShader=sh2.fragmentShader.replace("#include <common>"
         ${f2.scout?`<br><span class="scout">\u{1F9E0} Coach: "They're going to ${esc4(PLAN_NAMES[f2.scout])} this round."</span>`:""}
         ${f2.oppFiredUp&&f2.round===0?'<br><span style="color:#ff6b6e">Your opponent is fired up after the trash talk.</span>':""}</div>
       ${cornerPanelHtml(f2)}
-      ${f2.round===0?objectivesHtml(state.scheduled&&state.scheduled.objectives):""}
       ${f2.round>0&&highlightClips(f2).length?'<button class="btn small" data-highlights>\u{1F4FA} Round highlights</button>':""}
       ${f2.round===0?`<div class="touch-row"><span>Before the bell:</span>
         <button class="btn small ${touchGloves?"gold":""}" data-touch="1">\u{1F91C}\u{1F91B} Touch gloves</button>
@@ -5741,7 +5742,6 @@ vFurUv = uv;`),sh2.fragmentShader=sh2.fragmentShader.replace("#include <common>"
       <div class="rw ${r.result}">${word}</div>
       <div class="rd"><b>${esc4(f2.method)}</b> \xB7 R${f2.endRound} ${esc4(f2.endTime)}${f2.cards?" \xB7 "+f2.cards.join(", "):""}</div>
       <div class="rd">Paid <b>${money(r.pay||0)}</b>${r.perfBonus||r.objectivePay?` (incl. ${money((r.perfBonus||0)+(r.objectivePay||0))} in bonuses)`:""} \xB7 Fame ${r.fameDelta>=0?"+":""}${r.fameDelta} \xB7 Record <b>${esc4(r.record)}</b></div>
-      ${objectivesHtml(r.objectives,!0)}
       ${(r.bonuses||[]).map(b=>`<div class="rd bonus-win">${b.icon} ${esc4(b.award)}! +${money(b.amount)}</div>`).join("")}
       ${r.ppv?`<div class="rd">\u{1F4FA} ${r.ppv.buys.toLocaleString("en-US")} pay-per-view buys${r.ppv.share?` \xB7 your share <b>${money(r.ppv.share)}</b>`:" \xB7 no PPV points in your contract"}</div>`:""}
       ${r.weighIn&&!r.weighIn.made?`<div class="rd" style="color:var(--red)">\u2696\uFE0F Missed weight (${esc4(r.weighIn.weight)} lbs)</div>`:""}
