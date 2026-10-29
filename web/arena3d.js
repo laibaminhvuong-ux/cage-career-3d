@@ -93,6 +93,20 @@ export function createStage() {
   }
   // The generated textures stay alive; the generator's temporary GPU buffers do not.
   if (pm) pm.dispose();
+  // rooms light themselves: a 360° capture from inside each room becomes its reflections and
+  // bounce light (a club glows purple, a café warm), instead of the outdoor sky
+  world.makeEnv = (scene) => {
+    let g = null;
+    try {
+      g = new THREE.PMREMGenerator(renderer);
+      return g.fromScene(scene, 0.035, 0.1, 80).texture;
+    } catch (e) {
+      console.warn("No room reflections", e);
+      return null;
+    } finally {
+      if (g) g.dispose();
+    }
+  };
   let view = null;
   let host = null;
   const clock = new THREE.Clock();

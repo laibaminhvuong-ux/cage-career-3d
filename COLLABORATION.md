@@ -492,3 +492,36 @@ User added "after too": removed the objectivesHtml call from post-fight results 
   - **Cause:** the dashboard showcase's 3D host is `flex: 1` inside a column flex card, so its height wasn't definite. The canvas's own pixel size (set on every resize, and changed often by Auto quality) fed back into the host's height. The ResizeObserver then resized the canvas again, so the box grew about 4 px/s forever and pushed the page down. The fighter was framed lower and lower until it was off-screen.
   - **Fix:** `.stage-host canvas.stage3d` is now `position: absolute; inset: 0`, so a canvas never takes part in layout. Every 3D host already has a fixed height (create, dash, edit) or is absolute (arena, world).
   - **Verified in Chromium:** the box held at 371x526 for 20 s (before: +4 px/s), the arena held at 1098x490, the fighter is visible, and there were no errors.
+
+## Claude — claiming (interior overhaul)
+
+The user says the interiors look "mid". Claiming:
+- web/world3d.js: room builder, interiors, enter/leave.
+- web/arena3d.js: give the world view a reflection-map maker for rooms.
+- web/post3d.js: a view's look can change live (indoor and outdoor grades).
+
+Plan:
+- **Lighting:** each room gets an environment map captured from inside itself (real bounce light and colored reflections, instead of the outdoor sky), plus its own exposure and grade.
+- **Detail:** much more set dressing per room (materials, textures, furniture, lamps).
+
+## Claude — released (interior overhaul)
+
+Files released: web/world3d.js, web/arena3d.js, web/post3d.js.
+- **Lighting:**
+  - Each room captures a 360° reflection map of itself on first entry (`world.makeEnv`, a PMREM `fromScene` from the stage) and uses it as `scene.environment` while inside. Before, rooms kept the outdoor sky as fill light, which washed every wall out.
+  - Each room also has its own exposure, haze (club, arena) and grade. `post3d` now applies a view's look live, so the grade changes on enter/leave.
+  - Hemisphere fill dropped.
+- **Room shell:** `room()` gained wall finishes (brick, slats, a separate back wall), wainscoting, beamed or industrial ceilings, real window views and light fittings.
+- **New helpers:** textures (brick, slats, rugs, rubber, concrete, chalkboard, skyline) and furniture (bookshelf, lamps, pendants, curtains, neon, stools, fireplace, squat rack, bench, kettlebells, treadmill, booth).
+- **Every room re-dressed:**
+  - Home: slat TV wall, rug, bookcase, lamps, cushions, pendants, stools, backsplash, curtains. The mansion adds a golden-hour glass wall and a live fireplace.
+  - Club: neon, lasers, VIP booths, haze.
+  - Ink Studio: brick, ink shelves, a waiting sofa, neon.
+  - Café: brick, chalkboard menu, shelves, Edison pendants, wall lamps.
+  - Gym: brick, rubber floor, trusses, high-bays, racks, treadmills, logo.
+  - Car showroom: dark polished floor, LED strips, tyre display, lounge.
+  - Realtor: bookcase, rug, spotlit listings.
+  - Pet Shop: aquarium glow, cat tree, sign.
+  - Arena: LED ribbons, rig, light beams, banners.
+- **Floor gloss:** floors are satin rather than mirror. Point-light highlights were blooming into blobs near the camera.
+- **Verified:** all 13 checks PASS. Chromium screenshots of all 9 rooms show no errors, and leaving a room restores the outdoor sky, environment and look.

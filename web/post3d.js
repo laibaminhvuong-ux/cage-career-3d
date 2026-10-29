@@ -86,7 +86,7 @@ export function createPost(renderer) {
     for (const k of ["contrast", "saturation", "warmth", "vignette", "grain"]) grade.uniforms[k].value = look[k];
     if (!dbg.includes("nograde")) composer.addPass(grade);
     // every pass we made, attached or not, so changing quality frees all of them
-    const c = { composer, bloom, ao, grade, owned: [...composer.passes, bloom, grade].filter((p, i, a) => a.indexOf(p) === i) };
+    const c = { composer, bloom, ao, grade, look: view.look, owned: [...composer.passes, bloom, grade].filter((p, i, a) => a.indexOf(p) === i) };
     chains.set(view, c);
     return c;
   };
@@ -111,6 +111,14 @@ export function createPost(renderer) {
         return;
       }
       const c = chains.get(view) || build(view);
+      // a view can change its look (the town's grade, then a room's own)
+      if (c.look !== view.look) {
+        const look = { ...DEFAULT_LOOK, ...(view.look || {}) };
+        [c.bloom.strength, c.bloom.radius, c.bloom.threshold] = look.bloom;
+        for (const k of ["contrast", "saturation", "warmth", "vignette", "grain"]) c.grade.uniforms[k].value = look[k];
+        if (c.ao && look.ao) c.ao.updateGtaoMaterial({ radius: look.ao });
+        c.look = view.look;
+      }
       c.grade.uniforms.time.value = (c.grade.uniforms.time.value + dt * 60) % 1000;
       c.composer.render(dt);
     },
