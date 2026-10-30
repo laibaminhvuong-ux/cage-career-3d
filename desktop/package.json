@@ -1,7 +1,7 @@
 {
   "name": "cage-career-3d",
   "productName": "Cage Career 3D",
-  "version": "1.0.0",
+  "version": "1.12.0",
   "description": "Cage Career 3D, the desktop app",
   "main": "main.js",
   "private": true,

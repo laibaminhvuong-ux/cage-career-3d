@@ -645,3 +645,15 @@ input:focus, select:focus { outline: 2px solid var(--red); outline-offset: 1px; 
 .mentor-note { display: block; font-size: 12px; margin-top: 4px; }
 .mentor-line { font-size: 13px; color: var(--muted); margin: 2px 0 8px; }
 .mentor-line b { color: var(--gold); }
+
+/* ---------- what's new */
+.whatsnew h2 { margin-bottom: 2px; }
+.wn-version { border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; margin: 10px 0; }
+.wn-version.latest { border-color: var(--gold); box-shadow: 0 0 0 1px rgba(244, 185, 66, .25) inset; }
+.wn-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.wn-head b { color: var(--gold); }
+.wn-title { font-weight: 700; }
+.wn-date { margin-left: auto; font-size: 12px; }
+.wn-version ul { margin: 6px 0 0; padding-left: 18px; }
+.wn-version li { margin: 3px 0; font-size: 14px; line-height: 1.4; }
+.wn-auto { display: flex; align-items: center; gap: 8px; margin: 14px 0 6px; font-size: 14px; }

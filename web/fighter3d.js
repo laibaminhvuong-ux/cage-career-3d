@@ -134,6 +134,38 @@ export const POSES = {
     shL: [-0.35, 0, 0.12], elL: [-0.9, 0, 0], shR: [-0.35, 0, -0.12], elR: [-0.9, 0, 0],
     hipL: [-1.5, 0, 0.12], knL: [1.5, 0, 0], hipR: [-1.5, 0, -0.12], knR: [1.5, 0, 0],
   }),
+  // in the air: knees tucked, arms up for balance
+  jump: pose(null, {
+    hipsPos: [0, -0.05, 0], spine: [0.1, 0, 0], neck: [-0.1, 0, 0],
+    shL: [-0.9, 0, 0.5], elL: [-0.9, 0, 0], shR: [-0.9, 0, -0.5], elR: [-0.9, 0, 0],
+    hipL: [-1.0, 0, 0.12], knL: [1.4, 0, 0], hipR: [-0.8, 0, -0.12], knR: [1.2, 0, 0],
+  }),
+  // lying on your back (in bed, on a lounger), head toward -z, hands on the belly
+  lie: pose(null, {
+    hipsPos: [0, -0.84, 0],
+    hips: [-1.5, 0, 0], neck: [0.3, 0, 0],
+    shL: [-0.25, 0, 0.22], elL: [-1.1, 0, 0], shR: [-0.25, 0, -0.22], elR: [-1.1, 0, 0],
+    hipL: [0, 0, 0.06], knL: [0.08, 0, 0], hipR: [0, 0, -0.06], knR: [0.08, 0, 0],
+  }),
+  // swimming: face down, head toward +z, arms stroking (animated in idlePose)
+  swim: pose(null, {
+    hipsPos: [0, -0.85, 0],
+    hips: [1.45, 0, 0], neck: [-0.75, 0, 0],
+    shL: [-2.6, 0, 0.2], shR: [-1.0, 0, -0.2],
+    hipL: [0.05, 0, 0.05], hipR: [-0.05, 0, -0.05],
+  }),
+  // treading water: upright, arms sculling, legs cycling (animated in idlePose)
+  tread: pose(null, {
+    hipsPos: [0, -0.05, 0], neck: [-0.05, 0, 0],
+    shL: [-0.3, 0, 0.9], elL: [-0.6, 0, 0], shR: [-0.3, 0, -0.9], elR: [-0.6, 0, 0],
+    hipL: [-0.5, 0, 0.1], knL: [0.9, 0, 0], hipR: [-0.2, 0, -0.1], knR: [0.5, 0, 0],
+  }),
+  // under the shower: hands in the hair (animated in idlePose)
+  shower: pose(null, {
+    hipsPos: [0, -0.01, 0], neck: [-0.35, 0, 0], chest: [-0.05, 0, 0],
+    shL: [-2.4, 0, 0.55], elL: [-1.9, 0, 0], shR: [-2.4, 0, -0.55], elR: [-1.9, 0, 0],
+    hipL: [0, 0, 0.08], hipR: [0, 0, -0.08],
+  }),
   // behind the wheel: sitting, thighs forward, hands at ten and two
   drive: pose(null, {
     hipsPos: [0, -0.5, -0.05], spine: [-0.12, 0, 0], neck: [0.05, 0, 0],
@@ -1185,7 +1217,7 @@ export class Fighter3D {
     }
     if (!civ) this.buildAccessories(look, width, head, legs);
     for (const side of ["L", "R"]) {
-      if (!civ) continue;
+      if (!civ || opts.barefoot) continue;
       // shoes
       const shoe = new THREE.BoxGeometry(0.085, 0.06, 0.22);
       shoe.translate(0, -0.03, 0.05);
@@ -1784,6 +1816,34 @@ export class Fighter3D {
   idlePose() {
     const p = pose(POSES[this.base] || STANCE);
     const t = this.time;
+    if (this.base === "swim") {
+      // front crawl: the arms wheel half a turn apart, the legs flutter
+      const a = t * 3.2;
+      p.shL[0] = -1.6 - Math.cos(a) * 1.4;
+      p.shR[0] = -1.6 + Math.cos(a) * 1.4;
+      p.elL[0] = -0.3 - Math.max(0, Math.sin(a)) * 0.9;
+      p.elR[0] = -0.3 - Math.max(0, -Math.sin(a)) * 0.9;
+      p.hipL[0] += Math.sin(t * 9) * 0.22;
+      p.hipR[0] -= Math.sin(t * 9) * 0.22;
+      p.hips[2] = Math.sin(a) * 0.18;
+      p.neck[1] = Math.sin(a) * 0.4;
+    } else if (this.base === "tread") {
+      p.shL[2] += Math.sin(t * 3) * 0.3;
+      p.shR[2] -= Math.sin(t * 3) * 0.3;
+      p.hipL[0] += Math.sin(t * 4) * 0.35;
+      p.hipR[0] -= Math.sin(t * 4) * 0.35;
+      p.knL[0] += Math.cos(t * 4) * 0.3;
+      p.knR[0] -= Math.cos(t * 4) * 0.3;
+      p.hipsPos[1] += Math.sin(t * 2) * 0.03;
+    } else if (this.base === "shower") {
+      p.elL[0] += Math.sin(t * 7) * 0.25;
+      p.elR[0] += Math.sin(t * 7 + 1.5) * 0.25;
+      p.shL[1] = Math.sin(t * 3.5) * 0.25;
+      p.shR[1] = -Math.sin(t * 3.5) * 0.25;
+      p.neck[1] = Math.sin(t * 1.3) * 0.3;
+    } else if (this.base === "lie" || this.base === "sit") {
+      p.chest[0] += Math.sin(t * 1.6) * 0.02;
+    }
     if (this.base === "stance") {
       const b = Math.sin(t * 5.2);
       p.hipsPos[1] += b * 0.018;

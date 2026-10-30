@@ -3,6 +3,7 @@ import { WALKOUT_OPTIONS, highlightClips, tickCornerClock } from "./fightfeature
 import { createFightPresentation } from "./fightpresentation.js";
 import { featureLinks, walkoutSettingsHtml, filmRoomHtml, cornerPanelHtml, highlightShelfHtml } from "./fightfeatures-ui.js";
 import { trophiesHtml } from "./trophies-ui.js";
+import { whatsNewHtml, whatsNewAuto, setWhatsNewAuto, markSeen } from "./whatsnew.js";
 import { getPresentation15Plus, setPresentation15Plus, mountMediaPresenter } from "./ringcard3d.js";
 import * as audio from "./audio.js";
 import { LOOK_OPTIONS, SHORTS_NAMES, TATTOO_REGIONS, lookString, parseLook, randomLook } from "./fighter3d.js";
@@ -815,7 +816,11 @@ function openModal(kind, extra = {}) {
 }
 
 function closeModal() {
+  // a screen can lead into another one (What's new at startup, then the start menu)
+  const next = modal && modal.then;
+  if (modal && modal.kind === "whatsnew") markSeen();
   modal = null;
+  if (next) return openModal(next);
   renderModal();
   if (state) render3d();
 }
@@ -837,6 +842,7 @@ function renderModal() {
   if (modal.kind === "filmroom") { body.innerHTML = filmRoomHtml(s); return; }
   if (modal.kind === "highlights") { body.innerHTML = highlightShelfHtml(modal.fight); return; }
   if (modal.kind === "trophies") { body.innerHTML = trophiesHtml(s); return; }
+  if (modal.kind === "whatsnew") { body.innerHTML = whatsNewHtml(); return; }
   if (modal.kind === "saves") {
     const full = s.saves.length >= s.maxSaves;
     body.innerHTML = `
@@ -1156,9 +1162,11 @@ function renderWorldBottom() {
   if (!worldOpen() || !state) return;
   const inside = stage && stage.world.inside;
   if (inside) {
+    const act = stage.world.activityPrompt();
     $("worldBottom").innerHTML = `
+      ${act ? `<button class="btn primary big" data-activity>${act.icon} ${esc(act.label)} <span class="sub">E</span></button>` : ""}
       <button class="btn gold" data-placemenu>${inside.icon} ${esc(inside.name)} menu</button>
-      <button class="btn" data-leave>🚪 Leave <span class="sub">${stage.world.near ? "E" : "walk to the door"}</span></button>`;
+      ${stage.world.activity ? "" : `<button class="btn" data-leave>🚪 Leave <span class="sub">${stage.world.near ? "E" : "walk to the door"}</span></button>`}`;
     return;
   }
   const near = stage ? stage.world.near : null;
@@ -2029,6 +2037,8 @@ document.addEventListener("click", async (ev) => {
   }
   if (d.filmroom !== undefined) return openModal("filmroom");
   if (d.trophies !== undefined) return openModal("trophies");
+  if (d.whatsnew !== undefined) return openModal("whatsnew");
+  if (d.whatsnewdone !== undefined) return closeModal();
   if (d.studyfilm !== undefined) { if (await api("film/study")) render(); return; }
   if (d.studyfootage !== undefined) { const f = state.features?.film?.footage?.[Number(d.studyfootage)]?.fight; if (f) openModal("highlights", { fight: f }); return; }
   if (d.cornerchoice) { if (await api("fight/corner", { choice: d.cornerchoice })) { if (stage) stage.arena.restore(state.fight); renderFightHead(state.fight); renderFightControls(state.fight); } return; }
@@ -2234,6 +2244,7 @@ document.addEventListener("click", async (ev) => {
   }
   if (d.enter) return d.enter === "exit" ? leavePlace() : enterPlace(d.enter);
   if (d.leave !== undefined) return leavePlace();
+  if (d.activity !== undefined) { if (stage) stage.world.useActivity(); return; }
   if (d.placemenu !== undefined) return stage && stage.world.inside ? openModal("place", { place: stage.world.inside.id }) : null;
   if (d.phone !== undefined) return openModal("phone", { app: null });
   if (d.phoneapp !== undefined) {
@@ -2377,6 +2388,10 @@ document.addEventListener("change", (ev) => {
   }
 });
 
+document.addEventListener("change", (ev) => {
+  if (ev.target.matches && ev.target.matches("[data-whatsnewauto]")) setWhatsNewAuto(ev.target.checked);
+});
+
 $("createForm").addEventListener("change", (ev) => {
   if (ev.target.id === "genderSelect") fillWeightClasses();
   updateCreatePreview();
@@ -2414,6 +2429,8 @@ $("createForm").addEventListener("submit", (ev) => {
   } else if (!linked && state && state.saves.length) {
     openModal("start");
   }
+  // What's new opens first (then whatever was going to open), unless the player switched it off
+  if (whatsNewAuto()) openModal("whatsnew", { then: modal ? modal.kind : null });
   loadLinkedCareer();
 })();
 

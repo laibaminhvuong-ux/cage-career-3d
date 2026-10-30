@@ -1649,8 +1649,17 @@ export class WorldView {
         this.keys.add(k);
         this.moveTarget = null;
         e.preventDefault();
+        // walking off gets you up (except in the pool, where you swim)
+        if (k !== "shift" && this.activity && !this.activity.spot.area) this.stopActivity();
       }
-      if ((k === "e" || k === "enter") && this.near && this.onEnter) this.onEnter(this.near.id);
+      if (k === " ") {
+        e.preventDefault();
+        if (!e.repeat) this.jump();
+      }
+      if (k === "e" || k === "enter") {
+        if (this.activity || this.nearSpot) this.useActivity();
+        else if (this.near && this.onEnter) this.onEnter(this.near.id);
+      }
     });
     addEventListener("keyup", (e) => this.keys.delete(e.key.toLowerCase()));
     addEventListener("blur", () => this.keys.clear());
@@ -1996,7 +2005,14 @@ export class WorldView {
     if (key === this.key) return;
     this.key = key;
     const S = this.scene;
+    this.playerInfo = info;
     if (!this.player || this.playerLook !== info.look + !!info.female) {
+      this.stopActivity();
+      if (this.bareBody) {
+        S.remove(this.bareBody.root);
+        this.bareBody.dispose();
+        this.bareBody = null;
+      }
       if (this.player) this.player.dispose();
       this.player = new Fighter3D({ casual: true, look: parseLook(info.look), weightClass: info.weightClass, style: info.style, shirt: "#111111", pants: "#2b3a55", tattooText: info.ink, faceSeed: info.seed || "", female: !!info.female });
       this.playerLook = info.look + !!info.female;
@@ -2075,6 +2091,8 @@ export class WorldView {
 
   /** Walk in through a door. ctx: what the room shows ({ house, partner, cars, org }). */
   enterPlace(id, ctx = {}) {
+    this.stopActivity();
+    this.nearSpot = null;
     if (this.inside && this.inside.id === id) return;
     if (this.inside) this.leavePlace();
     if (this.driving) this.stopDriving();
@@ -2132,6 +2150,128 @@ export class WorldView {
     if (this.onNear) this.onNear(null);
   }
 
+  // ---------------------------------------------------------------- jumping and activities
+
+  jump() {
+    if (this.activity) return this.stopActivity();
+    if (this.driving || !this.player || (this.py || 0) > 0.001) return;
+    this.vy = 5.4;
+    this.py = 0.001;
+    this.player.setBase("jump");
+  }
+
+  /** The prompt for the activity button: what E does here, or null. */
+  activityPrompt() {
+    if (this.activity) return { icon: "⬆️", label: this.activity.spot.stopLabel || (this.activity.spot.kind === "swim" ? "Get out" : "Get up") };
+    const s = this.nearSpot;
+    if (!s) return null;
+    return { icon: s.icon || "👉", label: typeof s.label === "function" ? s.label() : s.label };
+  }
+
+  /** E: start what you're next to, stop what you're doing, or flip a switch. */
+  useActivity() {
+    if (this.activity) return this.stopActivity();
+    const s = this.nearSpot;
+    if (!s || !this.inside || this.driving) return;
+    if (s.kind === "toggle") {
+      s.use();
+      if (this.onNear) this.onNear(this.near);
+      return;
+    }
+    if (s.bare) this.undress();
+    const o = this.inside.I.origin;
+    this.activity = { spot: s, back: this.pos.clone(), t: 0, y: null };
+    this.vy = this.py = 0;
+    this.speedNow = 0;
+    this.moveTarget = null;
+    if (s.area) {
+      // slip into the water at the nearest edge
+      const a = s.area;
+      this.pos.set(Math.max(o.x + a[0], Math.min(o.x + a[2], this.pos.x)), 0, Math.max(o.z + a[1], Math.min(o.z + a[3], this.pos.z)));
+    } else {
+      this.pos.set(o.x + s.x, 0, o.z + s.z);
+      this.heading = s.ry;
+    }
+    const base = { sit: "sit", soak: "sit", lie: "lie", shower: "shower", swim: "tread", box: "stance", dive: "jump" }[s.kind] || "relaxed";
+    this.player.setBase(base);
+    if (s.onStart) s.onStart();
+    if (this.onNear) this.onNear(this.near);
+  }
+
+  stopActivity() {
+    const A = this.activity;
+    if (!A) return;
+    this.activity = null;
+    if (A.spot.onStop) A.spot.onStop();
+    this.player.stopActions();
+    this.player.setBase("relaxed");
+    if (A.spot.bare) this.dress();
+    this.pos.copy(A.back);
+    this.player.root.position.set(this.pos.x, 0, this.pos.z);
+    if (this.onNear) this.onNear(this.near);
+  }
+
+  /** Clothes off (shower, pool, sauna…): the fighter in swimwear, barefoot. */
+  undress() {
+    if (this.clothed || !this.player || !this.playerInfo) return;
+    if (!this.bareBody) {
+      const i = this.playerInfo;
+      this.bareBody = new Fighter3D({ presenter: true, barefoot: true, bikini: !!i.female, outfit: i.female ? "#e11d48" : "#1d4ed8", look: parseLook(i.look), weightClass: i.weightClass,
+        style: i.style, tattooText: i.ink, faceSeed: i.seed || "", female: !!i.female });
+      this.scene.add(this.bareBody.root);
+    }
+    this.clothed = this.player;
+    this.clothed.root.visible = false;
+    this.player = this.bareBody;
+    this.player.root.visible = true;
+    this.player.setInjured(this.injured);
+    this.player.root.position.copy(this.clothed.root.position);
+  }
+
+  dress() {
+    if (!this.clothed) return;
+    this.player.root.visible = false;
+    this.player = this.clothed;
+    this.clothed = null;
+    this.player.root.visible = true;
+  }
+
+  /** Where the fighter is while doing something: seated, lying, swimming, diving… */
+  placeActivity(A, dt) {
+    const s = A.spot, f = this.player, P = this.pos;
+    A.t += dt;
+    let y = s.y;
+    if (s.kind === "swim") {
+      const moving = this.speedNow > 0.3;
+      f.setBase(moving ? "swim" : "tread");
+      const target = s.water - (moving ? 0.1 : 1.3);
+      A.y = A.y === null ? target : A.y + (target - A.y) * damp(5, dt);
+      y = A.y + Math.sin(A.t * 2) * 0.02;
+    } else if (s.kind === "dive") {
+      // off the board in an arc, then sunk to the chest in gold
+      const T = 0.9, k = Math.min(1, A.t / T), o = this.inside.I.origin;
+      P.set(o.x + s.x + (s.to.x - s.x) * k, 0, o.z + s.z + (s.to.z - s.z) * k);
+      y = s.y + (s.to.y - s.y) * k + 2.2 * k * (1 - k);
+      f.setBase(k < 1 ? "jump" : "tread");
+    } else if (s.kind === "box" && !f.busy) {
+      f.play(attack(["jab", "jab-cross", "left hook", "body kick", "uppercut"][Math.floor(Math.random() * 5)]).frames, "stance");
+    }
+    f.root.position.set(P.x, y, P.z);
+    f.root.rotation.set(0, this.heading, 0);
+  }
+
+  /** The nearest thing in this room you could use. */
+  findSpot(P) {
+    const I = this.inside && this.inside.I;
+    if (!I || !I.spots || this.activity || this.driving) return null;
+    let best = null, bd = Infinity;
+    for (const s of I.spots) {
+      const d = Math.hypot(P.x - I.origin.x - s.x, P.z - I.origin.z - s.z);
+      if (d < s.dist && d < bd) { best = s; bd = d; }
+    }
+    return best;
+  }
+
   /** Walking from room to room in a house: that room's light, reflections and look take over. */
   houseRoom(I, P) {
     const ci = I.cellAt(P.x - I.origin.x, P.z - I.origin.z);
@@ -2159,6 +2299,8 @@ export class WorldView {
   /** Step back out onto the street in front of the door. */
   leavePlace() {
     if (!this.inside) return;
+    this.stopActivity();
+    this.nearSpot = null;
     const [dx, dz] = this.inside.door;
     this.inside.I.group.visible = false;
     this.inside = null;
@@ -2218,6 +2360,7 @@ export class WorldView {
 
   /** Teleport home (opening the world). */
   goHome() {
+    this.stopActivity();
     if (this.inside) this.leavePlace();
     this.pos.set(-38, 0, -6);
     this.heading = Math.PI;
@@ -2277,8 +2420,13 @@ export class WorldView {
     if (k.has("s") || k.has("arrowdown")) iz += 1;
     if (k.has("a") || k.has("arrowleft")) ix -= 1;
     if (k.has("d") || k.has("arrowright")) ix += 1;
+    // tapping the ground to walk away also gets you up
+    if (this.activity && !this.activity.spot.area && this.moveTarget) this.stopActivity();
+    const A = this.activity;
     let dir = null;
-    if (ix || iz) {
+    if (A && !A.spot.area) {
+      // seated, lying, showering: no walking
+    } else if (ix || iz) {
       const sy = Math.sin(this.camYaw), cy = Math.cos(this.camYaw);
       dir = new THREE.Vector3(ix * cy + iz * sy, 0, -ix * sy + iz * cy).normalize();
     } else if (this.moveTarget) {
@@ -2286,7 +2434,7 @@ export class WorldView {
       if (d.length() < (this.driving ? 1.5 : 0.4)) this.moveTarget = null;
       else dir = d.normalize();
     }
-    const maxV = this.driving ? 16 : (k.has("shift") ? 7 : 4.2) * (this.injured ? 0.55 : 1);
+    const maxV = this.driving ? 16 : A ? 1.7 : (k.has("shift") ? 7 : 4.2) * (this.injured ? 0.55 : 1);
     let want = dir ? maxV : 0;
     if (this.driving) {
       // a car turns by steering its front wheels while it rolls: it can't spin on the spot
@@ -2311,9 +2459,14 @@ export class WorldView {
       const step = this.speedNow * dt;
       const vx = Math.sin(this.heading) * step, vz = Math.cos(this.heading) * step;
       const r = this.driving ? 1.3 : 0.4;
-      if (!this.blocked(P.x + vx, P.z, r)) P.x += vx;
+      if (A && A.spot.area) {
+        // swimming: anywhere in the water
+        const a = A.spot.area, o = this.inside.I.origin;
+        P.x = Math.max(o.x + a[0], Math.min(o.x + a[2], P.x + vx));
+        P.z = Math.max(o.z + a[1], Math.min(o.z + a[3], P.z + vz));
+      } else if (!this.blocked(P.x + vx, P.z, r)) P.x += vx;
       else if (this.driving) this.speedNow *= 0.5;
-      if (!this.blocked(P.x, P.z + vz, r)) P.z += vz;
+      if (A && A.spot.area) { /* moved above */ } else if (!this.blocked(P.x, P.z + vz, r)) P.z += vz;
       else if (this.driving) this.speedNow *= 0.5;
     }
     if (this.driving) {
@@ -2334,8 +2487,20 @@ export class WorldView {
       this.player.root.position.set(seat.x, seat.y - 0.46 * this.player.root.scale.y, seat.z);
       this.player.root.rotation.set(0, this.heading, 0);
       this.player.update(dt);
+    } else if (A) {
+      this.placeActivity(A, dt);
+      this.player.update(dt);
     } else {
-      this.player.root.position.copy(P);
+      // a jump: up, gravity, land
+      if (this.py > 0) {
+        this.vy -= 16 * dt;
+        this.py += this.vy * dt;
+        if (this.py <= 0) {
+          this.py = this.vy = 0;
+          this.player.setBase("relaxed");
+        }
+      }
+      this.player.root.position.set(P.x, this.py || 0, P.z);
       this.player.root.rotation.y = this.heading;
       this.player.update(dt);
     }
@@ -2382,6 +2547,11 @@ export class WorldView {
       const I = this.inside.I;
       I.tick(dt, performance.now() / 1000);
       if (I.cells) this.houseRoom(I, P);
+      const spot = this.findSpot(P);
+      if (spot !== this.nearSpot) {
+        this.nearSpot = spot;
+        if (this.onNear) this.onNear(this.near);
+      }
       best = 0;
       if (Math.hypot(P.x - I.origin.x, P.z - (I.origin.z + I.d / 2 - 0.5)) < 1.4) near = EXIT;
     }
@@ -2406,7 +2576,7 @@ export class WorldView {
     // third-person camera
     const dist = this.driving ? 11 : this.inside ? 3.4 : 7.5;
     const c = this.camera;
-    const tgt = new THREE.Vector3(P.x, this.driving ? 1.2 : 1.5, P.z);
+    const tgt = new THREE.Vector3(P.x, (this.driving ? 1.2 : 1.5) + (this.py || 0) * 0.5, P.z);
     let cx = tgt.x + Math.sin(this.camYaw) * Math.cos(this.camPitch) * dist;
     let cz = tgt.z + Math.cos(this.camYaw) * Math.cos(this.camPitch) * dist;
     let cyp = tgt.y + Math.sin(this.camPitch) * dist;

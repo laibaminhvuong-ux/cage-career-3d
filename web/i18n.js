@@ -205,7 +205,7 @@ export const ROWS = [
   ["e.g. Alex Rivera", "ví dụ: Alex Rivera", "p. ej.: Alex Rivera", "ex.: Alex Rivera", "ex. : Alex Rivera"],
   ["e.g. The Storm", "ví dụ: The Storm", "p. ej.: The Storm", "ex.: The Storm", "ex. : The Storm"],
   ["3D preview unavailable on this device", "Thiết bị này không xem trước được 3D", "Vista previa 3D no disponible en este dispositivo", "Prévia 3D indisponível neste dispositivo", "Aperçu 3D indisponible sur cet appareil"],
-  ["Tap the ground or use WASD to walk · Shift to run · drag to look around", "Chạm vào mặt đất hoặc dùng WASD để đi · Shift để chạy · kéo để nhìn quanh", "Toca el suelo o usa WASD para caminar · Shift para correr · arrastra para mirar alrededor", "Toque no chão ou use WASD para andar · Shift para correr · arraste para olhar em volta", "Touche le sol ou utilise WASD pour marcher · Maj pour courir · fais glisser pour regarder autour"],
+  ["Tap the ground or use WASD to walk · Shift to run · Space to jump · E to use things · drag to look around", "Chạm vào mặt đất hoặc dùng WASD để đi · Shift để chạy · Space để nhảy · E để dùng đồ vật · kéo để nhìn quanh", "Toca el suelo o usa WASD para caminar · Shift para correr · Espacio para saltar · E para usar cosas · arrastra para mirar alrededor", "Toque no chão ou use WASD para andar · Shift para correr · Espaço para pular · E para usar coisas · arraste para olhar em volta", "Touche le sol ou utilise WASD pour marcher · Maj pour courir · Espace pour sauter · E pour utiliser les objets · fais glisser pour regarder autour"],
   ["Yes", "Có", "Sí", "Sim", "Oui"],
   ["Cancel", "Hủy", "Cancelar", "Cancelar", "Annuler"],
   ["Close", "Đóng", "Cerrar", "Fechar", "Fermer"],
@@ -239,6 +239,9 @@ export const ROWS = [
   ["Win by submission", "Thắng bằng khóa siết", "Gana por sumisión", "Vença por finalização", "Gagner par soumission"],
   ["Land 3 or more takedowns", "Quật ngã từ 3 lần trở lên", "Consigue 3 derribos o más", "Acerte 3 quedas ou mais", "Réussir 3 amenées au sol ou plus"],
   ["Don't get knocked down", "Không bị đánh ngã", "Que no te derriben", "Não seja derrubado", "Ne pas aller au tapis"],
+  ["What's new", "Có gì mới", "Novedades", "Novidades", "Nouveautés"],
+  ["Show What's new when the game opens", "Hiện Có gì mới khi mở trò chơi", "Mostrar Novedades al abrir el juego", "Mostrar Novidades ao abrir o jogo", "Afficher les Nouveautés à l'ouverture du jeu"],
+  ["Let's go", "Bắt đầu thôi", "Vamos", "Vamos lá", "C'est parti"],
   ["Out-land them two to one", "Ra đòn trúng gấp đôi đối thủ", "Conecta el doble que tu rival", "Acerte o dobro do adversário", "Toucher deux fois plus que l'adversaire"],
 ];
 

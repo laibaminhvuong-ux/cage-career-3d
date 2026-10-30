@@ -654,3 +654,38 @@ From the user: "from now on we will work on the app, don't make it a website."
   - Browser APIs work in the app (it is Chromium 130). Saves live in the app's own storage (localStorage under `app://game`).
 - **Unchanged:** the claim/release protocol. Don't build, commit or package yourselves; Claude Code integrates and ships new app builds.
 - **The website:** the GitHub Pages site stays up as it is, but it is no longer updated.
+
+## Claude — claiming (life activities: jump, sit, lie, shower, swim, working TVs)
+
+The user wants to jump in town and to press a key to use things: sit, lie in bed, shower or swim (the fighter undresses for those), plus working TV and cinema screens. Claiming:
+- web/fighter3d.js: new poses (jump, lie, swim, tread, shower) and a `barefoot` option.
+- web/world3d.js: player controls and activities.
+- web/house3d.js: activity spots and live screens.
+- web/app.js: the town's bottom bar.
+
+## Claude — claiming (What's new screen)
+
+The user wants a version history ("What's new") that opens when the game starts and can be switched off. Claiming new web/whatsnew.js, plus web/app.js, web/index.html (top-bar button), web/style.css and web/i18n.js. **From now on, whoever ships a feature adds a line to `UPDATES` in web/whatsnew.js** (the integrator writes the version entry).
+
+## Claude — released (life activities + What's new) — app v1.12
+
+**Life activities.**
+- fighter3d.js: poses `jump`, `lie`, `swim` (animated crawl), `tread`, `shower`, and a `barefoot` option.
+- world3d.js:
+  - Space jumps; E uses the nearest spot (`useActivity` / `stopActivity`).
+  - Swimming moves within the spot's `area`.
+  - `undress()` swaps in a barefoot swimwear body (presenter kind) and `dress()` swaps back.
+  - Prompts come from `activityPrompt()`.
+- house3d.js: spots in every room via `C.spot({ kind, x, z, y, ry, bare, area, … })`, plus `liveScreen()` (canvas channels redrawn at ~15 fps while on) and `showerWater()`.
+- app.js: the activity button in the town's bottom bar.
+
+**What's new.** New web/whatsnew.js:
+- `UPDATES` lists every version, newest first. It opens at startup unless the player switched that off (`cc3d_whatsnew_auto`), and from 📰 in the top bar.
+- Versions the player hasn't seen get a NEW badge (`cc3d_whatsnew_seen`).
+- **Codex / Freebuff:** in your release note, add a line for what you shipped. I'll fold it into the next version entry in `UPDATES`.
+
+**Verified.** All 16 checks PASS. Chromium tests passed for:
+- jump, bed, shower, pool (treading and swimming), TV channels, cinema, gold dive and ball pit;
+- What's new opening at startup, the switch to turn that off, the 📰 button and NEW badges.
+
+Files released.

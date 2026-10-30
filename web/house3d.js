@@ -111,6 +111,140 @@ function instanced(C, geo, material, n, place) {
   return m;
 }
 
+// ------------------------------------------------------------------ live screens
+
+/** What's on: each channel paints one frame at time t onto a canvas. */
+const CHANNELS = {
+  fight(x, w, h, t) {
+    const s = x.createLinearGradient(0, 0, 0, h); s.addColorStop(0, "#0b1020"); s.addColorStop(1, "#1f2937");
+    x.fillStyle = s; x.fillRect(0, 0, w, h);
+    x.fillStyle = "#e7e2d6"; x.beginPath(); x.ellipse(w / 2, h * 0.82, w * 0.42, h * 0.12, 0, 0, TAU); x.fill();
+    const gap = 40 + Math.sin(t * 1.3) * 14, punch = Math.max(0, Math.sin(t * 5)) ** 3;
+    for (const [side, c] of [[-1, "#dc2626"], [1, "#2563eb"]]) {
+      const px = w / 2 + side * gap / 2, bob = Math.sin(t * 6 + side) * 2;
+      x.fillStyle = c; x.fillRect(px - 7, h * 0.48 + bob, 14, 26);
+      x.fillStyle = "#e0ac69"; x.fillRect(px - 6, h * 0.4 + bob, 12, 30); x.beginPath(); x.arc(px, h * 0.36 + bob, 7, 0, TAU); x.fill();
+      x.fillStyle = "#111"; x.fillRect(px - 6, h * 0.66 + bob, 4, 18); x.fillRect(px + 2, h * 0.66 + bob, 4, 18);
+      const reach = side < 0 ? punch * 18 : (1 - punch) * 6;
+      x.fillStyle = c; x.fillRect(side < 0 ? px + 4 : px - 4 - (8 + reach), h * 0.44 + bob, 8 + reach, 5);
+    }
+    const hp = (k) => 0.35 + 0.6 * (0.5 + 0.5 * Math.cos(t * 0.21 + k));
+    x.fillStyle = "#22c55e"; x.fillRect(8, 8, (w / 2 - 20) * hp(0), 6); x.fillRect(w / 2 + 12, 8, (w / 2 - 20) * hp(2), 6);
+    x.fillStyle = "#dc2626"; x.fillRect(w - 40, 20, 32, 12); x.fillStyle = "#fff"; x.font = "bold 9px Arial"; x.fillText("LIVE", w - 35, 29);
+    x.fillStyle = "#f4b942"; x.fillRect(0, h - 14, w, 14); x.fillStyle = "#111"; x.font = "bold 10px Arial";
+    x.fillText("FIGHT NIGHT  ·  MAIN EVENT  ·  ROUND " + (1 + (Math.floor(t / 20) % 5)) + "  ·  CAGE CAREER 3D  ·  ", w - ((t * 40) % (w * 2.2)), h - 4);
+  },
+  news(x, w, h, t) {
+    x.fillStyle = "#1e3a8a"; x.fillRect(0, 0, w, h);
+    x.fillStyle = "#3b82f6"; for (let i = 0; i < 6; i++) x.fillRect(i * 50 + ((t * 10) % 50), 0, 20, h * 0.7);
+    x.fillStyle = "#e5e7eb"; x.fillRect(w * 0.15, h * 0.62, w * 0.7, h * 0.2);
+    x.fillStyle = "#111827"; x.fillRect(w / 2 - 14, h * 0.38, 28, 30);
+    x.fillStyle = "#c68642"; x.beginPath(); x.arc(w / 2, h * 0.32 + Math.sin(t * 4) * 0.8, 10, 0, TAU); x.fill();
+    x.fillStyle = "#dc2626"; x.fillRect(0, h - 30, 70, 16); x.fillStyle = "#fff"; x.font = "bold 9px Arial"; x.fillText("BREAKING", 8, h - 19);
+    x.fillStyle = "#111"; x.fillRect(0, h - 14, w, 14); x.fillStyle = "#fde68a"; x.font = "bold 10px Arial";
+    x.fillText("Undefeated prospect signs record deal  ·  Champion calls out the division  ·  Ticket sales smash records  ·  ", w - ((t * 45) % (w * 3)), h - 4);
+  },
+  music(x, w, h, t) {
+    x.fillStyle = "#0b0710"; x.fillRect(0, 0, w, h);
+    const cols = ["#ff3cac", "#784ba0", "#2b86c5", "#00f5d4", "#fee440"];
+    for (let i = 0; i < 24; i++) {
+      const v = 0.2 + 0.8 * Math.abs(Math.sin(t * (2 + (i % 5)) + i * 0.7));
+      x.fillStyle = cols[i % 5]; x.fillRect(8 + i * ((w - 16) / 24), h * 0.85 - v * h * 0.6, (w - 16) / 24 - 2, v * h * 0.6);
+    }
+    x.fillStyle = "#fff"; x.font = "bold 12px Arial"; x.fillText("♪ NOW PLAYING  ·  Walkout Anthem", 10, 18);
+  },
+  game(x, w, h, t) {
+    x.fillStyle = "#38bdf8"; x.fillRect(0, 0, w, h / 2); x.fillStyle = "#16a34a"; x.fillRect(0, h / 2, w, h / 2);
+    x.fillStyle = "#374151"; x.beginPath(); x.moveTo(w / 2 - 8, h / 2); x.lineTo(w / 2 + 8, h / 2); x.lineTo(w, h); x.lineTo(0, h); x.fill();
+    x.fillStyle = "#fff";
+    for (let i = 0; i < 8; i++) { const k = ((i / 8 + t * 0.9) % 1); const y = h / 2 + k * k * h / 2; x.fillRect(w / 2 - 1 - k * 4, y, 2 + k * 8, 2 + k * 8); }
+    const cx = w / 2 + Math.sin(t * 1.4) * w * 0.18;
+    x.fillStyle = "#dc2626"; x.fillRect(cx - 18, h - 34, 36, 20); x.fillStyle = "#111"; x.fillRect(cx - 18, h - 16, 8, 6); x.fillRect(cx + 10, h - 16, 8, 6);
+    x.fillStyle = "#fde68a"; x.font = "bold 11px Arial"; x.fillText("LAP " + (1 + (Math.floor(t / 15) % 3)) + "/3   " + (180 + Math.round(Math.sin(t) * 20)) + " km/h", 8, 16);
+  },
+  movie(x, w, h, t) {
+    const sc = Math.floor(t / 9) % 3;
+    const s = x.createLinearGradient(0, 0, 0, h);
+    const sky = [["#1e1b4b", "#be185d", "#fb923c"], ["#0c4a6e", "#0ea5e9", "#bae6fd"], ["#111", "#7f1d1d", "#dc2626"]][sc];
+    s.addColorStop(0, sky[0]); s.addColorStop(0.6, sky[1]); s.addColorStop(1, sky[2]);
+    x.fillStyle = s; x.fillRect(0, 0, w, h);
+    x.fillStyle = "rgba(255,240,200,0.9)"; x.beginPath(); x.arc(w * 0.7, h * 0.62, h * 0.18, 0, TAU); x.fill();
+    x.fillStyle = "#0a0a0a"; x.fillRect(0, h * 0.72, w, h * 0.28);
+    for (let i = 0; i < 2; i++) {
+      const px = ((t * 25 + i * 30) % (w + 60)) - 30, step = Math.sin(t * 8 + i) * 5;
+      x.fillRect(px - 5, h * 0.48, 10, 32); x.beginPath(); x.arc(px, h * 0.44, 7, 0, TAU); x.fill();
+      x.fillRect(px - 5 + step, h * 0.72 - 2, 4, 14); x.fillRect(px + 1 - step, h * 0.72 - 2, 4, 14);
+    }
+    const lines = ["\"They said I'd never make it.\"", "\"One more round. That's all I need.\"", "\"This is for everyone back home.\""];
+    x.fillStyle = "#000"; x.fillRect(0, 0, w, h * 0.08); x.fillRect(0, h * 0.92, w, h * 0.08);
+    x.fillStyle = "#fde68a"; x.font = "italic 11px Georgia"; x.textAlign = "center"; x.fillText(lines[sc], w / 2, h * 0.88); x.textAlign = "start";
+  },
+};
+
+/**
+ * A screen you can switch on (E): off, then each channel in turn, then off again. While on, the
+ * picture is repainted about 15 times a second. Returns { group, use(), label() }.
+ */
+function liveScreen(C, w, h, channels, names) {
+  const { K } = C;
+  const can = document.createElement("canvas");
+  can.width = 256;
+  can.height = Math.round((256 * h) / w);
+  const ctx = can.getContext("2d");
+  const tex = new THREE.CanvasTexture(can);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const g = new THREE.Group();
+  K.at(K.box(w + 0.08, h + 0.08, 0.06, "#0b0b0d"), 0, 0, 0, g);
+  const scr = K.at(plane(w, h, new THREE.MeshBasicMaterial({ map: tex, toneMapped: false })), 0, 0, 0.035, g);
+  let ch = -1, acc = 0;
+  const off = () => {
+    const s = ctx.createLinearGradient(0, 0, can.width, can.height);
+    s.addColorStop(0, "#15171c"); s.addColorStop(0.5, "#07080a"); s.addColorStop(1, "#111317");
+    ctx.fillStyle = s; ctx.fillRect(0, 0, can.width, can.height);
+    tex.needsUpdate = true;
+  };
+  off();
+  C.tick((dt, t) => {
+    if (ch < 0 || (acc += dt) < 1 / 15) return;
+    acc = 0;
+    CHANNELS[channels[ch]](ctx, can.width, can.height, t);
+    tex.needsUpdate = true;
+  });
+  return {
+    group: g, screen: scr,
+    on: () => ch >= 0,
+    use() {
+      ch = ch + 1 < channels.length ? ch + 1 : -1;
+      acc = 1;
+      if (ch < 0) off();
+    },
+    label: () => (ch < 0 ? names.on : ch + 1 < channels.length ? names.next : names.off),
+  };
+}
+
+/** Water falling from a shower head while it's running. Returns { group, run(on) }. */
+function showerWater(C, x, z, top) {
+  const n = 60, pos = new Float32Array(n * 6), seed = [];
+  for (let i = 0; i < n; i++) seed.push([(Math.random() - 0.5) * 0.36, (Math.random() - 0.5) * 0.36, Math.random()]);
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+  const lines = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: "#cfefff", transparent: true, opacity: 0.55, toneMapped: false }));
+  lines.frustumCulled = false;
+  lines.visible = false;
+  lines.position.set(x, 0, z);
+  C.g.add(lines);
+  C.tick((dt, t) => {
+    if (!lines.visible) return;
+    for (let i = 0; i < n; i++) {
+      const [dx, dz, ph] = seed[i];
+      const y = top - (((t * 1.6 + ph) % 1) * top);
+      pos.set([dx, y, dz, dx * 1.05, y - 0.12, dz * 1.05], i * 6);
+    }
+    geo.attributes.position.needsUpdate = true;
+  });
+  return { group: lines, run: (on) => { lines.visible = on; } };
+}
+
 // ------------------------------------------------------------------ painted textures
 
 /** A fake game on a monitor: a fighter, a racer or a space shooter. */
@@ -136,15 +270,6 @@ const gameTex = (K, kind) => K.canvasTex("game" + kind, 256, 160, (g, w, h) => {
     g.fillStyle = "#a3e635"; for (let i = 0; i < 6; i++) g.fillRect(30 + i * 36, 30 + (i % 2) * 18, 20, 12);
     g.fillStyle = "#fde68a"; g.fillRect(w / 2 - 1, 60, 2, 40);
   }
-}, false);
-const movieTex = (K) => K.canvasTex("movie", 512, 216, (g, w, h) => {
-  const s = g.createLinearGradient(0, 0, 0, h);
-  s.addColorStop(0, "#1e1b4b"); s.addColorStop(0.55, "#be185d"); s.addColorStop(0.8, "#fb923c"); s.addColorStop(1, "#111");
-  g.fillStyle = s; g.fillRect(0, 0, w, h);
-  g.fillStyle = "#fde68a"; g.beginPath(); g.arc(w / 2, h * 0.72, 40, Math.PI, 0); g.fill();
-  g.fillStyle = "#0a0a0a"; g.fillRect(0, h * 0.72, w, h * 0.28);
-  for (const [x, f] of [[w / 2 - 70, 1], [w / 2 + 70, -1]]) { g.fillRect(x - 10, h * 0.42, 20, 70); g.beginPath(); g.arc(x, h * 0.38, 14, 0, TAU); g.fill(); g.fillRect(x, h * 0.48, 40 * f, 10); }
-  g.fillStyle = "#fff"; g.font = "italic 900 34px Arial"; g.textAlign = "center"; g.fillText("CAGE CAREER: THE MOVIE", w / 2, 40);
 }, false);
 const waterTex = (K) => K.canvasTex("water", 256, 256, (g, w, h) => {
   g.fillStyle = "#0ea5e9"; g.fillRect(0, 0, w, h);
@@ -185,8 +310,11 @@ function living(C) {
   onWall(C, plane(3.2, h, stdMat({ map: K.tiled(K.slatTexture(lux ? "#3b2716" : "#6b4a2f"), 1.6, h / 2), roughness: 0.7 })), "back", x0, h / 2, T + 0.01);
   K.at(K.box(2.2, 0.45, 0.45, "#2a2420"), x0, 0.23, -d / 2 + 0.4, g);
   K.at(K.neon(3, "#ffcf8a"), x0, 0.5, -d / 2 + 0.22, g);
-  onWall(C, screen(C, lux ? 2.4 : 1.9, lux ? 1.35 : 1.07, K.textTexture("🥊 FIGHT NIGHT LIVE", { w: 512, h: 288, bg: "#0e1a33", fg: "#f4b942", font: "bold 44px Arial" })), "back", x0, 1.45, T + 0.1);
+  const tv = liveScreen(C, lux ? 2.4 : 1.9, lux ? 1.35 : 1.07, ["fight", "news", "music"], { on: "Turn on the TV", next: "Next channel", off: "Turn off the TV" });
+  onWall(C, tv.group, "back", x0, 1.45, T + 0.1);
   C.block(x0 - 1.1, -d / 2, x0 + 1.1, -d / 2 + 0.65);
+  C.spot({ kind: "toggle", icon: "📺", x: x0, z: -d / 2 + 1.1, use: tv.use, label: tv.label });
+  C.spot({ kind: "sit", icon: "🛋", label: "Sit on the sofa", x: x0 - 0.6, z: 1.45, ry: Math.PI });
   // a sofa facing it, a coffee table, cushions
   K.at(K.sofa(2.6, lux ? "#ece6da" : "#55606e"), x0, 0, 1.4, g).rotation.y = Math.PI;
   C.block(x0 - 1.3, 0.9, x0 + 1.3, 1.9);
@@ -218,6 +346,7 @@ function living(C) {
       K.at(K.sofa(0.95, lux ? "#7a1f2b" : "#a16207"), bx + x, 0, -0.2, g).rotation.y = Math.PI + x * 0.4;
       C.block(bx + x - 0.5, -0.7, bx + x + 0.5, 0.3);
     }
+    C.spot({ kind: "sit", icon: "🛋", label: tier >= 2 ? "Sit by the fire" : "Sit in the armchair", x: bx - 0.75, z: -0.15, ry: Math.PI - 0.3 });
   }
   K.at(K.plant(1.2), -w / 2 + 0.7, 0, d / 2 - 0.7, g);
   K.at(K.plant(1.2), w / 2 - 0.7, 0, d / 2 - 0.7, g);
@@ -252,6 +381,7 @@ function kitchen(C) {
   K.at(K.counter(2.4, lux ? "#1f2937" : body, lux ? "#f5f5f4" : top), ix, 0, 0.4, g);
   C.block(ix - 1.25, 0, ix + 1.25, 0.8);
   for (let i = 0; i < 3; i++) K.at(K.stool(lux ? "#e5e0d6" : "#2b2b2b"), ix - 0.8 + i * 0.8, 0, 1.2, g);
+  C.spot({ kind: "sit", icon: "🪑", label: "Sit at the island", x: ix, z: 1.2, y: 0.33, ry: Math.PI });
   for (let i = 0; i < 5; i++) K.at(K.sphere(0.07, ["#ef4444", "#f59e0b", "#84cc16"][i % 3]), ix + 0.4 + (i % 3) * 0.1, 1.12 + Math.floor(i / 3) * 0.08, 0.35 + (i % 2) * 0.1, g);
   for (const x of [-0.7, 0, 0.7]) K.at(K.pendant(h - 2.2, lux ? "#c9a227" : "#1f1f1f"), ix + x, h, 0.4, g);
   const tx = w / 4 + 0.4;
@@ -267,6 +397,7 @@ function bedroomCore(C, { width = 1.6, duvet = "#4b5b73", head = null, canopy = 
   const bx = w / 4 + 0.2, bz = -d / 2 + T + 1.12;
   K.at(bed(K, width, duvet, "#3b2a1d", head), bx, 0, bz, g);
   C.block(bx - width / 2 - 0.1, -d / 2, bx + width / 2 + 0.1, bz + 1.1);
+  C.spot({ kind: "lie", icon: "🛏", label: "Lie in bed", x: bx, z: bz + 0.2, y: 0.55, ry: 0, dist: 1.9 });
   for (const sx of [-1, 1]) K.at(nightstand(K), bx + sx * (width / 2 + 0.4), 0, -d / 2 + T + 0.3, g);
   if (canopy) {
     for (const x of [-1, 1]) for (const z of [-1, 1]) K.at(K.cyl(0.05, 0.05, 2.4, "#d4af37", 8, { metalness: 0.9, roughness: 0.3 }), bx + x * (width / 2 + 0.1), 1.2, bz + z * 1.05, g);
@@ -279,7 +410,9 @@ function bedroomCore(C, { width = 1.6, duvet = "#4b5b73", head = null, canopy = 
   // a dresser with a TV over it, facing the bed
   K.at(K.box(1.4, 0.8, 0.45, "#2a1d14"), bx, 0.4, d / 2 - T - 0.24, g);
   C.block(bx - 0.7, d / 2 - 0.6, bx + 0.7, d / 2);
-  onWall(C, screen(C, 1.3, 0.75, K.textTexture("Netflix & chill", { w: 512, h: 288, bg: "#111", fg: "#e50914", font: "bold 54px Arial" })), "front", bx, 1.55);
+  const tv = liveScreen(C, 1.3, 0.75, ["movie", "news", "fight"], { on: "Turn on the TV", next: "Next channel", off: "Turn off the TV" });
+  onWall(C, tv.group, "front", bx, 1.55);
+  C.spot({ kind: "toggle", icon: "📺", x: bx, z: d / 2 - 1.2, use: tv.use, label: tv.label });
   // an armchair and a lamp in the free corner, a window on an outside wall
   K.at(K.sofa(0.95, "#a16207"), -w / 2 + 1.0, 0, d / 2 - 1.1, g).rotation.y = Math.PI * 0.75;
   C.block(-w / 2 + 0.4, d / 2 - 1.6, -w / 2 + 1.6, d / 2 - 0.5);
@@ -307,6 +440,7 @@ function kids(C) {
   // bunk beds
   const bx = w / 4 + 0.4, bz = -d / 2 + T + 1.12;
   K.at(bed(K, 1.0, "#3b82f6", "#f5f5f4"), bx, 0, bz, g);
+  C.spot({ kind: "lie", icon: "🛏", label: "Lie on the bottom bunk", x: bx, z: bz + 0.2, y: 0.55, ry: 0, dist: 1.8 });
   K.at(bed(K, 1.0, "#f43f5e", "#f5f5f4"), bx, 1.35, bz, g);
   for (const x of [-0.58, 0.58]) for (const z of [-1.08, 1.08]) K.at(K.box(0.08, 2.3, 0.08, "#f5f5f4"), bx + x, 1.15, bz + z, g);
   for (let i = 0; i < 5; i++) K.at(K.box(0.4, 0.04, 0.04, "#d4d4d4"), bx + 0.75, 0.35 + i * 0.35, bz + 0.9, g);
@@ -339,6 +473,7 @@ function bathCore(C, { lux = false, gold = false }) {
   K.at(plane(1.6, 0.65, stdMat({ map: K.tiled(waterTex(K), 1, 0.4), color: "#bae6fd", transparent: true, opacity: 0.75, roughness: 0.05 })), tx, 0.5, -d / 2 + T + 0.45, g).rotation.x = -Math.PI / 2;
   K.at(K.cyl(0.02, 0.02, 0.3, "#c0c4ca", 8, { metalness: 0.9 }), tx - 0.75, 0.8, -d / 2 + T + 0.1, g);
   C.block(tx - 0.95, -d / 2, tx + 0.95, -d / 2 + 0.95);
+  C.spot({ kind: "soak", icon: "🛁", label: "Take a bath", x: tx - 0.4, z: -d / 2 + T + 0.45, y: 0.08, ry: Math.PI / 2, bare: true, dist: 1.6 });
   // the toilet (a golden one, in the mansion)
   const tm = gold ? K.mat("#d4af37", { metalness: 1, roughness: 0.18 }) : white;
   const toilet = new THREE.Group();
@@ -358,6 +493,8 @@ function bathCore(C, { lux = false, gold = false }) {
   K.at(K.box(1.5, 2.1, 1.5, "#cfe8f5", { transparent: true, opacity: 0.18, roughness: 0.05 }), sx, 1.05, sz, g);
   K.at(K.cyl(0.18, 0.18, 0.03, "#c0c4ca", 16, { metalness: 0.9 }), sx, 2.05, sz, g);
   C.block(sx - 0.8, sz - 0.8, sx + 0.8, d / 2);
+  const water = showerWater(C, sx, sz, 2.0);
+  C.spot({ kind: "shower", icon: "🚿", label: "Take a shower", x: sx, z: sz, ry: 0, bare: true, dist: 1.6, onStart: () => water.run(true), onStop: () => water.run(false) });
   K.at(K.plant(0.9), w / 2 - 0.6, 0, d / 2 - 0.6, g);
 }
 const bath = (C) => bathCore(C, {});
@@ -377,6 +514,7 @@ function spa(C) {
     water.material.map.offset.x = (t * 0.03) % 1;
   });
   C.block(jx - 1.1, jz - 1.1, jx + 1.1, jz + 1.1);
+  C.spot({ kind: "soak", icon: "🫧", label: "Get in the jacuzzi", x: jx, z: jz + 0.45, y: 0.1, ry: Math.PI, bare: true, dist: 1.9 });
   // a sauna cabin in the corner: slats, a glass door, glowing stones inside
   const sx = -w / 2 + 1.4, sz = 0.5;
   const cab = new THREE.Group();
@@ -388,6 +526,7 @@ function spa(C) {
   for (let i = 0; i < 6; i++) K.at(new THREE.Mesh(new THREE.DodecahedronGeometry(0.09), glow(i % 2 ? "#f97316" : "#fb923c")), 0.6 + (i % 3) * 0.12, 0.55, 0.35 + Math.floor(i / 3) * 0.12, cab);
   K.at(cab, sx, 0, sz, g);
   C.block(sx - 1.15, sz - 1.05, sx + 1.15, sz + 1.05);
+  C.spot({ kind: "sit", icon: "🔥", label: "Sweat it out in the sauna", x: sx, z: sz - 0.55, y: 0.18, ry: 0, bare: true, dist: 1.9 });
   K.at(K.sign("SAUNA", 1.0, 0.3, { bg: "#3b2414", fg: "#fed7aa", font: "bold 70px Georgia" }), sx, 2.55, sz + 1.03, g);
   // candles
   for (let i = 0; i < 5; i++) {
@@ -420,6 +559,7 @@ function gaming(C) {
   K.at(K.cyl(0.04, 0.04, 0.44, "#444", 8), 0, 0.24, 0, chairG);
   K.at(chairG, dx, 0, -d / 2 + T + 1.3, g);
   C.block(dx - 1.3, -d / 2, dx + 1.3, -d / 2 + 1.6);
+  C.spot({ kind: "sit", icon: "🎮", label: "Sit at the battle station", x: dx, z: -d / 2 + T + 1.3, y: 0.12, ry: Math.PI, dist: 1.6 });
   // arcade cabinets along the front wall
   [["FIGHT CLUB", "#f43f5e"], ["SPACE PUNCH", "#22d3ee"]].forEach(([name, c], i) => {
     const cab = new THREE.Group();
@@ -433,8 +573,11 @@ function gaming(C) {
   });
   C.block(w / 4 - 1.1, d / 2 - 0.8, w / 4 + 1.1, d / 2);
   // a console corner: big TV, a couch, bean bags
-  onWall(C, screen(C, 2.0, 1.12, gameTex(K, 1)), "back", w / 4 + 0.3, 1.5);
+  const tv = liveScreen(C, 2.0, 1.12, ["game", "fight", "music"], { on: "Turn on the console", next: "Switch game", off: "Turn off the console" });
+  onWall(C, tv.group, "back", w / 4 + 0.3, 1.5);
+  C.spot({ kind: "toggle", icon: "🕹", x: w / 4 + 0.3, z: -d / 2 + 1.2, use: tv.use, label: tv.label });
   K.at(K.sofa(2.0, "#312e81"), w / 4 + 0.3, 0, 0.4, g).rotation.y = Math.PI;
+  C.spot({ kind: "sit", icon: "🛋", label: "Sit on the couch", x: w / 4 + 0.3, z: 0.45, ry: Math.PI });
   C.block(w / 4 - 0.8, -0.1, w / 4 + 1.4, 0.9);
   for (const [x, z, c] of [[-0.6, 1.4, "#a855f7"], [0.4, 1.8, "#f59e0b"]]) {
     const bb = K.at(new THREE.Mesh(new THREE.SphereGeometry(0.42, 14, 10), K.mat(c, { roughness: 0.9 })), x, 0.25, z, g);
@@ -450,6 +593,7 @@ function gym(C) {
   C.block(w / 4 - 0.5, -d / 2, w / 4 + 1.3, -d / 2 + 2.1);
   K.at(K.bench(), -w / 5, 0, -0.6, g);
   C.block(-w / 5 - 0.25, -1.2, -w / 5 + 0.25, 0);
+  C.spot({ kind: "lie", icon: "🏋", label: "Lie on the bench", x: -w / 5, z: -0.45, y: 0.5, ry: 0, dist: 1.5 });
   K.at(K.kettlebells(6), -w / 2 + 0.6, 0, d / 2 - 0.5, g);
   K.at(K.treadmill(), w / 2 - 0.9, 0, d / 2 - 1.6, g);
   C.block(w / 2 - 1.4, d / 2 - 2.6, w / 2 - 0.4, d / 2 - 0.6);
@@ -457,6 +601,7 @@ function gym(C) {
   K.at(K.cyl(0.01, 0.01, 1.2, "#9ca3af", 4, { metalness: 0.9 }), -w / 4, h - 0.7, d / 4, g);
   C.tick((dt, t) => { bag.rotation.z = Math.sin(t * 2) * 0.05; });
   C.block(-w / 4 - 0.3, d / 4 - 0.3, -w / 4 + 0.3, d / 4 + 0.3);
+  C.spot({ kind: "box", icon: "🥊", label: "Hit the heavy bag", x: -w / 4, z: d / 4 + 0.75, ry: Math.PI, dist: 1.5 });
   const mats = plane(3, 2.4, K.mat("#b91c1c", { roughness: 0.85 }));
   mats.rotation.x = -Math.PI / 2;
   K.at(mats, -w / 5, 0.012, -0.6, g);
@@ -468,8 +613,11 @@ function cinema(C) {
   const { K, g, w, d, h } = C;
   // the screen, flickering with the film, red curtains either side
   const sw = w - 2.4, sh = Math.min(h - 1.2, sw * 0.42);
-  const scr = onWall(C, plane(sw, sh, new THREE.MeshBasicMaterial({ map: movieTex(K), toneMapped: false })), "back", 0, 0.6 + sh / 2 + 0.3, T + 0.03);
-  C.tick((dt, t) => scr.material.color.setScalar(0.8 + 0.2 * Math.sin(t * 9) * Math.sin(t * 2.3)));
+  const film = liveScreen(C, sw, sh, ["movie"], { on: "Play the movie", next: "", off: "Stop the movie" });
+  onWall(C, film.group, "back", 0, 0.6 + sh / 2 + 0.3, T + 0.03);
+  C.tick((dt, t) => film.screen.material.color.setScalar(film.on() ? 0.85 + 0.15 * Math.sin(t * 9) * Math.sin(t * 2.3) : 1));
+  C.spot({ kind: "toggle", icon: "🎬", x: 0, z: -d / 2 + 2.2, use: film.use, label: film.label, dist: 2.2 });
+  for (const x of [-0.65, 0.65]) C.spot({ kind: "sit", icon: "🍿", label: "Take a seat", x, z: 1.45, ry: Math.PI, dist: 1.2 });
   for (const sx of [-1, 1]) K.at(K.curtains(0.6, h - 0.3, "#7f1d1d"), sx * (sw / 2 + 0.5), 0, -d / 2 + T + 0.08, g);
   // tiered recliners
   // (the band between the side doorways stays clear as the aisle)
@@ -520,6 +668,8 @@ function pool(C) {
   under.rotation.x = -Math.PI / 2;
   C.tick((dt, t) => { water.material.map.offset.set((t * 0.02) % 1, (t * 0.013) % 1); });
   C.block(-pw / 2 - 0.2, pz - pd / 2 - 0.2, pw / 2 + 0.2, pz + pd / 2 + 0.2);
+  C.spot({ kind: "swim", icon: "🏊", label: "Get in the pool", x: 0, z: pz + pd / 2 + 0.5, bare: true, water: 0.38, dist: 2.4,
+    area: [-pw / 2 + 0.35, pz - pd / 2 + 0.35, pw / 2 - 0.35, pz + pd / 2 - 0.35] });
   // an inflatable flamingo bobbing on the water
   const fl = new THREE.Group();
   K.at(new THREE.Mesh(new THREE.TorusGeometry(0.4, 0.16, 10, 24), K.mat("#f472b6", { roughness: 0.3 })), 0, 0, 0, fl).rotation.x = Math.PI / 2;
@@ -536,6 +686,7 @@ function pool(C) {
     K.at(K.box(0.58, 0.04, 1.9, "#0ea5e9", { roughness: 1 }), 0, 0.38, 0, l);
     K.at(l, x, 0, d / 2 - 1.4, g);
   }
+  C.spot({ kind: "lie", icon: "☀️", label: "Lie on a lounger", x: -w / 4 + 0.6, z: d / 2 - 1.3, y: 0.38, ry: 0, bare: true, dist: 1.4 });
   C.block(-w / 2, d / 2 - 2.4, -w / 4 + 1, d / 2);
   C.block(w / 4 - 1, d / 2 - 2.4, w / 2, d / 2);
   for (const sx of [-1, 1]) K.at(K.plant(1.6), sx * (w / 2 - 0.6), 0, 1.5, g);
@@ -563,6 +714,7 @@ function wine(C) {
     for (const y of [0.15, 0.85]) K.at(new THREE.Mesh(new THREE.TorusGeometry(0.43, 0.025, 6, 24), K.mat("#2b2b2b", { metalness: 0.6 })), x, y, z, g).rotation.x = Math.PI / 2;
     for (let i = 0; i < 2; i++) K.at(K.cyl(0.03, 0.035, 0.28, "#3f0d12", 8, { roughness: 0.1 }), x - 0.1 + i * 0.2, 1.14, z, g);
     for (const sx of [-0.7, 0.7]) K.at(K.stool("#3b2414"), x + sx, 0, z, g);
+    C.spot({ kind: "sit", icon: "🍷", label: "Pull up a stool", x: x - 0.7, z, y: 0.33, ry: Math.PI / 2, dist: 1.2 });
     C.block(x - 0.5, z - 0.5, x + 0.5, z + 0.5);
     K.at(K.pendant(h - 2.0, "#7c4a24", "#ffb860"), x, h, z, g);
   }
@@ -604,6 +756,7 @@ function closet(C) {
   onWall(C, plane(0.9, 2.0, stdMat({ color: "#d6e2ea", metalness: 1, roughness: 0.04 })), "front", -w / 4, 1.2);
   K.at(chandelier(K, 0.45), -0.4, h - 0.6, 0.6, g);
   K.at(K.cyl(0.4, 0.4, 0.45, "#c9a227", 18, { roughness: 0.8 }), w / 4 - 1.2, 0.23, d / 2 - 1.4, g);
+  C.spot({ kind: "sit", icon: "👟", label: "Sit and pick an outfit", x: w / 4 - 1.2, z: d / 2 - 1.4, y: 0, ry: Math.PI, dist: 1.3 });
 }
 
 function recovery(C) {
@@ -629,6 +782,7 @@ function recovery(C) {
   for (let i = 0; i < 12; i++) K.at(K.box(0.12, 0.12, 0.12, "#ecfeff", { transparent: true, opacity: 0.8, roughness: 0.05 }), ix - 0.6 + (i % 6) * 0.24, 0.64, -d / 2 + T + 0.3 + Math.floor(i / 6) * 0.35, g).rotation.set(i, i * 2, 0);
   K.at(K.sign("ICE BATH  3°C", 1.2, 0.26, { bg: "#0f172a", fg: "#67e8f9", font: "bold 60px Arial" }), ix, 1.5, -d / 2 + T + 0.02, g);
   C.block(ix - 0.85, -d / 2, ix + 0.85, -d / 2 + 1.05);
+  C.spot({ kind: "soak", icon: "🧊", label: "Get in the ice bath", x: ix - 0.3, z: -d / 2 + T + 0.5, y: 0.1, ry: Math.PI / 2, bare: true, dist: 1.6 });
   // a massage table, a red-light panel, a hyperbaric pod
   const mt = new THREE.Group();
   K.at(K.box(0.75, 0.12, 2.0, "#e5e7eb", { roughness: 0.6 }), 0, 0.72, 0, mt);
@@ -636,12 +790,14 @@ function recovery(C) {
   K.at(K.box(0.7, 0.04, 0.6, "#bae6fd", { roughness: 1 }), 0, 0.8, 0.5, mt);
   K.at(mt, -w / 4, 0, d / 4, g);
   C.block(-w / 4 - 0.4, d / 4 - 1.05, -w / 4 + 0.4, d / 4 + 1.05);
+  C.spot({ kind: "lie", icon: "💆", label: "Get a massage", x: -w / 4, z: d / 4 + 0.2, y: 0.78, ry: 0, bare: true, dist: 1.6 });
   onWall(C, plane(1.2, 2.0, glow("#ff2a2a")), "front", w / 4 + 0.8, 1.3, T + 0.05);
   K.at(K.box(1.3, 2.1, 0.08, "#111"), w / 4 + 0.8, 1.3, d / 2 - T - 0.02, g);
   const pod = K.at(new THREE.Mesh(new THREE.CapsuleGeometry(0.5, 1.8, 6, 16), stdMat({ color: "#e0f2fe", transparent: true, opacity: 0.35, roughness: 0.05 })), w / 4 - 0.2, 0.62, 2.2, g);
   pod.rotation.z = Math.PI / 2;
   K.at(K.box(2.6, 0.12, 0.8, "#9ca3af", { metalness: 0.6 }), w / 4 - 0.2, 0.08, 2.2, g);
   C.block(w / 4 - 1.6, 1.7, w / 4 + 1.2, 2.7);
+  C.spot({ kind: "lie", icon: "🫁", label: "Climb into the oxygen pod", x: w / 4 - 0.4, z: 2.2, y: 0.32, ry: Math.PI / 2, dist: 1.7 });
   for (const [x, c] of [[-w / 2 + 0.6, "#22d3ee"], [-w / 2 + 1.3, "#a3e635"]]) K.at(K.sphere(0.32, c, { roughness: 0.5 }), x, 0.32, d / 2 - 0.6, g);
   onWall(C, K.sign("RECOVERY LAB", 2.4, 0.45, { bg: "#0b1220", fg: "#22d3ee", font: "bold 76px Arial" }), "back", 0, h - 0.6);
 }
@@ -708,6 +864,7 @@ function octagon(C) {
     p.rotation.y = -Math.atan2(z2 - z1, x2 - x1);
   }
   C.block(ox - R - 0.3, -R - 0.3, ox + R + 0.3, R + 0.3);
+  C.spot({ kind: "box", icon: "🥊", label: "Shadowbox in the cage", x: ox, z: 0, y: 0.31, ry: Math.PI / 2, dist: R + 0.6 });
   // heavy bags and a banner
   for (const z of [-d / 2 + 1.0, d / 2 - 1.0]) {
     K.at(K.cyl(0.2, 0.2, 1.2, "#111", 14), w / 2 - 1.0, h - 2.0, z, g);
@@ -763,6 +920,7 @@ function studio(C) {
   onWall(C, K.sign("ON AIR", 1.2, 0.4, { bg: "#1a0505", fg: "#ff2a2a", font: "bold 110px Arial" }), "back", -w / 2 + 1.5, h - 0.6);
   K.at(K.sofa(2.0, "#3b2416"), w / 4, 0, d / 2 - 1.0, g).rotation.y = Math.PI;
   C.block(w / 4 - 1.0, d / 2 - 1.5, w / 4 + 1.0, d / 2 - 0.5);
+  C.spot({ kind: "sit", icon: "🎧", label: "Listen back on the couch", x: w / 4, z: d / 2 - 0.95, ry: Math.PI });
 }
 
 function vault(C) {
@@ -790,6 +948,8 @@ function vault(C) {
   for (let i = 0; i < 5; i++) K.at(K.box(0.5, 0.04, 0.04, "#d4d4d4"), 0, 0.3 * i + 0.2, 1.05, db);
   K.at(db, w / 4 - 0.2, 0, 2.6, g);
   C.block(w / 4 - 0.5, 1.4, w / 4 + 0.1, 3.8);
+  C.spot({ kind: "dive", icon: "🤑", label: "Dive into the gold", x: w / 4 - 0.2, z: 1.7, y: 1.55, ry: Math.PI, dist: 2.2,
+    to: { x: w / 4 - 0.2, z: -0.4, y: -0.55 }, stopLabel: "Climb out of the gold" });
   // pallets of cash and a pyramid of gold bars
   instanced(C, new THREE.BoxGeometry(0.32, 0.12, 0.16), K.mat("#4d7c0f", { roughness: 0.9 }), 120, (o, i) => {
     const layer = Math.floor(i / 30), k = i % 30;
@@ -842,6 +1002,7 @@ function aquarium(C) {
   for (const x of [-w / 4, w / 4]) {
     K.at(K.sofa(2.4, "#0c4a6e"), x, 0, 2.1, g).rotation.y = Math.PI;
     C.block(x - 1.2, 1.6, x + 1.2, 2.6);
+    C.spot({ kind: "sit", icon: "🦈", label: "Watch the shark", x, z: 2.15, ry: Math.PI });
   }
   K.at(K.table(1.2, 0.6, 0.4, "#111"), 0, 0, 1.1, g);
   C.block(-0.6, 0.8, 0.6, 1.4);
@@ -860,6 +1021,8 @@ function ballpit(C) {
     return true;
   });
   C.block(-pw / 2 - 0.1, pz - pd / 2 - 0.1, pw / 2 + 0.1, pz + pd / 2 + 0.1);
+  C.spot({ kind: "swim", icon: "🎈", label: "Jump in the ball pit", x: 0, z: pz + pd / 2 + 0.5, water: 0.55, dist: 2.6, stopLabel: "Climb out",
+    area: [-pw / 2 + 0.35, pz - pd / 2 + 0.35, pw / 2 - 0.35, pz + pd / 2 - 0.35] });
   // a slide into it
   const sl = new THREE.Group();
   K.at(K.box(0.9, 0.08, 0.9, "#3b82f6"), 0, 1.8, 0, sl);
@@ -913,6 +1076,7 @@ function sneakers(C) {
   beam(C, -0.6, 0.4, 0.6);
   C.block(-1.1, -0.1, -0.1, 0.9);
   K.at(K.box(1.6, 0.42, 0.5, "#e7e5e4", { roughness: 0.6 }), -0.6, 0.21, d / 2 - 1.4, g);
+  C.spot({ kind: "sit", icon: "👟", label: "Admire the collection", x: -0.6, z: d / 2 - 1.4, ry: Math.PI, dist: 1.3 });
   onWall(C, K.sign("HEAT CHECK", 2.4, 0.5, { bg: "#0b0710", fg: "#f97316", font: "bold 100px Arial" }), "front", 0, h - 0.7);
 }
 
@@ -923,6 +1087,7 @@ function office(C) {
   K.at(K.floorLamp("#fff1d6", 0.42), -0.7, 0.79, -d / 2 + 1.0, g);
   K.at(K.chair("#111"), 0, 0, -d / 2 + 1.9, g).rotation.y = Math.PI;
   C.block(-0.9, -d / 2, 0.9, -d / 2 + 2.2);
+  C.spot({ kind: "sit", icon: "💻", label: "Sit at the desk", x: 0, z: -d / 2 + 1.9, ry: Math.PI, dist: 1.4 });
   K.at(K.bookshelf(1.6, 2.2), -w / 2 + T + 1.0, 0, -d / 2 + T + 0.2, g);
   C.block(-w / 2, -d / 2, -w / 2 + 1.9, -d / 2 + 0.5);
   const wb = K.canvasTex("whiteboard", 512, 320, (x, cw, ch) => {
@@ -1058,7 +1223,7 @@ export function buildHouse(K, ctx = {}) {
   const w = cols * cw, d = rows * cd;
   const lux = tier >= 3;
   const g = new THREE.Group();
-  const solids = [], people = [], ticks = [], cells = [];
+  const solids = [], people = [], ticks = [], cells = [], spots = [];
   // one light walks with you from room to room (switching lights on and off would make every
   // material recompile); the rooms you can't see are hidden
   const lamp = new THREE.PointLight("#fff1dc", 12, Math.max(cw, cd) * 1.5, 1.6);
@@ -1081,6 +1246,10 @@ export function buildHouse(K, ctx = {}) {
       K, g: cg, w: cw, d: cd, h, lux, tier, doors, ctx,
       block: (x0, z0, x1, z1) => solids.push([cx + Math.min(x0, x1), cz + Math.min(z0, z1), cx + Math.max(x0, x1), cz + Math.max(z0, z1)]),
       tick: (fn) => ticks.push(fn),
+      // something to use (E): kind sit / lie / soak / shower / swim / box / dive / toggle, at x, z
+      // (y up), facing ry; bare = clothes off first; area = where you can swim
+      spot: (o) => spots.push({ ...o, x: cx + o.x, z: cz + o.z, y: o.y || 0, ry: o.ry || 0, dist: o.dist || 1.5,
+        area: o.area && [cx + o.area[0], cz + o.area[1], cx + o.area[2], cz + o.area[3]], to: o.to && { ...o.to, x: cx + o.to.x, z: cz + o.to.z } }),
       person: (x, z, ry, opts = {}) => {
         const p = K.randomPerson(opts.seed || id + x + z);
         const f = K.npc(p.look, { ...opts, female: opts.female ?? p.female });
@@ -1162,7 +1331,7 @@ export function buildHouse(K, ctx = {}) {
     for (const p of people) p.f.update(dt);
   };
   const L = cells[front];
-  return { group: g, w, d, h, solids, people, tick, cells, cellAt, enterCell, exposure: L.exposure, look: L.look, bg: L.bg };
+  return { group: g, w, d, h, solids, people, tick, cells, cellAt, enterCell, spots, exposure: L.exposure, look: L.look, bg: L.bg };
 }
 
 /** For checks: the rooms each house has. */
