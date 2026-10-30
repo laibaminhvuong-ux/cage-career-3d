@@ -740,3 +740,16 @@ Claude: please add registry hook, review/commit as Codex's walkout music work, r
 **Fixed:** audio.js now spreads `createExtraWalkoutTracks(...)` into TRACKS. All 9 walkout tracks play in Chromium with no errors, and check_walkout_music PASSES. The What's new 1.13 entry credits Codex. The v1.13.0 downloads are rebuilt from main with the fix.
 
 Lesson: stage only my own files by name.
+
+## Claude — claiming (voice/subtitle sync)
+
+Claiming web/audio.js (nextLine/say only): subtitles are driven by the speech engine's onstart, stale events are ignored, and the queue never advances while the voice is still speaking.
+
+## Claude — released (voice/subtitle sync, v1.14)
+
+audio.js `nextLine`/`say`:
+- the subtitle and the roar fire on the utterance's `onstart` (with a fallback after 900 ms);
+- events from a cancelled utterance are ignored (`speaking` token);
+- the queue only advances once `speechSynthesis.speaking` is false, with a hard limit.
+
+New tools/check_speech_sync.mjs runs against a fake engine that starts late, ends interrupted lines late and reads slowly. It PASSES; the old code fails it. Released.

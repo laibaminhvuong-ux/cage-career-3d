@@ -729,17 +729,29 @@ function pickVoice(kind) {
   return voiceMap.map[kind] || voiceMap.map.announcer;
 }
 
+// the line being spoken right now: events from any other (cancelled) utterance are ignored, and
+// holding it keeps Chrome from garbage-collecting it before its events fire
+let speaking = null;
+
 function nextLine() {
   sayTimer = null;
   const seg = sayQueue.shift();
   if (!seg) {
+    speaking = null;
     if (onSayHook) onSayHook(null);
     return;
   }
   const go = () => {
-    if (onSayHook) onSayHook(seg.t, seg.mood);
-    if (seg.roar) roar(seg.roar);
+    // the subtitle (and the crowd's roar) come in when the voice actually starts
+    let shown = false;
+    const show = () => {
+      if (shown) return;
+      shown = true;
+      if (onSayHook) onSayHook(seg.t, seg.mood);
+      if (seg.roar) roar(seg.roar);
+    };
     if (!on || !vol.voice || !vol.master || !("speechSynthesis" in window)) {
+      show();
       sayTimer = setTimeout(nextLine, 600 + seg.t.length * 55);
       return;
     }
@@ -752,18 +764,31 @@ function nextLine() {
       u.volume = Math.min(1, u.volume * vol.voice * vol.master);
       const v = pickVoice(MOODS[seg.mood] && ["call", "color", "analyst", "ref", "coach", "interview", "fighter"].includes(seg.mood) ? seg.mood : "announcer");
       if (v) u.voice = v;
-      let done = false;
+      speaking = u;
+      const mine = () => speaking === u;
       const finish = () => {
-        if (done) return;
-        done = true;
+        if (!mine()) return;
+        speaking = null;
+        show();
         nextLine();
       };
+      u.onstart = () => mine() && show();
       u.onend = finish;
       u.onerror = finish;
-      // some browsers never fire onend: move on anyway
-      sayTimer = setTimeout(finish, 1500 + seg.t.length * 110);
+      // some engines never fire onstart: show the line shortly anyway
+      setTimeout(() => mine() && show(), 900);
+      // some never fire onend: once the line should be over, wait until the voice is actually quiet
+      // (slow, dramatic lines run long) before moving on, with a hard limit
+      const limit = performance.now() + 5000 + seg.t.length * 220;
+      const watch = () => {
+        if (!mine()) return;
+        if (speechSynthesis.speaking && performance.now() < limit) sayTimer = setTimeout(watch, 250);
+        else finish();
+      };
+      sayTimer = setTimeout(watch, 1500 + seg.t.length * 70);
       speechSynthesis.speak(u);
     } catch {
+      show();
       sayTimer = setTimeout(nextLine, 800);
     }
   };
@@ -780,6 +805,7 @@ export function say(segments, queue = false) {
     sayQueue = [];
     clearTimeout(sayTimer);
     sayTimer = null;
+    speaking = null; // the cut-off line's late "ended" must not advance the new sequence
     try { if ("speechSynthesis" in window) speechSynthesis.cancel(); } catch { /* ignore */ }
   }
   sayQueue.push(...segments);

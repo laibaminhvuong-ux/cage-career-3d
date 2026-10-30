@@ -4,6 +4,13 @@
 
 export const UPDATES = [
   {
+    version: "1.14", date: "Oct 30, 2026", title: "Voices in sync",
+    items: [
+      "🎙️ The announcer's and commentators' subtitles now appear exactly when they start speaking, and stay until they finish.",
+      "🐛 Fixed lines getting skipped or out of step when one announcement cut into another, and during the long \"It's time!\" walkout introductions.",
+    ],
+  },
+  {
     version: "1.13", date: "Oct 30, 2026", title: "Fight music and easy updates",
     items: [
       "🔥 New Strong background music: a hard-hitting fight-camp anthem with pounding drums, distorted guitars and a big drop.",
