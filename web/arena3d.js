@@ -9,6 +9,7 @@ import { RoomEnvironment } from "./vendor/RoomEnvironment.js";
 import { createPost } from "./post3d.js";
 import { RingCardPresenter } from "./ringcard3d.js";
 import { WalkoutDirector } from "./walkout3d.js";
+import { RingsideLED } from "./ringside-led3d.js";
 import { commentary, cornerCall, finishShout, interviewCall, reaction, resultCall, roundCall } from "./announcer.js";
 
 const R = 4.4; // cage radius to the fence posts
@@ -928,6 +929,7 @@ class ArenaView {
       p: corners.red.clone().multiplyScalar(0.8),
       o: corners.blue.clone().multiplyScalar(0.8),
     };
+    this.ledBoards = new RingsideLED(scene);
     this.crowd = buildCrowd(scene);
     this.extras = buildExtras(scene, this.cornerSpot);
     this.extras.drawScreen("RED CORNER", "BLUE CORNER", "FIGHT NIGHT");
@@ -1085,6 +1087,7 @@ class ArenaView {
 
   /** Jump straight to where the fight currently stands (opening the screen, reloading mid-fight). */
   restore(f) {
+    this.ledBoards.reset(f);
     this.walkouts.stop(false);
     this.presenter.hide();
     this.timers = [];
@@ -1177,6 +1180,7 @@ class ArenaView {
   }
 
   handle(e, f, instant) {
+    this.ledBoards.event(e);
     this.flush();
     // hands-on fights: stepping in closes the distance, backing off opens it, circling turns the pair
     if (e.r) this.standGap = e.r === "in" ? 1.0 : 1.65;
@@ -1875,6 +1879,7 @@ class ArenaView {
     }
     this.excite += (0.25 - this.excite) * damp(0.35, dt);
     this.crowd.update(this.real, this.excite);
+    this.ledBoards.update(sdt);
     if (this.presenter.root.visible) {
       const a = this.real * 0.14;
       this.presenter.root.position.set(Math.sin(a) * 1.7, 0, Math.cos(a) * 1.7);
