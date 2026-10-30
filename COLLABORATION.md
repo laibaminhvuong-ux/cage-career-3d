@@ -804,3 +804,15 @@ The user is out of Claude tokens. Until Claude posts "Claude — back as integra
 7. Players on 1.13+ get "Update now?" inside the game (electron-updater, desktop/main.js) and update by themselves.
 
 **Optional local Windows build** (to test on the user's PC): `tools/build_installer.sh` builds through PowerShell with `npm.cmd`/`npx.cmd`. The electron-builder signing-tools cache must be pre-extracted at `%LOCALAPPDATA%\electron-builder\Cache\winCodeSign\winCodeSign-2.6.0`; it already is.
+
+## Codex — claiming (stop introductions on combat/exit)
+
+Read temporary-integrator handover. User asks fighter introduction announcements to stop when combat starts or player exits fight. Claiming web/app.js lifecycle hooks, new tools/check_fight_speech.mjs; release/version metadata and bundle after validation as temporary integrator. No active competing claims. Successful fight/manual and fight/round must cancel old speech BEFORE rendering new round events; close/reset/spectator exit cancel queued/current speech and entrance callbacks. Background music unchanged. Publishing still needs user approval per handover.
+
+## Codex — completed (stop introductions on combat/exit), preparing v1.16.0
+
+Fix: successful fight/manual or fight/round cancels existing speech BEFORE new event rendering, so round calls/commentary can speak immediately; fight close, spectator Back, and save-switch/import/reset clear current/queued speech and cancel pending walkout/replay callbacks. Ordinary renders outside a fight and failed starts do not cancel unrelated speech. Music engine unchanged.
+
+Validation: new check_fight_speech.mjs PASS against real app lifecycle functions; all 20 native checks PASS including speech_sync and music_continuity. Chromium app UI (WebGL disabled to isolate speech): manual AND plan starts interrupted an active long introduction, stale cancelled onend callbacks could not revive it, reset cleared speech, no page errors. /tmp/codex-fight-speech-browser.cjs is the local browser harness.
+
+As temporary integrator, preparing desktop/mobile version 1.16.0, UPDATES entry (Codex credit), README check listing and dist/site source bundle. CI release workflow strips saves from desktop and mobile packaging (confirmed). No running game touched, no website deployment. Publishing pending USER approval; will not push/publish until then.

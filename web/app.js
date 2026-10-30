@@ -136,6 +136,8 @@ async function api(path, params = {}) {
   busy = true;
   try {
     const data = game.call(path, params);
+    // End the introductions/corner speech before rendering the new combat commentary.
+    if (["fight/manual", "fight/round", "fight/close"].includes(path)) audio.say([]);
     state = data;
     if (data.message) toast(data.message);
     return data;
@@ -1677,7 +1679,8 @@ async function watchBout(f, back = "card") {
 }
 
 async function stopWatching() {
-  presentation.cancelWalkouts();
+  presentation.cancelAll();
+  audio.say([]);
   const back = watching ? watching.back : "card";
   watching = null;
   $("fightScreen").classList.remove("spectating");
@@ -1699,6 +1702,10 @@ function renderFightScreen() {
   const f = state.fight;
   const screen = $("fightScreen");
   if (!f) {
+    if (!screen.classList.contains("hidden")) {
+      presentation.cancelAll();
+      audio.say([]);
+    }
     screen.classList.add("hidden");
     fightShown = 0;
     headSnapshot = null;
@@ -2347,6 +2354,7 @@ document.addEventListener("click", async (ev) => {
 /** Switching careers mid-fight must not replay the old fight's log. */
 function resetFightScreen() {
   presentation.cancelAll();
+  audio.say([]);
   $("fightScreen").classList.add("hidden");
 }
 

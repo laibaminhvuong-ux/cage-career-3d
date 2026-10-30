@@ -4,6 +4,12 @@
 
 export const UPDATES = [
   {
+    version: "1.16", date: "Oct 30, 2026", title: "Introductions stop at the bell",
+    items: [
+      "🎙️ Fighter introductions stop when you start fighting or leave the fight screen, including spectator exits and career switches (by Codex).",
+    ],
+  },
+  {
     version: "1.15", date: "Oct 30, 2026", title: "Smooth music",
     items: [
       "🎵 Background music keeps its beat through action clicks and screen updates instead of briefly dropping out (by Codex).",
