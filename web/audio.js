@@ -59,8 +59,10 @@ function unlock() {
   if (!ctx) return;
   if (ctx.state === "suspended") ctx.resume();
   if (wanted.name && (!current || current.name !== wanted.name)) startTrack(wanted.name, wanted.intensity);
+  // Fill the audio queue before a click/key can trigger expensive save and UI work.
+  schedule();
 }
-["pointerdown", "keydown", "touchstart"].forEach((ev) => window.addEventListener(ev, unlock, { passive: true }));
+["pointerdown", "keydown", "touchstart"].forEach((ev) => window.addEventListener(ev, unlock, { passive: true, capture: true }));
 
 export function isOn() {
   return on;
@@ -477,14 +479,22 @@ function startTrack(name, intensity) {
   gain.gain.exponentialRampToValueAtTime(1, now + 1.2);
   gain.connect(musicBus);
   current = { name, track: TRACKS[name], gain, step: 0, next: now + 0.1, intensity };
+  schedule(); // prime immediately, even if the next timer is delayed by rendering
 }
 
 function schedule() {
   if (!ctx || !current || ctx.state !== "running") return;
   const tr = current.track;
   const sd = 60 / tr.bpm / 4;
-  if (current.next < ctx.currentTime - 0.2) current.next = ctx.currentTime + 0.05; // tab was in the background
-  while (current.next < ctx.currentTime + 0.12) {
+  if (current.next < ctx.currentTime - 0.2) {
+    // An unusually long stall: skip expired notes while keeping the song's beat position.
+    const missed = Math.ceil((ctx.currentTime + 0.05 - current.next) / sd);
+    current.step += missed;
+    current.next += missed * sd;
+  }
+  // Web Audio plays queued notes on its audio thread while actions/save/render block JS.
+  // Track fades still silence queued notes immediately through their shared gain.
+  while (current.next < ctx.currentTime + 1.25) {
     const swing = current.step % 2 ? tr.swing * sd : 0;
     tr.play(current.step, current.next + swing, current.intensity, current.gain);
     current.step++;
