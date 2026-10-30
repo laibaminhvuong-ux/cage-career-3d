@@ -4,6 +4,13 @@
 
 export const UPDATES = [
   {
+    version: "1.19", date: "Oct 30, 2026", title: "Easier driving",
+    items: [
+      "🚗 Simpler car keys: W forward, S backward, A turn left, D turn right. A and D now turn the car even when it's standing still.",
+      "⬇️ Download links on the GitHub page always give you the newest version.",
+    ],
+  },
+  {
     version: "1.18", date: "Oct 30, 2026", title: "Real driving",
     items: [
       "🚗 Cars now drive like cars: W to go forward, S to brake and then reverse, A to turn left, D to turn right.",

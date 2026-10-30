@@ -2424,7 +2424,7 @@ export class WorldView {
     if (this.activity && !this.activity.spot.area && this.moveTarget) this.stopActivity();
     const A = this.activity;
     let dir = null;
-    // behind the wheel the keys work the car itself: W gas, S brake then reverse, A/D steer
+    // behind the wheel the keys work the car itself: W forward, S backward (brakes first), A/D turn
     const keyDrive = this.driving && (ix || iz);
     if (keyDrive) this.moveTarget = null;
     if (A && !A.spot.area) {
@@ -2447,13 +2447,15 @@ export class WorldView {
       this.steer += (steerTo - this.steer) * damp(ix ? 5 : 8, dt);
       let a;
       if (iz < 0) a = v < -0.3 ? 18 : 9 * (1 - Math.max(0, v) / maxV); // gas (brakes first if rolling back)
-      else if (iz > 0) a = v > 0.3 ? -18 : -6 * (1 + Math.min(0, v) / 7); // brake, then reverse up to 7 m/s
+      else if (iz > 0) a = v > 0.3 ? -22 : -8 * (1 + Math.min(0, v) / 8); // brake, then back up to 8 m/s
       else a = -Math.sign(v) * Math.min(Math.abs(v) / dt, 2.5); // coasting slows the car down
       const before = v;
       this.speedNow = v + a * dt;
       if ((iz < 0 && before < 0 && this.speedNow > 0) || (iz > 0 && before > 0 && this.speedNow < 0)) this.speedNow = 0; // stop before changing direction
       this.accel = (this.speedNow - before) / Math.max(dt, 1e-3);
-      this.heading += (this.speedNow / U.wheelBase) * Math.tan(this.steer) * dt;
+      // A/D always turn, even standing still (the car pivots on the spot when slow)
+      const pivot = -ix * 1.6 * Math.max(0, 1 - Math.abs(this.speedNow) / 4);
+      this.heading += ((this.speedNow / U.wheelBase) * Math.tan(this.steer) + pivot) * dt;
     } else if (this.driving) {
       // a car turns by steering its front wheels while it rolls: it can't spin on the spot
       let diff = 0;

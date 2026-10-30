@@ -1,4 +1,4 @@
-// Car keys: W drives forward, S brakes and then reverses, A turns left, D turns right (as seen from
+// Car keys: W drives forward, S goes backward (braking first if rolling forward), A turns left, D turns right (as seen from
 // the chase camera behind the car). Runs the real WorldView.update on an open road.  node tools/check_car_controls.mjs
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -41,8 +41,12 @@ w=road();run(w,['w','a'],2);
 assert(leftOf(w.heading)>.3,'W+A turns left');
 w=road();run(w,['w','d'],2);
 assert(leftOf(w.heading)<-.3,'W+D turns right');
-w=road();run(w,['a'],2);
-assert(Math.abs(w.heading)<1e-6,'A alone does not spin a parked car');
+w=road();run(w,['a'],1);
+assert(leftOf(w.heading)>.5&&w.pos.length()<.5,'A alone turns a stopped car left on the spot');
+w=road();run(w,['d'],1);
+assert(leftOf(w.heading)<-.5,'D alone turns a stopped car right on the spot');
+w=road();run(w,['s'],2);
+assert(w.speedNow<-5&&w.pos.z<-3,'S from a standstill goes straight backward');
 w=road();run(w,['s','a'],2);
 assert(w.speedNow<0&&leftOf(w.heading)<0,'reversing with A swings the nose the other way, like a real car');
-console.log('PASS: W gas, S brake then reverse, A left, D right, no spinning on the spot, coasting stops');
+console.log('PASS: W gas, S brake then reverse, A left, D right, A/D turn even when stopped, coasting stops');

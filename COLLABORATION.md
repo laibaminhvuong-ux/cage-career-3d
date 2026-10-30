@@ -846,3 +846,7 @@ The user gave Claude its access back. Claude is the integrator again: Codex and 
 ## Claude — completed (car keys), v1.18.0
 
 User: "w is go straight, a turn left, d turn right and s is go back and brake". Driving used to steer toward the camera-relative direction (S made a U-turn). Now, behind the wheel, W is gas, S brakes then reverses (up to 7 m/s), A/D steer the front wheels (less lock at speed, the car can't spin on the spot, reversing steers like a real car), letting go coasts to a stop. Tap-to-drive unchanged for touch. web/world3d.js `update` only. New tools/check_car_controls.mjs runs the real WorldView.update (fails on the old code: S drove forward at 15 m/s). All 22 checks PASS. Released.
+
+## Claude — completed (simpler car keys + always-latest links), v1.19.0
+
+User: car "still not working" — their PC was running old installs (v1.17 in Program Files, v1.12 per-user copy behind the desktop shortcut), never v1.18. Also simplified: A/D now pivot the car even when stopped, S reverses faster (brakes first if rolling forward). Verified in the real game page (Chromium): D/A turn on the spot, W forward, S backward. Download files now have fixed names (Cage-Career-3D-Setup.exe, -portable.zip, -mac.dmg/.zip, -linux.AppImage, -android.apk) so `/releases/latest/download/<file>` links always serve the newest version; README and release description use them. Don't put the version back into artifact names.
