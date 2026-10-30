@@ -21,6 +21,9 @@ app.commandLine.appendSwitch("disable-backgrounding-occluded-windows");
 protocol.registerSchemesAsPrivileged([{ scheme: "app", privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } }]);
 const SITE = path.join(__dirname, "site");
 const RELEASES = "https://github.com/laibaminhvuong-ux/cage-career-3d/releases/latest";
+// installed builds update themselves (electron-updater reads the release's latest*.yml)
+let autoUpdater = null;
+try { ({ autoUpdater } = require("electron-updater")); } catch { /* a build without the updater: download page only */ }
 
 /** Is version a newer than b? ("1.13.0" vs "1.12.0") */
 function newer(a, b) {
@@ -29,8 +32,58 @@ function newer(a, b) {
   return false;
 }
 
-/** On startup, ask GitHub for the latest release; if it's newer, offer to download it. */
+/**
+ * Updating inside the game: ask, download (progress in the title bar and taskbar), install
+ * silently and restart. Resolves once it knows whether there's an update; rejects if this build
+ * can't update itself (a Mac without Apple signing, an unpacked folder), so the caller can fall
+ * back to the download page.
+ */
+function inAppUpdate(win) {
+  return new Promise((resolve, reject) => {
+    autoUpdater.autoDownload = false;
+    autoUpdater.autoInstallOnAppQuit = false;
+    let asked = false;
+    autoUpdater.on("error", (e) => {
+      if (!asked) return reject(e);
+      win.setProgressBar(-1);
+      win.setTitle("Cage Career 3D");
+      dialog.showMessageBox(win, { type: "error", buttons: ["Open download page", "OK"], defaultId: 0, cancelId: 1, title: "Update failed",
+        message: "The update couldn't be installed", detail: "You can download the new version from the download page instead. Your saves stay." })
+        .then((r) => r.response === 0 && shell.openExternal(RELEASES));
+    });
+    autoUpdater.once("update-not-available", () => resolve());
+    autoUpdater.once("update-available", async (info) => {
+      asked = true;
+      resolve();
+      const { response } = await dialog.showMessageBox(win, {
+        type: "question", buttons: ["Update now", "Later"], defaultId: 0, cancelId: 1, title: "Update available",
+        message: `Cage Career 3D ${info.version} is out`,
+        detail: `You have ${app.getVersion()}. Update now? The game downloads it, installs it and restarts by itself. Your saves stay.`,
+      });
+      if (response !== 0) return;
+      autoUpdater.on("download-progress", (p) => {
+        win.setProgressBar(p.percent / 100);
+        win.setTitle(`Cage Career 3D: downloading update ${Math.round(p.percent)}%`);
+      });
+      autoUpdater.once("update-downloaded", () => {
+        win.setProgressBar(-1);
+        win.setTitle("Cage Career 3D: installing update, restarting…");
+        setTimeout(() => autoUpdater.quitAndInstall(true, true), 800);
+      });
+      autoUpdater.downloadUpdate();
+    });
+    autoUpdater.checkForUpdates().catch(reject);
+  });
+}
+
+/** On startup: update inside the game when this build can; otherwise offer the download page. */
 async function checkForUpdate(win) {
+  if (autoUpdater && app.isPackaged && process.platform !== "darwin") {
+    try {
+      await inAppUpdate(win);
+      return;
+    } catch { /* fall back to the download page below */ }
+  }
   try {
     const r = await net.fetch("https://api.github.com/repos/laibaminhvuong-ux/cage-career-3d/releases/latest", { headers: { "User-Agent": "cage-career-3d" } });
     if (!r.ok) return;

@@ -1041,6 +1041,9 @@ function renderModal() {
       </div>
       ${slider("master", "Master volume")}
       ${slider("music", "Music")}
+      <div class="set-row"><span>Background music</span><div class="btn-row" style="margin:0">
+        ${[["strong", "🔥 Strong"], ["chill", "🌙 Chill"]].map(([k, l]) => `<button class="btn small ${audio.getMusicStyle() === k ? "gold" : "ghost"}" data-musicstyle="${k}">${l}</button>`).join("")}
+      </div></div>
       ${slider("sfx", "Sound effects")}
       ${slider("crowd", "Crowd")}
       ${slider("voice", "Commentary voice")}
@@ -2094,6 +2097,11 @@ document.addEventListener("click", async (ev) => {
     syncSoundButtons();
     updateMusic();
     return renderModal();
+  }
+  if (d.musicstyle) {
+    audio.setMusicStyle(d.musicstyle);
+    renderModal();
+    return;
   }
   if (d.quality) {
     if (stage) stage.setQuality(d.quality);

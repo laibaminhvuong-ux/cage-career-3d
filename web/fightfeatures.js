@@ -1,7 +1,8 @@
 // Fight presentation and preparation helpers. No mini-games or event customization.
+import { EXTRA_WALKOUT_MUSIC } from "./walkout-music.js";
 export class FeatureError extends Error {}
 export const WALKOUT_OPTIONS = {
-  music: { anthem: "Arena anthem", thunder: "Heavy drums", neon: "Neon synth" },
+  music: { anthem: "Arena anthem", thunder: "Heavy drums", neon: "Neon synth", ...EXTRA_WALKOUT_MUSIC },
   lighting: { crimson: "Crimson", blue: "Electric blue", gold: "Championship gold", violet: "Violet" },
   entrance: { focused: "Focused walk", bounce: "Shadowbox", salute: "Salute the crowd" },
   celebration: { triumph: "Arms raised", bow: "Respectful bow", dance: "Victory dance" },
@@ -13,7 +14,7 @@ export function walkoutPreferences(value = {}) {
 }
 export function npcWalkout(name = "", style = "") {
   let h = 0; for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-  return { music: ["thunder", "neon", "anthem"][h % 3], lighting: ["blue", "violet", "gold"][h % 3], entrance: style === "Striker" ? "bounce" : h % 2 ? "salute" : "focused", celebration: "triumph" };
+  return { music: Object.keys(WALKOUT_OPTIONS.music)[h % Object.keys(WALKOUT_OPTIONS.music).length], lighting: ["blue", "violet", "gold"][h % 3], entrance: style === "Striker" ? "bounce" : h % 2 ? "salute" : "focused", celebration: "triumph" };
 }
 export function saveWalkout(career, input) {
   if (career.fight) throw new FeatureError("Finish your fight before changing your walkout.");

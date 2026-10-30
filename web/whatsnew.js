@@ -4,6 +4,16 @@
 
 export const UPDATES = [
   {
+    version: "1.13", date: "Oct 30, 2026", title: "Fight music and easy updates",
+    items: [
+      "🔥 New Strong background music: a hard-hitting fight-camp anthem with pounding drums, distorted guitars and a big drop.",
+      "🌙 Prefer it calm? Settings → Background music → Chill brings back the relaxed track.",
+      "⬆️ Updates install inside the game: when a new version is out, the game asks you, downloads it, installs it and restarts. Your saves stay.",
+      "💓 A heartbeat kick keeps the tension up between rounds.",
+      "📱 Now on every device: Windows, Mac, Linux and Android, plus a Jump button on touch screens.",
+    ],
+  },
+  {
     version: "1.12", date: "Oct 30, 2026", title: "Life at home",
     items: [
       "🦘 Jump anywhere in town and indoors with Space.",

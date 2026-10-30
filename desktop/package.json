@@ -1,7 +1,7 @@
 {
   "name": "cage-career-3d",
   "productName": "Cage Career 3D",
-  "version": "1.12.0",
+  "version": "1.13.0",
   "description": "Cage Career 3D: an MMA career game",
   "author": "laibaminhvuong",
   "main": "main.js",
@@ -89,5 +89,8 @@
       "owner": "laibaminhvuong-ux",
       "repo": "cage-career-3d"
     }
+  },
+  "dependencies": {
+    "electron-updater": "6.3.9"
   }
 }

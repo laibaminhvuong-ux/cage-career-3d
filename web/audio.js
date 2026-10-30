@@ -262,10 +262,105 @@ function lead(t, midi, dur, vol, dest) {
   lfo.stop(t + dur + 0.05);
 }
 
+/** A war drum: a pitched, falling thump with a little skin noise. */
+function tom(t, vol, dest, pitch = 90) {
+  const g = ctx.createGain();
+  g.connect(dest);
+  env(g, t, vol, 0.002, 0.35);
+  const o = osc("sine", pitch, t, 0.4, g);
+  o.frequency.exponentialRampToValueAtTime(pitch * 0.55, t + 0.3);
+  const n = ctx.createGain();
+  n.connect(dest);
+  env(n, t, vol * 0.25, 0.001, 0.06);
+  noise(t, 0.08, n);
+}
+
+/** A brass-like stab: detuned saws through a closing filter. */
+function stab(t, notes, dur, vol, dest) {
+  const lp = ctx.createBiquadFilter();
+  lp.type = "lowpass";
+  lp.frequency.setValueAtTime(3200, t);
+  lp.frequency.exponentialRampToValueAtTime(500, t + dur);
+  const g = ctx.createGain();
+  lp.connect(g).connect(dest);
+  env(g, t, vol, 0.008, dur);
+  for (const n of notes) for (const d of [-8, 8]) osc("sawtooth", mtof(n), t, dur, lp).detune.value = d;
+}
+
+/** A rising sweep of noise into a drop. */
+function riser(t, dur, vol, dest) {
+  const bp = ctx.createBiquadFilter();
+  bp.type = "bandpass";
+  bp.Q.value = 3;
+  bp.frequency.setValueAtTime(300, t);
+  bp.frequency.exponentialRampToValueAtTime(6000, t + dur);
+  const g = ctx.createGain();
+  bp.connect(g).connect(dest);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(vol, t + dur * 0.95);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur + 0.05);
+  noise(t, dur + 0.05, bp);
+}
+
 // ------------------------------------------------------------------ tracks
 
-// chord = [bass root, chord tones...] in MIDI notes
+// Fight camp: the music around the career and the town. A 140 bpm anthem in D minor that cycles
+// through 32 bars: verse (pounding drums, chugging distorted bass), chorus (crash, 16th hats, a
+// lead riff, brass stabs), a half-time war-drum breakdown, a snare-roll build with a riser, and
+// the drop (everything, the riff an octave up).
 const CAMP = {
+  bpm: 140,
+  swing: 0,
+  roots: [38, 38, 34, 36, 38, 38, 41, 40], // D D Bb C D D F E
+  riff: [
+    [62, null, 62, 65, null, 62, 67, null, 65, null, 62, null, 60, null, 62, null],
+    [62, null, 62, 65, null, 69, 67, null, 65, null, 67, null, 69, null, 72, null],
+    [70, null, 69, null, 67, null, 65, null, 67, null, 65, null, 62, null, 60, null],
+    [64, null, 64, 67, null, 69, 70, null, 69, null, 67, null, 64, null, 61, null],
+  ],
+  play(step, t, I, dest) {
+    const bar = Math.floor(step / 16) % 32, s = step % 16;
+    const root = this.roots[bar % 8], sd = 60 / this.bpm / 4;
+    const part = bar < 8 ? "verse" : bar < 16 ? "chorus" : bar < 20 ? "breakdown" : bar < 24 ? "build" : "drop";
+    const big = part === "chorus" || part === "drop";
+    if (part === "breakdown") {
+      // half time: war drums, one huge chord per bar
+      if (s === 0) { kick(t, 1, dest); powerChord(t, root + 12, sd * 15, 0.2); }
+      if (s === 8) snare(t, 0.9, dest);
+      if ([0, 3, 6, 10, 12, 14].includes(s)) tom(t, 0.55, dest, s < 8 ? 110 : 80);
+      if (s % 4 === 2) hat(t, 0.08, dest);
+      if (s === 0) bassNote(t, root, sd * 14, 0.4, dest, true);
+      return;
+    }
+    if (part === "build") {
+      // a snare roll that tightens and swells, a riser over the last two bars
+      const k = (bar - 20) * 16 + s, every = k < 32 ? 4 : k < 48 ? 2 : 1;
+      if (k % every === 0) snare(t, 0.25 + (k / 64) * 0.6, dest);
+      if (s % 4 === 0) kick(t, 0.8, dest);
+      if (s % 2 === 0) bassNote(t, root, sd * 1.6, 0.3, dest, true);
+      if (bar === 22 && s === 0) riser(t, sd * 32, 0.12, dest);
+      return;
+    }
+    // verse, chorus, drop
+    if (s % 4 === 0 || (s === 10 && bar % 2) || (s === 14 && bar % 4 === 3)) kick(t, 1, dest);
+    if (s === 4 || s === 12) snare(t, big ? 0.85 : 0.7, dest);
+    if (big) hat(t, s % 2 ? 0.06 : 0.12, dest, s === 6 || s === 14);
+    else if (s % 2 === 0) hat(t, 0.1, dest, s === 14);
+    if (s === 0 && (big ? bar % 4 === 0 : bar % 8 === 0)) crash(t, 0.25, dest);
+    // the chug: distorted 8ths on the root, an octave jump at the end of the bar
+    if (s % 2 === 0) bassNote(t, root + (s === 14 ? 12 : 0), sd * 1.7, 0.34, dest, true);
+    if ([0, 3, 6, 8, 11].includes(s)) powerChord(t, root + 12, sd * (s === 8 ? 3 : 2.4), big ? 0.22 : 0.15);
+    if (big && (s === 0 || s === 10)) stab(t, [root + 24, root + 27, root + 31], sd * 3, 0.05, dest);
+    if (big) {
+      const n = this.riff[bar % 4][s];
+      if (n) lead(t, n + (part === "drop" ? 12 : 0), sd * 1.8, 0.055, dest);
+    }
+    if (part === "verse" && s === 0 && bar % 2 === 1) tom(t, 0.4, dest, 70);
+  },
+};
+
+// The chill version of the career music (lo-fi, swung). chord = [bass root, chord tones...] in MIDI notes
+const CAMP_CHILL = {
   bpm: 86,
   swing: 0.14,
   chords: [
@@ -325,6 +420,8 @@ const FIGHT = {
       if (bar % 4 === 0 && s === 0) crash(t, 0.22, dest);
     } else if (I >= 0.5 && s === 0) {
       kick(t, 0.6, dest);
+    } else if (s === 0 || s === 8) {
+      kick(t, 0.4, dest); // between rounds: a heartbeat under the pad
     }
     if (I >= 0.5) hat(t, s % 2 ? 0.07 : 0.13, dest, s === 14);
     if (s % 2 === 0) bassNote(t, root + (s === 6 || s === 14 ? 12 : 0), sd * 1.8, I >= 0.5 ? 0.3 : 0.2, dest, true);
@@ -358,7 +455,7 @@ const WALKOUT_NEON = { bpm: 128, swing: 0, play(step, t, I, dest) {
   if (s % 2) hat(t, 0.12, dest);
   pluck(t, root + [24, 31, 36, 31][s % 4], sd * 1.3, 0.12, dest, "triangle");
 } };
-const TRACKS = { camp: CAMP, fight: FIGHT, "walkout-anthem": WALKOUT_ANTHEM, "walkout-thunder": WALKOUT_THUNDER, "walkout-neon": WALKOUT_NEON };
+const TRACKS = { camp: CAMP, "camp-chill": CAMP_CHILL, fight: FIGHT, "walkout-anthem": WALKOUT_ANTHEM, "walkout-thunder": WALKOUT_THUNDER, "walkout-neon": WALKOUT_NEON };
 
 function startTrack(name, intensity) {
   if (!ctx) return;
@@ -390,8 +487,20 @@ function schedule() {
   }
 }
 
+// the career music: "strong" (the fight-camp anthem) or "chill" (lo-fi), from Settings
+const STYLE_KEY = "cc3d_music_style";
+let musicStyle = "strong";
+try { if (localStorage.getItem(STYLE_KEY) === "chill") musicStyle = "chill"; } catch { /* storage blocked */ }
+export function getMusicStyle() { return musicStyle; }
+export function setMusicStyle(style) {
+  musicStyle = style === "chill" ? "chill" : "strong";
+  try { localStorage.setItem(STYLE_KEY, musicStyle); } catch { /* ignore */ }
+  if (wanted && /^camp/.test(wanted.name)) music("camp", wanted.intensity);
+}
+
 /** Pick the music. intensity (fight track only): 0.3 calm, 0.6 walkout, 1 fighting, 1.2 final round. */
 export function music(name, intensity = 1) {
+  if (name === "camp" && musicStyle === "chill") name = "camp-chill";
   wanted = { name, intensity };
   if (!ctx) return;
   if (current && current.name === name) {

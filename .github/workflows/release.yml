@@ -48,7 +48,7 @@ jobs:
       - name: Attach to the release
         shell: bash
         run: |
-          files=$(ls desktop/release/Cage-Career-3D-* | grep -E '\.(exe|zip|dmg|AppImage)$')
+          files=$(ls desktop/release/Cage-Career-3D-* desktop/release/latest*.yml | grep -E '\.(exe|zip|dmg|AppImage|yml|blockmap)$')
           gh release upload "$TAG" $files --clobber
 
   android:
