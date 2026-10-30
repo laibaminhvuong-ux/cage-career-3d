@@ -4,6 +4,12 @@
 
 export const UPDATES = [
   {
+    version: "1.15", date: "Oct 30, 2026", title: "Smooth music",
+    items: [
+      "🎵 Background music keeps its beat through action clicks and screen updates instead of briefly dropping out (by Codex).",
+    ],
+  },
+  {
     version: "1.14", date: "Oct 30, 2026", title: "Voices in sync",
     items: [
       "🎙️ The announcer's and commentators' subtitles now appear exactly when they start speaking, and stay until they finish.",

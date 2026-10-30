@@ -753,3 +753,28 @@ audio.js `nextLine`/`say`:
 - the queue only advances once `speechSynthesis.speaking` is false, with a hard limit.
 
 New tools/check_speech_sync.mjs runs against a fake engine that starts late, ends interrupted lines late and reads slowly. It PASSES; the old code fails it. Released.
+
+## Codex — claiming (music continuity during actions; music sections only)
+
+User explicitly asks Codex to fix action-click music interruptions alongside Claude. Read Claude's scoped audio.js claim (nextLine/say ONLY). Codex claims ONLY unlock/startTrack/schedule music sections in web/audio.js and new tools/check_music_continuity.mjs; no voice/subtitle section edits. Existing action handler is in-page, same-track requests already preserve current. Scheduler only buffers .12s and can underrun during synchronous action/save/render work. Increasing ahead buffer, priming immediately and before gesture handling, and preserving beat position after unusually long stalls. Will preserve all Claude's current voice edits in place. Please avoid these music sections until release.
+
+## Codex — released (music continuity during actions)
+
+User-reported normal action clicks appeared to reload UI and pause music. Confirmed app action API/render is in-page and same-track music requests already preserve current; the vulnerability was only .12s of scheduled audio, which can underrun while synchronous saves/UI work block JS.
+
+Changed ONLY music-related sections in web/audio.js: unlock listener now runs in capture phase and primes queue before expensive action handlers; startTrack immediately primes instead of waiting for its interval; schedule buffers 1.25s on Web Audio's independent audio thread; after exceptional stalls it skips expired steps to preserve song phase rather than resetting next to an arbitrary instant. Existing track gain routing means switching/stopping still fades queued notes. Claude's voice/say/nextLine work untouched; his released check passes.
+
+New tools/check_music_continuity.mjs: deterministic real-module scheduler check, reproduced failure before fix; now PASS for immediate priming, .2-.75s action stalls, same track/gain and increasing beats across rerenders, long-stall recovery without overdue burst, capture gestures, chill style, walkout/intensity transitions, explicit stop. Required six stage/post/fighter_dispose/belts/events/presentation PASS; walkout_music PASS; check_speech_sync PASS; ES2020 minified app bundle PASS; git diff --check PASS.
+
+Actual Chromium application smoke test /tmp/codex-action-music-check.cjs: real local career + THREE Rest clicks, each artificially blocked 350ms on document capture (after audio capture); same running camp track instance and continuous queued audio, no reload and no page errors. WebGL deliberately disabled to isolate the action/audio path; no personal save touched.
+
+Released web/audio.js music sections and new tools/check_music_continuity.mjs. No app/engine changes, no builds/dist/package/commit/deploy by Codex. Claude: please review/commit this fix and include it with your voice sync desktop update. What's new line: "Background music keeps its beat through action clicks and screen updates instead of briefly dropping out."
+
+## Claude — integrated Codex (music continuity) → v1.15
+
+Reviewed:
+- a 1.25 s schedule-ahead;
+- priming the queue on capture-phase gestures and on track start;
+- phase-preserving recovery after stalls.
+
+Intensity changes can lag by up to about 1 s, which is acceptable; track switches still fade instantly through the gain. check_music_continuity, check_speech_sync and check_walkout_music PASS, and playback in Chromium shows no errors. Committed as Codex's work, released as v1.15.0.
