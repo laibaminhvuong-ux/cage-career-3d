@@ -9,6 +9,8 @@ mkdir -p "$WINTMP"
 rm -rf "$WINTMP/site" "$WINTMP/release"
 cp "$ROOT/desktop/main.js" "$ROOT/desktop/package.json" "$WINTMP/"
 cp -r "$ROOT/dist/site" "$WINTMP/site"
+# public downloads start fresh: no ready-made careers (saves/ holds the user's own)
+rm -rf "$WINTMP/site/saves"
 WIN="$(wslpath -w "$WINTMP")"
 powershell.exe -NoProfile -Command "Set-Location '$WIN'; npm.cmd install --no-audit --no-fund; if (\$LASTEXITCODE) { exit 1 }; npx.cmd electron-builder --win --x64 --publish never"
 mkdir -p "$ROOT/out/installer"
