@@ -48,6 +48,41 @@
       "createStartMenuShortcut": true,
       "shortcutName": "Cage Career 3D",
       "artifactName": "Cage-Career-3D-Setup-${version}.${ext}"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "universal"
+          ]
+        }
+      ],
+      "icon": "site/icons/icon-512.png",
+      "category": "public.app-category.games",
+      "identity": "-",
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false,
+      "artifactName": "Cage-Career-3D-${version}-mac.${ext}"
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "site/icons/icon-512.png",
+      "category": "Game",
+      "artifactName": "Cage-Career-3D-${version}-linux.${ext}"
     }
   }
 }

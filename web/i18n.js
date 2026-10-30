@@ -239,6 +239,7 @@ export const ROWS = [
   ["Win by submission", "Thắng bằng khóa siết", "Gana por sumisión", "Vença por finalização", "Gagner par soumission"],
   ["Land 3 or more takedowns", "Quật ngã từ 3 lần trở lên", "Consigue 3 derribos o más", "Acerte 3 quedas ou mais", "Réussir 3 amenées au sol ou plus"],
   ["Don't get knocked down", "Không bị đánh ngã", "Que no te derriben", "Não seja derrubado", "Ne pas aller au tapis"],
+  ["Jump", "Nhảy", "Saltar", "Pular", "Sauter"],
   ["What's new", "Có gì mới", "Novedades", "Novidades", "Nouveautés"],
   ["Show What's new when the game opens", "Hiện Có gì mới khi mở trò chơi", "Mostrar Novedades al abrir el juego", "Mostrar Novidades ao abrir o jogo", "Afficher les Nouveautés à l'ouverture du jeu"],
   ["Let's go", "Bắt đầu thôi", "Vamos", "Vamos lá", "C'est parti"],

@@ -1158,12 +1158,16 @@ function leavePlace() {
   renderWorldBottom();
 }
 
+/** Touch screens have no Space bar: a jump button instead. */
+const touchOnly = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
+const jumpBtn = () => (touchOnly ? `<button class="btn" data-jump>🦘 Jump</button>` : "");
+
 function renderWorldBottom() {
   if (!worldOpen() || !state) return;
   const inside = stage && stage.world.inside;
   if (inside) {
     const act = stage.world.activityPrompt();
-    $("worldBottom").innerHTML = `
+    $("worldBottom").innerHTML = `${jumpBtn()}
       ${act ? `<button class="btn primary big" data-activity>${act.icon} ${esc(act.label)} <span class="sub">E</span></button>` : ""}
       <button class="btn gold" data-placemenu>${inside.icon} ${esc(inside.name)} menu</button>
       ${stage.world.activity ? "" : `<button class="btn" data-leave>🚪 Leave <span class="sub">${stage.world.near ? "E" : "walk to the door"}</span></button>`}`;
@@ -1173,7 +1177,7 @@ function renderWorldBottom() {
   const L = state.life;
   const car = L.driving && L.catalog.cars.find((c) => c.id === L.driving);
   const driving = stage && stage.world.isDriving();
-  $("worldBottom").innerHTML = `
+  $("worldBottom").innerHTML = `${driving ? "" : jumpBtn()}
     ${near ? `<button class="btn gold big" data-enter="${near.id}">${near.icon} Enter ${esc(near.name)} <span class="sub">E</span></button>` : ""}
     ${car ? `<button class="btn" data-drive>${driving ? "🚶 Get out" : "🚗 Drive " + esc(car.name)}</button>` : ""}`;
 }
@@ -2245,6 +2249,7 @@ document.addEventListener("click", async (ev) => {
   if (d.enter) return d.enter === "exit" ? leavePlace() : enterPlace(d.enter);
   if (d.leave !== undefined) return leavePlace();
   if (d.activity !== undefined) { if (stage) stage.world.useActivity(); return; }
+  if (d.jump !== undefined) { if (stage) stage.world.jump(); return; }
   if (d.placemenu !== undefined) return stage && stage.world.inside ? openModal("place", { place: stage.world.inside.id }) : null;
   if (d.phone !== undefined) return openModal("phone", { app: null });
   if (d.phoneapp !== undefined) {

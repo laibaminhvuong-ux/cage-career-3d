@@ -1,0 +1,6 @@
+{
+  "appId": "com.laibaminhvuong.cagecareer3d",
+  "appName": "Cage Career 3D",
+  "webDir": "www",
+  "android": { "backgroundColor": "#0b0d12" }
+}

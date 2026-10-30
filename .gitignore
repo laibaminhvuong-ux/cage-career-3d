@@ -4,3 +4,7 @@ desktop/node_modules/
 desktop/site/
 desktop/package-lock.json
 desktop/release/
+mobile/node_modules/
+mobile/www/
+mobile/android/
+mobile/package-lock.json
