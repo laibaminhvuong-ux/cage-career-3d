@@ -4,6 +4,13 @@
 
 export const UPDATES = [
   {
+    version: "1.18", date: "Oct 30, 2026", title: "Real driving",
+    items: [
+      "🚗 Cars now drive like cars: W to go forward, S to brake and then reverse, A to turn left, D to turn right.",
+      "🛞 Let go of the keys and the car rolls to a stop. Tapping the ground to drive still works on touch screens.",
+    ],
+  },
+  {
     version: "1.17", date: "Oct 30, 2026", title: "A clear path to the shark lounge",
     items: [
       "🚪 Moved the vault's gold pile and diving board clear of the doorway so you can walk into the shark tank lounge and back.",

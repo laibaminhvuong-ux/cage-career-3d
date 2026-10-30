@@ -2424,8 +2424,13 @@ export class WorldView {
     if (this.activity && !this.activity.spot.area && this.moveTarget) this.stopActivity();
     const A = this.activity;
     let dir = null;
+    // behind the wheel the keys work the car itself: W gas, S brake then reverse, A/D steer
+    const keyDrive = this.driving && (ix || iz);
+    if (keyDrive) this.moveTarget = null;
     if (A && !A.spot.area) {
       // seated, lying, showering: no walking
+    } else if (keyDrive) {
+      // handled below
     } else if (ix || iz) {
       const sy = Math.sin(this.camYaw), cy = Math.cos(this.camYaw);
       dir = new THREE.Vector3(ix * cy + iz * sy, 0, -ix * sy + iz * cy).normalize();
@@ -2436,7 +2441,20 @@ export class WorldView {
     }
     const maxV = this.driving ? 16 : A ? 1.7 : (k.has("shift") ? 7 : 4.2) * (this.injured ? 0.55 : 1);
     let want = dir ? maxV : 0;
-    if (this.driving) {
+    if (keyDrive) {
+      const U = this.driving.userData, v = this.speedNow;
+      const steerTo = -ix * 0.55 * (1 - Math.min(0.5, Math.abs(v) / 40)); // less lock at speed
+      this.steer += (steerTo - this.steer) * damp(ix ? 5 : 8, dt);
+      let a;
+      if (iz < 0) a = v < -0.3 ? 18 : 9 * (1 - Math.max(0, v) / maxV); // gas (brakes first if rolling back)
+      else if (iz > 0) a = v > 0.3 ? -18 : -6 * (1 + Math.min(0, v) / 7); // brake, then reverse up to 7 m/s
+      else a = -Math.sign(v) * Math.min(Math.abs(v) / dt, 2.5); // coasting slows the car down
+      const before = v;
+      this.speedNow = v + a * dt;
+      if ((iz < 0 && before < 0 && this.speedNow > 0) || (iz > 0 && before > 0 && this.speedNow < 0)) this.speedNow = 0; // stop before changing direction
+      this.accel = (this.speedNow - before) / Math.max(dt, 1e-3);
+      this.heading += (this.speedNow / U.wheelBase) * Math.tan(this.steer) * dt;
+    } else if (this.driving) {
       // a car turns by steering its front wheels while it rolls: it can't spin on the spot
       let diff = 0;
       if (dir) {
@@ -2448,6 +2466,7 @@ export class WorldView {
       const steerTo = Math.max(-0.6, Math.min(0.6, diff * 1.4));
       this.steer += (steerTo - this.steer) * damp(6, dt);
       const before = this.speedNow;
+      if (this.speedNow < 0) want = 0; // let go of reverse: roll to a stop
       this.speedNow += (want - this.speedNow) * damp(want > this.speedNow ? 1.6 : 2.6, dt);
       this.accel = (this.speedNow - before) / Math.max(dt, 1e-3);
       this.heading += (this.speedNow / this.driving.userData.wheelBase) * Math.tan(this.steer) * dt;
@@ -2455,7 +2474,7 @@ export class WorldView {
       this.speedNow += (want - this.speedNow) * damp(10, dt);
       if (dir) this.heading = angleLerp(this.heading, Math.atan2(dir.x, dir.z), damp(12, dt));
     }
-    if (this.speedNow > 0.01) {
+    if (Math.abs(this.speedNow) > 0.01) {
       const step = this.speedNow * dt;
       const vx = Math.sin(this.heading) * step, vz = Math.cos(this.heading) * step;
       const r = this.driving ? 1.3 : 0.4;
@@ -2572,7 +2591,7 @@ export class WorldView {
     this.sun.target.position.copy(P);
 
     // behind the wheel the camera swings round behind the car
-    if (this.driving && this.speedNow > 2 && !this.drag) this.camYaw = angleLerp(this.camYaw, this.heading + Math.PI, damp(2.5, dt));
+    if (this.driving && Math.abs(this.speedNow) > 2 && !this.drag) this.camYaw = angleLerp(this.camYaw, this.heading + Math.PI, damp(2.5, dt));
     // third-person camera
     const dist = this.driving ? 11 : this.inside ? 3.4 : 7.5;
     const c = this.camera;

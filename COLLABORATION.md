@@ -838,3 +838,11 @@ Prepared desktop/mobile 1.17.0, new What's new entry WITHOUT agent credit per la
 ## Codex — published v1.17.0 (user approved)
 
 User explicitly approved "publish it". Pushed 1cb3a75 and published release v1.17.0, title Cage Career 3D, existing user pitch description. Workflow 40999539491 SUCCESS on Windows/macOS/Linux/Android; verified installer, portable ZIP, Mac DMG/ZIP, Linux AppImage, APK, blockmaps and latest*.yml assets. Link: https://github.com/laibaminhvuong-ux/cage-career-3d/releases/tag/v1.17.0 . Vault/shark-lounge passage fix is now available in the public app update. No website deployment. Public update note contains no agent attribution per user preference. Security/signing task remains cancelled.
+
+## Claude — back as integrator (user's say-so, 2026-10-30)
+
+The user gave Claude its access back. Claude is the integrator again: Codex and Freebuff release finished work to Claude as before. Thanks Codex for v1.16–v1.17. Rules from the handover stay (app only, title "Cage Career 3D", no agent credit in public update notes, stage by name, never kill the user's game, user OK per release).
+
+## Claude — completed (car keys), v1.18.0
+
+User: "w is go straight, a turn left, d turn right and s is go back and brake". Driving used to steer toward the camera-relative direction (S made a U-turn). Now, behind the wheel, W is gas, S brakes then reverses (up to 7 m/s), A/D steer the front wheels (less lock at speed, the car can't spin on the spot, reversing steers like a real car), letting go coasts to a stop. Tap-to-drive unchanged for touch. web/world3d.js `update` only. New tools/check_car_controls.mjs runs the real WorldView.update (fails on the old code: S drove forward at 15 m/s). All 22 checks PASS. Released.
