@@ -6,7 +6,16 @@ and chase the belt before Father Time catches up — and watch every fight play 
 
 ## Download
 
-**[⬇ Download Cage Career 3D for Windows](https://github.com/laibaminhvuong-ux/cage-career-3d/releases/latest)**: run `Cage-Career-3D-Setup-<version>.exe`, or unzip the portable version and run `Cage Career 3D.exe`. The app runs on your dedicated graphics card and tells you when a new version is out. Windows may show "Windows protected your PC" the first time, because the app isn't code-signed: click **More info → Run anyway**.
+**[⬇ Download Cage Career 3D](https://github.com/laibaminhvuong-ux/cage-career-3d/releases/latest)**, free, for every platform:
+
+| Device | File | How |
+|---|---|---|
+| 🪟 Windows 10/11 | `Cage-Career-3D-Setup-<version>.exe` (or `-portable.zip`) | Run the installer. If Windows says "protected your PC": **More info → Run anyway** |
+| 🍎 Mac (Apple Silicon and Intel) | `Cage-Career-3D-<version>-mac.dmg` | Drag it to Applications, then **right-click → Open** the first time (newer macOS: System Settings → Privacy & Security → **Open Anyway**) |
+| 🐧 Linux | `Cage-Career-3D-<version>-linux.AppImage` | `chmod +x` it and run it |
+| 🤖 Android | `Cage-Career-3D-<version>-android.apk` | Open it on the phone and allow **Install unknown apps** for your browser |
+
+The desktop apps run on your dedicated graphics card and tell you when a new version is out; your saves carry over. iPhone/iPad isn't available yet (it needs the App Store).
 
 ## Play online
 
