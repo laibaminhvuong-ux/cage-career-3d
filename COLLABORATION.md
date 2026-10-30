@@ -778,3 +778,29 @@ Reviewed:
 - phase-preserving recovery after stalls.
 
 Intensity changes can lag by up to about 1 s, which is acceptable; track switches still fade instantly through the gain. check_music_continuity, check_speech_sync and check_walkout_music PASS, and playback in Chromium shows no errors. Committed as Codex's work, released as v1.15.0.
+
+## 🔁 HANDOVER: Codex is the TEMPORARY INTEGRATOR (from Claude, 2026-10-30)
+
+The user is out of Claude tokens. Until Claude posts "Claude — back as integrator" here, **Codex does the integrator job** that Claude used to do. Freebuff releases its work to Codex instead of Claude. The claim/release protocol is unchanged.
+
+**What Codex now does:** review released work, run the checks, commit (each agent's work under its own name), build, and publish releases.
+
+**Rules from the user (keep them):**
+- It's a **desktop app**, not a website. Never redeploy gh-pages or the old artifact.
+- **Release title is always just `Cage Career 3D`.** The version goes in the tag (`vX.Y.Z`) and in the in-game What's new, never in the title. The release description is the user's pitch in `out/installer/DESCRIPTION.md` (if that file is missing, use: "Have you ever dreamed of being an MMA fighter, fighting from scratch, earning money, getting a title shot and reaching the top of the world? Jump into the game and start building your own fighter legacy now!").
+- Every version gets a `UPDATES` entry at the top of `web/whatsnew.js` (credit the agent: "(by Codex)" / "(by Freebuff)").
+- Public builds never include personal saves (`saves/` is stripped by the build).
+- Stage files **by name**. Never `git add web` while another agent has unreleased work: that's how Codex's walkout files once shipped without their hook.
+- Never kill the user's running game. Kill test copies by PID or path only, never by window title.
+- Publishing a release needs the user's OK each time (permission prompt). Ask them.
+
+**How to ship a version (what Claude did):**
+1. Run every check: `node tools/check_stage.cjs`, `node tools/check_post.cjs`, `node tools/check_fighter_dispose.cjs`, then each `node tools/check_*.mjs` (Node 22 runs the .mjs checks directly). All must PASS.
+2. Bump the version in **both** `desktop/package.json` and `mobile/package.json` (e.g. 1.16.0), and add the What's new entry.
+3. Build the game bundle: `ESBUILD=<path to esbuild 0.24 binary> python3 tools/build_site.py`, which writes `dist/site`. Commit `dist` too: the cloud builds package `dist/site` exactly as committed.
+4. Commit (attributed to the agent who wrote it) and `git push origin main`.
+5. Publish: `gh release create vX.Y.Z --title "Cage Career 3D" --notes-file out/installer/DESCRIPTION.md --target main`.
+6. That triggers `.github/workflows/release.yml`, which builds Windows (installer + portable), Mac (dmg/zip), Linux (AppImage) and Android (APK), plus the `latest*.yml` update files, and attaches them to the release in about 5 minutes. Watch it with `gh run list --workflow=release.yml` / `gh run watch <id>`. If a platform fails, fix it and re-run with `gh workflow run release.yml -f tag=vX.Y.Z` (that builds from main and replaces the files).
+7. Players on 1.13+ get "Update now?" inside the game (electron-updater, desktop/main.js) and update by themselves.
+
+**Optional local Windows build** (to test on the user's PC): `tools/build_installer.sh` builds through PowerShell with `npm.cmd`/`npx.cmd`. The electron-builder signing-tools cache must be pre-extracted at `%LOCALAPPDATA%\electron-builder\Cache\winCodeSign\winCodeSign-2.6.0`; it already is.
