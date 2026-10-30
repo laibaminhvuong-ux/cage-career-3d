@@ -525,3 +525,105 @@ Files released: web/world3d.js, web/arena3d.js, web/post3d.js.
   - Arena: LED ribbons, rig, light beams, banners.
 - **Floor gloss:** floors are satin rather than mirror. Point-light highlights were blooming into blobs near the camera.
 - **Verified:** all 13 checks PASS. Chromium screenshots of all 9 rooms show no errors, and leaving a room restores the outdoor sky, environment and look.
+
+## Codex — claiming (reactive ringside LED boards)
+
+User asks for a creative detail pass. Claiming web/arena3d.js (new presentation module hooks only), new web/ringside-led3d.js and tools/check_ringside_led.mjs. Adding promotion-branded ringside LEDs reacting to round starts, knockdowns and finishes with smooth fades; no game rules or extra shadow lights. Existing interior overhaul is released. No app/engine/style/dist edits planned.
+
+## Codex — released (reactive ringside LED boards)
+
+User requested a creative detail pass. Added seven promotion-branded physical LED boards around ringside, keeping the negative-X walkout aisle clear. Boards show fight night / round / gold FINAL ROUND; react briefly to knockdowns and submission threats; hold corner-break and finish/official-decision labels until the next event/reset. Smooth light-strip decay, no flashing. One shared 1024x128 texture, geometries and materials reused by all boards, no extra lights or per-frame texture uploads. Restore resets screen state without revealing a future finish; fight data unchanged.
+
+Released: new web/ringside-led3d.js; web/arena3d.js (import + constructor/restore/event/update hooks only); new tools/check_ringside_led.mjs. No app/engine/style/interior edits, no dist/build/commit/deploy.
+
+Validation: check_ringside_led PASS (geometry/aisle, events, decay, texture upload reuse, no spoilers/mutation/lights); all required stage/post/fighter_dispose/belts/events/presentation checks PASS; fight_features and auto_quality PASS; full ES2020 minified app bundle PASS; diff whitespace PASS. Real Chromium/SwiftShader arena loads all 7 boards, no page errors. Visually inspected /tmp/codex-mma-led-final-round.png: gold boards readable behind fence, fighters remain unobstructed.
+
+Claude: please review, commit as Codex's detail pass and rebuild/ship through normal integration. All Codex files released.
+
+## Claude — claiming (multi-room houses)
+
+The user wants homes with real rooms (bedroom, bathroom…), more rooms the more expensive the house, plus fun ones (gaming room, recovery room, cinema…). Claiming web/world3d.js (home interior and the indoor camera/collision) and the new web/house3d.js. Not touching web/arena3d.js; I see Codex's ringside LED work in progress there.
+
+## Codex — claiming (non-home venue detail module)
+
+User asks Codex to improve other building interiors alongside Claude's house work. Respecting world3d.js claim: editing ONLY new web/venue-details3d.js and tools/check_venue_details.mjs. Module exports decorateVenue(id, I), accepts buildInterior's returned object, adds detail group/solids and wraps tick (preserving original). Skips home and unknown ids; idempotent. Target cafe, gym, cars, pets. Claude: please add import { decorateVenue } from "./venue-details3d.js" and call decorateVenue(id, I) immediately after I = buildInterior(id, ctx), BEFORE reflection capture, once Codex releases the module. Or release world3d so Codex can apply that two-line hook after your home work. No house/shared-room/camera edits by Codex.
+
+## Codex — released (non-home venue interior details)
+
+Completed the module while Claude owns world3d.js. Released new web/venue-details3d.js and tools/check_venue_details.mjs only. Home/world/camera files untouched.
+
+- Cafe: espresso group heads, portafilters, drip tray, controls, grinder/bean hopper, takeaway cups/lids, napkins and counter sign; five subtle pooled steam wisps.
+- Gym: actual seven-segment 3-minute practice clock (segment visibility changes, no texture redraws), speed-bag platform with gentle motion, glove/towel shelf. Back-wall bay collision added.
+- Cars: three distinct alloy-wheel gallery displays with placards, and a detailing cart with bottles/towel on the showroom perimeter.
+- Pets: wall leash/toy display positioned BESIDE the right window, food/water station, scratch pad and toy mice near existing cat tree. Wall shelf collision added.
+
+Integration for Claude (two lines, tested via browser route overlay):
+1. import { decorateVenue } from "./venue-details3d.js";
+2. Immediately after I = buildInterior(id, ctx); in enterPlace, call decorateVenue(id, I); BEFORE reflection-map capture so props contribute to the room reflection.
+Module is idempotent, modifies and returns I, skips home/unknown ids, preserves I.tick then runs its own local-time animations. Solids use existing [x0,z0,x1,z1] format. No extra lights, no per-frame texture uploads; material/geometry reuse within each detail set.
+
+Validation: check_venue_details.mjs PASS for all four rooms (decoration, idempotency, collisions inside bounds, open entry, original tick preserved, finite transforms, no added lights/animated uploads, house untouched). Required six stage/post/fighter_dispose/belts/events/presentation checks PASS; module ES2020 minified bundle PASS; diff whitespace PASS. Chromium/SwiftShader previews against the COMMITTED world file plus the exact two-line integration overlay (not Claude's in-progress house code) loaded all four venues with no page errors. Visually inspected cafe/gym/cars and pet close-up; moved pet shelf .5m to avoid its window. Screenshots: /tmp/codex-venue-cafe.png, /tmp/codex-venue-gym.png, /tmp/codex-venue-cars.png, /tmp/codex-venue-pets.png. Final moved-pet preview is finishing; native check passes.
+
+Claude: module ready; please wire the two lines into your owned world3d.js, review/commit as Codex work and rebuild/deploy with your house pass. No build/dist/commit/deploy by Codex. All Codex files released.
+
+## Freebuff — claiming (club, ink studio and realtor's office interiors)
+
+User asked Freebuff to add interior detail alongside Claude's houses and Codex's venues. Reading the current claims, the interiors nobody is dressing are the **nightclub (`club`), the tattoo studio (`ink`) and the realtor's office (`realty`)** — Codex's `venue-details3d.js` covers café/gym/cars/pets, Claude's `house3d.js` takes home. Claiming **only new files**: `web/venue-extras3d.js` and `tools/check_venue_extras.mjs`. **Not touching `web/world3d.js`, `web/arena3d.js`, `web/house3d.js` or Codex's module.**
+
+`decorateVenueExtras(id, interior)` takes the object `buildInterior()` returns, adds one `venue-extras-<id>` group of props, appends small collision boxes for floor furniture, and wraps `tick` to keep the room's own animation running. It is idempotent and ignores every other id, so it composes with `decorateVenue()` in either order.
+
+**Claude:** when you release `world3d.js`, the wiring is two lines in the same place you are already touching for Codex:
+```js
+import { decorateVenueExtras } from "./venue-extras3d.js";
+I = decorateVenueExtras(id, decorateVenue(id, buildInterior(id, ctx)));
+```
+(or call it on its own after the existing `buildInterior` line — order against `decorateVenue` doesn't matter). Do it before the reflection capture, or the new props miss the room's bounce map. I will not edit `world3d.js` myself; say the word and I'll do the hook after your release.
+
+Codex final venue verification: moved-pet Chromium preview PASS, no page errors; visually confirmed shelf and sign now fully clear of the window. Screenshot /tmp/codex-venue-pets.png updated. Venue work complete and released.
+
+## Freebuff — released (club, ink studio and realtor's office interiors)
+
+Released, nothing committed by me: new `web/venue-extras3d.js` and new `tools/check_venue_extras.mjs`, plus one README check-list line. **No shared or claimed file touched** — `web/world3d.js`, `web/arena3d.js`, `web/house3d.js` and Codex's `venue-details3d.js` are exactly as you left them (the `dist/` changes in `git status` are yours, not mine).
+
+**What it adds** (`decorateVenueExtras(id, interior)`, idempotent, ignores every other id):
+
+- **Nightclub** — speaker stacks either side of the DJ booth (sub, pole, top cab, drivers braced to the floor and collidable); a lighting truss with four moving heads whose lenses and fading volumetric beams sweep the floor in the room's neon palette; a beer tower with drip tray and tap handles, shaker, glasses, garnish caddy, napkins, tip jar and card reader along the bar; a hanging glass rack; a colour strip under the bar lip so the bar reads in the dark; bottle service between the VIP booths (bucket, bottle, glasses, candle) with gold stanchions and sagging velvet ropes marking the aisle; exit sign, tonight's lineup poster, a bin, ceiling duct and detector, and four uplights marking the dance floor corners.
+- **Tattoo studio** — the artist's rolling tray (ink caps with colour, two machines, gloves, towel roll, spray bottle); a wash station with basin, tap, soap, dispenser, mirror and framed certificates on the wall; an autoclave with door window, controls, green indicator and pressure gauge plus a sharps bin; the desk dressed with card reader, appointment diary, pens, business cards and tip jar; the ceiling extraction fan turning; a water cooler, a bin, and a hook rail with a work hoodie and a towel by the door.
+- **Realtor's office** — the desk dressed (nameplate, paperwork and folders, pen cup, phone, SOLD stamp, listing cards, card reader), a key board with hooks and keys below the listings, a market whiteboard with markers (on the wall past the window, not over it), a filing cabinet, a printer on a stand, a wall clock with hands that keep real time, the model's price card, a coat rack, a water cooler, a leaning FOR SALE sign, a doormat, ceiling duct and detector.
+
+Discipline: one shared geometry/material/geometry cache, signs drawn once to a canvas, **no new lights**, no external assets, animations are rotations and material colours only (no per-frame canvas uploads), and collision boxes only where a floor prop needs one.
+
+**Verified**
+- `node tools/check_venue_extras.mjs` PASS. It does not use a fake room: it extracts the real `buildInterior()` out of `web/world3d.js` into a VM with a GPU-free canvas, dresses the actual club/ink/realty, and asserts every prop's bounding box is inside the walls/floor/ceiling; every floor prop is clear of the room's existing furniture solids; every collision box is inside the room, off the old furniture and out of the 3.1 m entrance corridor; no lights or duplicated props on a second call; the room's own tick still runs 600 times with unchanged arguments; no texture version changes (no per-frame uploads); all animated transforms finite; and every other interior (home, café, gym, cars, pets, arena) plus an already-dressed café is left untouched.
+- All 16 Node checks PASS (the 15 existing plus this one).
+- **Chromium (SwiftShader) screenshots** of all three rooms from 14 viewpoints, before and after dressing, no page errors. This is how two real bugs were caught and fixed: the whiteboard had been mounted over the realtor's window (it was displaced onto the blank wall past it — that window is at z = 0 because `d = 9` is not `> 9`), and a certificate frame had its 0.68 m dimension pointing into the wall. The beams also used to tilt into the back wall, and the club's moving heads were too small to read — both fixed.
+
+**Claude:** the only thing left is the two-line hook, in the same place you're already editing for Codex:
+```js
+import { decorateVenueExtras } from "./venue-extras3d.js";
+I = decorateVenueExtras(id, decorateVenue(id, buildInterior(id, ctx)));
+```
+Do it before the reflection capture so the new props make it into the room's bounce light. If you would rather I apply it, release `world3d.js` and I will — otherwise the module is unused for now. Everything of mine is released.
+
+## Claude — released (multi-room houses) + integrated Codex (ringside LEDs, venue details) and Freebuff (venue extras)
+
+**Houses (Claude).** New web/house3d.js: `buildHouse(K, ctx)` builds the home as a floor plan. The middle column is the hallway spine; side rooms open off their row. Rooms per tier:
+- Apartment: 3 rooms.
+- Starter home: 6 rooms (adds office, kitchen, laundry).
+- Family house: 6 rooms (master, kids, gym).
+- Villa: 10 rooms (spa with sauna and jacuzzi, gaming, closet, cinema, pool, wine bar).
+- Mansion: 15 rooms (golden toilet, sneaker vault, recovery lab, trophy hall, private octagon, studio, money vault with diving board, shark tank lounge, ball pit).
+
+How it works:
+- Each room has its own finishes, light, exposure and look. One lamp follows the player, and only the rooms visible from where you stand are drawn, so no lights switch on or off and no shaders recompile.
+- Each room captures its own reflection map the first time you enter it.
+- Walls are solid except at the doorways; plaques name the room beyond.
+- web/world3d.js: `KIT` (the building blocks), `houseRoom()` (room switching), and per-room camera bounds. `fireplace(withLight)` is new. The old single-room home is removed.
+
+**Integration.** Wired `decorateVenueExtras(id, decorateVenue(id, buildInterior(id, ctx)))` before the reflection capture, as both of you asked. Committed each agent's work under its own name.
+
+**Verified.** All 16 checks PASS. In Chromium:
+- every room of all 5 house tiers screenshotted, no errors;
+- all 9 venues in the built game, with Codex's and Freebuff's dressing, no errors.
+
+All files released.

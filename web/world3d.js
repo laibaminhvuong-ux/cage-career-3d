@@ -3,6 +3,9 @@
 // partner and kids wait at home. Every place in town opens a screen in the app.
 import * as THREE from "./vendor/three.module.min.js";
 import { Fighter3D, LOOK_OPTIONS, attack, parseLook, lookFromName } from "./fighter3d.js";
+import { buildHouse } from "./house3d.js";
+import { decorateVenue } from "./venue-details3d.js";
+import { decorateVenueExtras } from "./venue-extras3d.js";
 
 const TAU = Math.PI * 2;
 const damp = (rate, dt) => 1 - Math.exp(-rate * dt);
@@ -1029,7 +1032,7 @@ function stool(seat = "#1f1f1f") {
   return g;
 }
 /** A fireplace with a living fire. Returns { group, tick }. */
-function fireplace() {
+function fireplace(withLight = true) {
   const g = new THREE.Group();
   at(box(2.2, 1.3, 0.5, "#e9e5dc", { roughness: 0.6 }), 0, 0.65, 0, g);
   at(box(1.3, 0.75, 0.52, "#0d0b0a"), 0, 0.5, 0.01, g);
@@ -1042,7 +1045,7 @@ function fireplace() {
   for (let i = 0; i < 3; i++) at(cyl(0.05, 0.05, 0.6, "#3b2414", 6), -0.15 + i * 0.15, 0.17, 0.12, g).rotation.z = Math.PI / 2;
   const light = new THREE.PointLight("#ff8a3d", 3, 6, 1.8);
   light.position.set(0, 0.6, 0.6);
-  g.add(light);
+  if (withLight) g.add(light);
   const tick = (dt, t) => {
     flames.forEach((f, i) => { f.scale.y = 0.8 + Math.abs(Math.sin(t * (7 + i) + i * 2)) * 0.6; f.scale.x = 0.9 + Math.sin(t * 5 + i) * 0.15; });
     light.intensity = 2.6 + Math.sin(t * 13) * 0.4 + Math.sin(t * 7.3) * 0.3;
@@ -1105,8 +1108,17 @@ const randomPerson = (seed) => {
   return { look: f, female: seed.length % 2 === 0 };
 };
 
+// the building blocks a house (house3d.js) furnishes its rooms with
+const KIT = {
+  box, at, mat, cyl, sphere, textTexture, sign, picture, poster, emojiArt, plant, chair, table, roundTable, sofa, counter, npc, randomPerson,
+  floorTexture, plasterTexture, canvasTex, tiled, brickTexture, slatTexture, rugTexture, rubberTexture, concreteTexture, chalkTexture, viewTexture,
+  bookshelf, floorLamp, pendant, curtains, neon, cushion, stool, fireplace, squatRack, bench, kettlebells, treadmill, booth,
+};
+
 /** Builds the inside of a place. Returns { group, w, d, h, solids, npcs, tick(dt, t) }. */
 function buildInterior(id, ctx) {
+  // a home is a whole floor plan of rooms
+  if (id === "home") return buildHouse(KIT, ctx);
   const people = [];
   const solids = [];
   const block = (x0, z0, x1, z1) => solids.push([Math.min(x0, x1), Math.min(z0, z1), Math.max(x0, x1), Math.max(z0, z1)]);
@@ -1125,94 +1137,7 @@ function buildInterior(id, ctx) {
   // each room's mood: exposure, post-processing look, the color its reflections are captured on
   let exposure = 0.9, look = null, bg = "#15130f", fog = null;
 
-  if (id === "home") {
-    const tier = ctx.house || 0;
-    w = [10, 12, 14, 16, 20][tier];
-    d = [8, 9, 10, 11, 14][tier];
-    h = tier >= 3 ? 4 : 3;
-    const lux = tier >= 3;
-    g = room(w, d, h, {
-      floorTex: floorTexture(lux ? "#6e4527" : "#a87b4f", "planks"), floorRough: lux ? 0.42 : 0.6,
-      wall: lux ? "#e9e4da" : tier === 1 ? "#cbbda4" : "#ddd2bf", lights: lux ? 3 : 2, windows: "left", power: lux ? 11 : 10,
-      view: lux ? "night" : "day", wainscot: lux ? null : tier >= 1 ? "#efe9dd" : null, ceilingStyle: lux ? "flat" : "beams",
-    });
-    exposure = lux ? 0.82 : 0.86;
-    look = { bloom: [0.3, 0.5, 0.88], ao: 0.7, contrast: 1.1, saturation: 1.12, warmth: 0.75, vignette: 0.32, grain: 0.016 };
-    // living area: sofa facing the TV, a rug, a coffee table
-    const rug = new THREE.Mesh(new THREE.PlaneGeometry(3.6, 2.6), new THREE.MeshStandardMaterial({ map: lux ? rugTexture("#6b1d2a", "#2a1016", "#d4af37") : rugTexture("#3f4d63", "#1f2633", "#c9b38a"), roughness: 1 }));
-    rug.rotation.x = -Math.PI / 2;
-    at(rug, -w / 4, 0.01, 0.2, g);
-    at(sofa(2.6, lux ? "#ece6da" : "#55606e"), -w / 4, 0, 1.5, g).rotation.y = Math.PI;
-    block(-w / 4 - 1.3, 1.0, -w / 4 + 1.3, 2.0);
-    at(table(1.2, 0.6, 0.42, "#3a2c20"), -w / 4, 0, 0.2, g);
-    block(-w / 4 - 0.6, -0.1, -w / 4 + 0.6, 0.5);
-    at(box(2.2, 0.5, 0.45, "#2a2420"), -w / 4, 0.25, -d / 2 + 0.3, g);
-    const tv = at(box(2.0, 1.15, 0.06, "#0b0b0d"), -w / 4, 1.25, -d / 2 + 0.12, g);
-    tv.add(at(new THREE.Mesh(new THREE.PlaneGeometry(1.9, 1.05), new THREE.MeshBasicMaterial({ map: textTexture("🥊 FIGHT NIGHT LIVE", { w: 512, h: 288, bg: "#0e1a33", fg: "#f4b942", font: "bold 44px Arial" }), toneMapped: false })), 0, 0, 0.035));
-    block(-w / 4 - 1.1, -d / 2, -w / 4 + 1.1, -d / 2 + 0.55);
-    // kitchen along the back wall on the other side, a dining table
-    at(counter(3.2, lux ? "#f5f5f5" : "#6b4e37", lux ? "#222" : "#d8d4cc"), w / 4 + 0.4, 0, -d / 2 + 0.4, g);
-    at(box(0.8, 1.9, 0.7, "#d9dde2", { metalness: 0.6, roughness: 0.3 }), w / 4 + 2.4, 0.95, -d / 2 + 0.4, g);
-    block(w / 4 - 1.3, -d / 2, w / 4 + 2.9, -d / 2 + 0.8);
-    at(table(1.6, 0.9), w / 4 + 0.6, 0, 0.6, g);
-    for (const [x, z, r] of [[-0.45, -0.6, 0], [0.45, -0.6, 0], [-0.45, 0.6, Math.PI], [0.45, 0.6, Math.PI]]) at(chair(), w / 4 + 0.6 + x, 0, 0.6 + z, g).rotation.y = r;
-    block(w / 4 - 0.4, -0.2, w / 4 + 1.6, 1.4);
-    // pictures: a fight poster, family art
-    at(picture(0.9, 1.25, poster("CAGE", "CAREER 3D", "#7f1d1d")), -0.3, 1.8, -d / 2 + 0.04, g);
-    at(picture(1.4, 1.0, emojiArt("🏔️", "#bfdbfe")), w / 2 - 0.03, 1.7, 0.8, g).rotation.y = -Math.PI / 2;
-    at(plant(), -w / 2 + 0.6, 0, d / 2 - 0.8, g);
-    at(plant(1.2), w / 2 - 0.6, 0, d / 2 - 0.8, g);
-    if (lux) {
-      // a chandelier and a trophy cabinet
-      const ch = new THREE.Group();
-      at(cyl(0.6, 0.3, 0.4, "#d4af37", 12, { metalness: 0.9, roughness: 0.25 }), 0, 0, 0, ch);
-      for (let i = 0; i < 8; i++) at(new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), new THREE.MeshBasicMaterial({ color: "#fff3c4", toneMapped: false })), Math.cos(i) * 0.6, -0.22, Math.sin(i) * 0.6, ch);
-      at(ch, 0, h - 0.6, 0, g);
-      const cab = at(box(1.6, 2.0, 0.45, "#2a1d14"), w / 2 - 0.3, 1.0, -1.8, g);
-      cab.rotation.y = -Math.PI / 2;
-      for (let i = 0; i < 3; i++) at(cyl(0.08, 0.12, 0.35, "#d4af37", 10, { metalness: 0.9, roughness: 0.2 }), w / 2 - 0.35, 1.35, -2.4 + i * 0.6, g);
-      block(w / 2 - 0.6, -2.7, w / 2, -0.9);
-    }
-    // a feature wall of wood slats behind the TV, with a soft glow along its foot
-    at(new THREE.Mesh(new THREE.PlaneGeometry(3.4, h), new THREE.MeshStandardMaterial({ map: tiled(slatTexture(lux ? "#3b2716" : "#6b4a2f"), 3.4 / 2, h / 2), roughness: 0.7 })), -w / 4, h / 2, -d / 2 + 0.02, g);
-    at(neon(3.2, "#ffcf8a"), -w / 4, 0.52, -d / 2 + 0.2, g);
-    // a bookcase, lamps, cushions and a side table
-    at(bookshelf(1.6, Math.min(2.3, h - 0.5)), -w / 2 + 1.1, 0, -d / 2 + 0.25, g);
-    block(-w / 2 + 0.3, -d / 2, -w / 2 + 1.9, -d / 2 + 0.5);
-    at(floorLamp("#f6e2bd"), -w / 4 - 1.7, 0, 1.9, g);
-    at(table(0.5, 0.5, 0.55, "#2a1d14"), -w / 4 + 1.7, 0, 1.9, g);
-    at(floorLamp("#f6e2bd", 0.45), -w / 4 + 1.7, 0.58, 1.9, g);
-    block(-w / 4 - 2, 1.6, -w / 4 + 2, 2.2);
-    for (const [x, c] of [[-0.8, lux ? "#c9a227" : "#e0b04f"], [0.1, lux ? "#7a1f2b" : "#c2410c"], [0.85, lux ? "#c9a227" : "#e5e7eb"]]) {
-      const cu = at(cushion(c), -w / 4 + x, 0.62, 1.78, g);
-      cu.rotation.set(-0.2, Math.PI, (x - 0.1) * 0.15);
-    }
-    // the dining corner: pendants over the table, stools at the counter
-    for (const x of [-0.45, 0.45, 1.35].slice(0, lux ? 3 : 2)) at(pendant(h - 2.1, lux ? "#c9a227" : "#1f1f1f"), w / 4 + 0.3 + x, h, 0.6, g);
-    for (let i = 0; i < 3; i++) at(stool(lux ? "#e5e0d6" : "#2b2b2b"), w / 4 - 0.6 + i * 0.7, 0, -d / 2 + 1.15, g);
-    // the backsplash behind the kitchen counter
-    at(new THREE.Mesh(new THREE.PlaneGeometry(3.4, 0.7), new THREE.MeshStandardMaterial({ map: tiled(floorTexture(lux ? "#d9d4cb" : "#7d8c99", "tiles"), 3.4, 0.7), roughness: 0.2 })), w / 4 + 0.4, 1.4, -d / 2 + 0.02, g);
-    if (lux) {
-      // a wall of glass onto the city at golden hour, with curtains, and a fireplace
-      const glass = at(new THREE.Mesh(new THREE.PlaneGeometry(d * 0.55, h - 0.7), new THREE.MeshBasicMaterial({ map: viewTexture(true), toneMapped: false })), -w / 2 + 0.03, (h - 0.7) / 2 + 0.25, -0.6, g);
-      glass.rotation.y = Math.PI / 2;
-      for (let i = 0; i <= 4; i++) at(box(0.06, h - 0.6, 0.06, "#1f1f1f", { metalness: 0.6 }), -w / 2 + 0.06, (h - 0.6) / 2 + 0.25, -0.6 - d * 0.275 + i * (d * 0.55) / 4, g);
-      const cur = at(curtains(d * 0.55, h - 0.5, "#efe6d4"), -w / 2 + 0.12, 0, -0.6, g);
-      cur.rotation.y = Math.PI / 2;
-      const fp = fireplace();
-      at(fp.group, w / 2 - 0.28, 0, d / 2 - 2.6, g).rotation.y = -Math.PI / 2;
-      ticks.push(fp.tick);
-      block(w / 2 - 0.6, d / 2 - 3.8, w / 2, d / 2 - 1.4);
-      at(picture(1.6, 1.0, emojiArt("🏆", "#1f2937")), w / 2 - 0.04, 2.4, d / 2 - 2.6, g).rotation.y = -Math.PI / 2;
-      // a second sofa closes the living area
-      at(sofa(2.2, "#3a2a20"), -w / 4, 0, -1.6, g);
-      block(-w / 4 - 1.1, -2.1, -w / 4 + 1.1, -1.1);
-    } else {
-      const cur = at(curtains(1.7, 2.1, tier === 0 ? "#7c8a6b" : "#8b6f4e"), -w / 2 + 0.12, 0.8, 0, g);
-      cur.rotation.y = Math.PI / 2;
-    }
-    if (ctx.partner) person(-w / 4 + 0.4, 1.6, Math.PI, { seed: ctx.partner.name, female: (ctx.partner.gender || "F") === "F", shirt: "#e11d48", sit: true });
-  } else if (id === "club") {
+  if (id === "club") {
     w = 16; d = 12; h = 4.2;
     g = room(w, d, h, { floorTex: concreteTexture("#1a1620"), floorRough: 0.42, wall: "#1d1626", wallTex: brickTexture("#2b2035", "#100c15"), ceiling: "#0c0a10", light: "#b46cff", lights: 2, power: 9, windows: "none", hemi: 0.08, ceilingStyle: "industrial" });
     exposure = 0.95;
@@ -2162,13 +2087,16 @@ export class WorldView {
         this.scene.remove(this.interiors[k].group);
         for (const p of this.interiors[k].people) p.f.dispose();
         if (this.interiors[k].env) this.interiors[k].env.dispose();
+        for (const c of this.interiors[k].cells || []) if (c.env) c.env.dispose();
         delete this.interiors[k];
       }
-      I = buildInterior(id, ctx);
+      // extra set dressing (Codex: café, gym, cars, pets; Freebuff: club, ink, realty), before the
+      // room captures its reflections
+      I = decorateVenueExtras(id, decorateVenue(id, buildInterior(id, ctx)));
       I.origin = new THREE.Vector3(1000 + PLACES.findIndex((p) => p.id === id) * 80, 0, 0);
       // the room lights itself: a 360° capture from eye height in the middle of the room becomes
       // its reflections and bounce light
-      if (this.makeEnv) {
+      if (this.makeEnv && !I.cells) {
         const snap = new THREE.Scene();
         snap.background = new THREE.Color(I.bg || "#15130f");
         I.group.position.set(0, -1.6, 0);
@@ -2181,7 +2109,7 @@ export class WorldView {
     }
     for (const x of Object.values(this.interiors)) x.group.visible = x === I;
     const place = PLACES.find((p) => p.id === id);
-    this.inside = { id, I, door: place.door, name: place.name, icon: place.icon };
+    this.inside = { id, I, door: place.door, name: place.name, icon: place.icon, cell: -1 };
     // a few steps in from the door, so the camera behind you has room
     this.pos.set(I.origin.x, 0, I.origin.z + I.d / 2 - 3.1);
     this.heading = Math.PI;
@@ -2202,6 +2130,30 @@ export class WorldView {
     this.bringPets();
     this.near = null;
     if (this.onNear) this.onNear(null);
+  }
+
+  /** Walking from room to room in a house: that room's light, reflections and look take over. */
+  houseRoom(I, P) {
+    const ci = I.cellAt(P.x - I.origin.x, P.z - I.origin.z);
+    if (ci < 0 || ci === this.inside.cell) return;
+    this.inside.cell = ci;
+    const cell = I.cells[ci];
+    I.enterCell(ci);
+    if (!cell.env && this.makeEnv) {
+      // first time in this room: capture it from eye height in its middle
+      const snap = new THREE.Scene();
+      snap.background = new THREE.Color(cell.bg || "#15130f");
+      I.group.position.set(-cell.cx, -1.6, -cell.cz);
+      snap.add(I.group);
+      cell.env = this.makeEnv(snap);
+      I.group.position.copy(I.origin);
+      this.scene.add(I.group);
+    }
+    if (cell.env) this.scene.environment = cell.env;
+    this.exposure = cell.exposure;
+    this.look = cell.look;
+    this.scene.fog = cell.fog || null;
+    if (this.onRoom) this.onRoom(cell.name);
   }
 
   /** Step back out onto the street in front of the door. */
@@ -2429,6 +2381,7 @@ export class WorldView {
     if (this.inside) {
       const I = this.inside.I;
       I.tick(dt, performance.now() / 1000);
+      if (I.cells) this.houseRoom(I, P);
       best = 0;
       if (Math.hypot(P.x - I.origin.x, P.z - (I.origin.z + I.d / 2 - 0.5)) < 1.4) near = EXIT;
     }
@@ -2458,10 +2411,11 @@ export class WorldView {
     let cz = tgt.z + Math.cos(this.camYaw) * Math.cos(this.camPitch) * dist;
     let cyp = tgt.y + Math.sin(this.camPitch) * dist;
     if (this.inside) {
-      // keep the camera inside the walls
+      // keep the camera inside the walls (in a house: inside the room you're in)
       const I = this.inside.I, m = 0.25;
-      cx = Math.max(I.origin.x - I.w / 2 + m, Math.min(I.origin.x + I.w / 2 - m, cx));
-      cz = Math.max(I.origin.z - I.d / 2 + m, Math.min(I.origin.z + I.d / 2 - m, cz));
+      const b = I.cells && this.inside.cell >= 0 ? I.cells[this.inside.cell].bounds : [-I.w / 2, -I.d / 2, I.w / 2, I.d / 2];
+      cx = Math.max(I.origin.x + b[0] + m, Math.min(I.origin.x + b[2] - m, cx));
+      cz = Math.max(I.origin.z + b[1] + m, Math.min(I.origin.z + b[3] - m, cz));
       cyp = Math.min(I.h - 0.3, cyp);
     }
     c.position.lerp(new THREE.Vector3(cx, cyp, cz), this.snapCam ? 1 : damp(8, dt));
