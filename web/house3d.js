@@ -933,23 +933,24 @@ function vault(C) {
   for (let i = 0; i < 4; i++) K.at(K.box(1.3, 0.06, 0.06, "#e5e7eb", { metalness: 0.95 }), 0, 0, 0.25, vd).rotation.z = (i / 4) * Math.PI;
   for (let i = 0; i < 12; i++) K.at(K.cyl(0.06, 0.06, 0.12, "#6b7280", 8, { metalness: 0.9 }), Math.cos((i / 12) * TAU) * 1.2, Math.sin((i / 12) * TAU) * 1.2, 0.22, vd).rotation.x = Math.PI / 2;
   onWall(C, vd, "back", -w / 4, 1.6, T + 0.25);
-  // a mountain of gold coins, with a diving board into it
-  const mound = K.at(new THREE.Mesh(new THREE.SphereGeometry(2.0, 28, 14, 0, TAU, 0, Math.PI / 2), gold), w / 4 - 0.2, -0.6, -0.6, g);
+  // Keep the side-door aisle clear: the gold and board live entirely in the back bay.
+  const goldX = w / 4 - 0.2, goldZ = -d / 2 + 1.65;
+  const mound = K.at(new THREE.Mesh(new THREE.SphereGeometry(1.35, 28, 14, 0, TAU, 0, Math.PI / 2), gold), goldX, -0.45, goldZ, g);
   mound.scale.set(1, 0.65, 1);
   instanced(C, new THREE.CylinderGeometry(0.07, 0.07, 0.015, 12), gold, 160, (o, i) => {
-    const a = Math.random() * TAU, r = 1.4 + Math.random() * 1.0;
-    o.position.set(w / 4 - 0.2 + Math.cos(a) * r, 0.01 + Math.random() * 0.03, -0.6 + Math.sin(a) * r);
+    const a = Math.random() * TAU, r = 0.9 + Math.random() * 0.5;
+    o.position.set(goldX + Math.cos(a) * r, 0.01 + Math.random() * 0.03, goldZ + Math.sin(a) * r);
     o.rotation.set(Math.random() * 0.4, Math.random() * TAU, Math.random() * 0.4);
   });
-  C.block(w / 4 - 2.3, -2.7, w / 4 + 1.9, 1.5);
+  C.block(goldX - 1.48, goldZ - 1.48, goldX + 1.48, goldZ + 1.48);
   const db = new THREE.Group();
   K.at(K.box(0.5, 0.05, 2.2, "#f5f5f4", { roughness: 0.6 }), 0, 1.5, 0, db);
   K.at(K.box(0.4, 1.5, 0.4, "#60a5fa"), 0, 0.75, 0.8, db);
   for (let i = 0; i < 5; i++) K.at(K.box(0.5, 0.04, 0.04, "#d4d4d4"), 0, 0.3 * i + 0.2, 1.05, db);
-  K.at(db, w / 4 - 0.2, 0, 2.6, g);
-  C.block(w / 4 - 0.5, 1.4, w / 4 + 0.1, 3.8);
-  C.spot({ kind: "dive", icon: "🤑", label: "Dive into the gold", x: w / 4 - 0.2, z: 1.7, y: 1.55, ry: Math.PI, dist: 2.2,
-    to: { x: w / 4 - 0.2, z: -0.4, y: -0.55 }, stopLabel: "Climb out of the gold" });
+  K.at(db, goldX - 2.45, 0, goldZ, g).rotation.y = -Math.PI / 2;
+  C.block(goldX - 3.65, goldZ - 0.3, goldX - 1.25, goldZ + 0.3);
+  C.spot({ kind: "dive", icon: "🤑", label: "Dive into the gold", x: goldX - 1.55, z: goldZ, y: 1.55, ry: Math.PI / 2, dist: 2.2,
+    to: { x: goldX, z: goldZ, y: -0.55 }, stopLabel: "Climb out of the gold" });
   // pallets of cash and a pyramid of gold bars
   instanced(C, new THREE.BoxGeometry(0.32, 0.12, 0.16), K.mat("#4d7c0f", { roughness: 0.9 }), 120, (o, i) => {
     const layer = Math.floor(i / 30), k = i % 30;

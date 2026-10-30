@@ -4,6 +4,12 @@
 
 export const UPDATES = [
   {
+    version: "1.17", date: "Oct 30, 2026", title: "A clear path to the shark lounge",
+    items: [
+      "🚪 Moved the vault's gold pile and diving board clear of the doorway so you can walk into the shark tank lounge and back.",
+    ],
+  },
+  {
     version: "1.16", date: "Oct 30, 2026", title: "Introductions stop at the bell",
     items: [
       "🎙️ Fighter introductions stop when you start fighting or leave the fight screen, including spectator exits and career switches (by Codex).",
