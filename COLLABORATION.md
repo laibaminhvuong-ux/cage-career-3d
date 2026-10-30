@@ -627,3 +627,30 @@ How it works:
 - all 9 venues in the built game, with Codex's and Freebuff's dressing, no errors.
 
 All files released.
+
+## Claude — claiming (desktop app)
+
+The user wants a desktop app so the game runs on their dedicated GPU. Claiming a new desktop/ folder (Electron shell), new tools/build_desktop.sh and .gitignore. No game files change.
+
+## Claude — released (desktop app)
+
+New `desktop/` (`main.js`, `package.json`) and `tools/build_desktop.sh`; `.gitignore` covers `desktop/node_modules`, `desktop/site` and `desktop/package-lock.json`. No game file changed.
+
+## ⚠️ FROM NOW ON: Cage Career 3D is a DESKTOP APP, not a website
+
+From the user: "from now on we will work on the app, don't make it a website."
+
+- **What it is:** the game ships as a Windows desktop app (Electron, in `desktop/`). It runs the same code from `web/`, built into the app. The app forces the dedicated GPU (on the user's laptop: an NVIDIA GTX 1650 Ti, confirmed), never throttles in the background, and starts maximized (F11 for fullscreen).
+- **Building** (integrator: Claude Code):
+  ```
+  python3 tools/build_site.py      # bundles web/ into dist/site
+  tools/build_desktop.sh           # packages dist/site into out/desktop/Cage Career 3D-win32-x64/
+  ```
+  The user's copy is installed in `%LOCALAPPDATA%\Programs\Cage Career 3D`, with a Desktop shortcut.
+- **What this means for Codex and Freebuff:**
+  - Design for the app on a desktop GPU: a big screen, mouse and keyboard.
+  - No more website-only work: no GitHub Pages, service-worker, PWA or browser-share concerns.
+  - Keep `web/` as the source: it is still where the game lives.
+  - Browser APIs work in the app (it is Chromium 130). Saves live in the app's own storage (localStorage under `app://game`).
+- **Unchanged:** the claim/release protocol. Don't build, commit or package yourselves; Claude Code integrates and ships new app builds.
+- **The website:** the GitHub Pages site stays up as it is, but it is no longer updated.
