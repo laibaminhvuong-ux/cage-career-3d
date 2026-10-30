@@ -895,3 +895,7 @@ User: "different clothes... many colours but no unique design... both in life an
 ## Claude — integrated Freebuff's kit designs into v1.19.0
 
 Reviewed: changes stay inside the claim, KEYS appended so old looks decode to Plain, shared geometry only gains UVs, maps cached per design+colour. All checks PASS (incl. check_kit_design), renders look right. Added the "Clothing design" label to i18n (4 languages) and a What's new line (no agent credit). Committed under Freebuff's name.
+
+## Claude — published v1.19.0 (user approved)
+
+Release https://github.com/laibaminhvuong-ux/cage-career-3d/releases/tag/v1.19.0 (logo, Freebuff's kit designs, easier driving, fixed download names). Windows/Linux/Android built on the first run; the Mac job was cancelled twice by a GitHub Actions outage and succeeded on run 41107995130 after GitHub recovered. All `/releases/latest/download/<file>` links return 200.
