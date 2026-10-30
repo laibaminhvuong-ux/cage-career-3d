@@ -4,6 +4,7 @@ import * as THREE from "./vendor/three.module.min.js";
 import { createPromotionBelt } from "./belt3d.js";
 import { ABS, BIND_POSE, BODY_TYPES, FACES, buildBody, buildGloveGeo, buildHeadGeo } from "./body3d.js";
 import { TATTOO_DESIGNS, TATTOO_REGIONS, addTattoos } from "./tattoo3d.js";
+import { KIT_NAMES, addCylinderUV, kitTexture } from "./kit3d.js";
 
 export const LOOK_OPTIONS = {
   skin: ["#f2d2b6", "#e3b48e", "#c98e64", "#a96c45", "#7c4b2c", "#4f301d"],
@@ -14,6 +15,7 @@ export const LOOK_OPTIONS = {
   beard: ["None", "Stubble", "Goatee", "Full"],
   shorts: ["#c8102e", "#1d4ed8", "#151515", "#f2f2f2", "#15803d", "#e8a91c", "#7c3aed", "#f97316",
     "#0f2a5c", "#0d9488", "#ec4899", "#9ca3af", "#7f1d1d", "#38bdf8", "#84cc16"],
+  design: KIT_NAMES,
   body: BODY_TYPES.map((b) => b.name),
   abs: ABS.map((a) => a.name),
   ...Object.fromEntries(TATTOO_REGIONS.map((r) => [r.key, TATTOO_DESIGNS])),
@@ -42,7 +44,8 @@ export function orgStyle(org) {
 }
 
 export const SHORTS_NAMES = ["Red", "Blue", "Black", "White", "Green", "Gold", "Purple", "Orange", "Navy", "Teal", "Pink", "Silver", "Maroon", "Sky blue", "Lime"];
-const KEYS = ["skin", "hair", "hairColor", "beard", "shorts", "body", "abs", ...TATTOO_REGIONS.map((r) => r.key), "face", "headband", "wraps", "knees"];
+// Appended keys only, so every look saved before a feature still decodes to the same fighter.
+const KEYS = ["skin", "hair", "hairColor", "beard", "shorts", "body", "abs", ...TATTOO_REGIONS.map((r) => r.key), "face", "headband", "wraps", "knees", "design"];
 // looks saved before body type and abs existed are athletic and toned
 const LOOK_DEFAULTS = { body: 1, abs: 1 };
 
@@ -73,6 +76,7 @@ export function lookFromName(name) {
   return { skin: pick("skin"), hair: pick("hair"), hairColor: Math.floor(r() * 5), beard: pick("beard"), shorts: pick("shorts"), body: pick("body"), abs: pick("abs"),
     ...Object.fromEntries(TATTOO_REGIONS.map((t) => [t.key, r() < 0.3 ? 1 + Math.floor(r() * (TATTOO_DESIGNS.length - 1)) : 0])),
     face: 1 + Math.floor(r() * (FACES.length - 1)),
+    design: r() < 0.45 ? 0 : 1 + Math.floor(r() * (KIT_NAMES.length - 1)),
     headband: r() < 0.12 ? 1 + Math.floor(r() * 6) : 0, wraps: r() < 0.35 ? 1 + Math.floor(r() * 3) : 0, knees: r() < 0.15 ? 1 + Math.floor(r() * 2) : 0 };
 }
 
@@ -1096,14 +1100,16 @@ export class Fighter3D {
     this.skinM = skin;
     this.skinBase = skin.color.clone();
     const hairM = addDetail(mat(LOOK_OPTIONS.hairColor[look.hairColor], { roughness: 0.62, envMapIntensity: 0.5 }), "hair");
-    const shortsM = addDetail(mat(opts.presenter ? opts.outfit || "#b91c38" : civ ? opts.pants || "#3c3f46" : LOOK_OPTIONS.shorts[look.shorts], { roughness: 0.62 }), "cloth");
+    const shortsColor = opts.presenter ? opts.outfit || "#b91c38" : civ ? opts.pants || "#3c3f46" : LOOK_OPTIONS.shorts[look.shorts];
+    const shortsM = addDetail(mat(shortsColor, { roughness: 0.62 }), "cloth");
     // each promotion has its own glove: the body, the knuckle panel and (for some) a fixed strap color
     const GS = { ...orgStyle(opts.org).gloves, ...(opts.eventGloves || {}) };
     this.gloveStyle = GS;
     const gloveM = addDetail(mat(GS.body, { roughness: 0.36, envMapIntensity: 0.6 }), "leather");
     const panelM = addDetail(mat(GS.panel, { roughness: 0.32, envMapIntensity: 0.7, metalness: GS.metal || 0.02 }), "leather");
     const bandM = mat(opts.glove || "#c8102e", { roughness: 0.5 });
-    const shirtM = addDetail(mat(opts.shirt || "#17181c", { roughness: 0.8 }), "cloth");
+    const shirtColor = opts.shirt || "#17181c";
+    const shirtM = addDetail(mat(shirtColor, { roughness: 0.8 }), "cloth");
     const dark = mat("#120d0b", { roughness: 0.4 });
 
     const root = new THREE.Group();
@@ -1144,6 +1150,17 @@ export class Fighter3D {
     const body = buildBody(bones, order, width, kind, { body: look.body, abs: look.abs, female, bikini: !!opts.bikini, step: opts.detail === "low" ? 0.022 : undefined });
     // Body geometry is cached across fighters; only the vertex-painted skin is private.
     this.sharedGeometry = new Set(Object.values(body).filter((g) => g && g.isBufferGeometry));
+    // A clothing design is a print wrapped around the cloth; the geometry is shared, so only the
+    // UVs (design-independent) and the map are added, and "Plain" leaves the flat colour alone.
+    const design = look.design || 0;
+    if (design) for (const g of [body.shorts, body.top, body.shirt, body.pants]) if (g) addCylinderUV(g);
+    const printed = (m, color, on = true) => {
+      const tex = on ? kitTexture(design, color) : null;
+      if (!tex) return m;
+      m.map = tex;
+      m.color.setStyle("#ffffff");
+      return m;
+    };
     const skeleton = new THREE.Skeleton(order.map((n) => bones[n]));
     const skinned = (g, m) => {
       const sm = new THREE.SkinnedMesh(g, m);
@@ -1157,6 +1174,7 @@ export class Fighter3D {
     this.bodyMesh = skinned(withColors(body.skin), skin);
     if (body.shorts) {
       shortsM.side = THREE.DoubleSide;
+      printed(shortsM, shortsColor, !civ);
       skinned(body.shorts, shortsM);
     }
     if (body.trim) {
@@ -1168,7 +1186,10 @@ export class Fighter3D {
       skinned(body.trim, trimM);
     }
     if (body.top) skinned(body.top, shortsM);
-    if (body.shirt) skinned(body.shirt, shirtM);
+    if (body.shirt) {
+      printed(shirtM, shirtColor, !opts.ref);
+      skinned(body.shirt, shirtM);
+    }
     if (body.pants) skinned(body.pants, shortsM);
     // tattoos are cut from the skin while the skeleton is still in the bind pose
     const wp = (b, y = 0) => b.localToWorld(new THREE.Vector3(0, y, 0));

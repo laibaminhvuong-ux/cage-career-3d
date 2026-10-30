@@ -377,7 +377,7 @@ function lookRows(look, attr, section = "all") {
     </div></div>`;
   const parts = {
     face: () => row("skin", "Skin tone", "swatch") + row("face", "Face", "chip") + row("hair", "Hair", "chip") + row("hairColor", "Hair color", "swatch") + row("beard", "Facial hair", "chip"),
-    body: () => row("body", "Body type", "chip") + row("abs", "Abs", "chip") + row("shorts", "Fight shorts", "swatch"),
+    body: () => row("body", "Body type", "chip") + row("abs", "Abs", "chip") + row("shorts", "Fight shorts", "swatch") + row("design", "Clothing design", "chip"),
     gear: () => row("headband", "Headband", "chip") + row("wraps", "Feet", "chip") + row("knees", "Knees", "chip"),
     ink: () => TATTOO_REGIONS.map((r) => row(r.key, r.name, "chip")).join(""),
   };
