@@ -4,6 +4,10 @@ A Java + HTML MMA career simulator, now with 3D fighters and music. Create a fig
 grind the regional circuit, earn a Contender Series shot, sign with the GFC, climb the rankings
 and chase the belt before Father Time catches up — and watch every fight play out in a 3D octagon.
 
+## Download
+
+**[⬇ Download Cage Career 3D for Windows](https://github.com/laibaminhvuong-ux/cage-career-3d/releases/latest)**: run `Cage-Career-3D-Setup-<version>.exe`, or unzip the portable version and run `Cage Career 3D.exe`. The app runs on your dedicated graphics card and tells you when a new version is out. Windows may show "Windows protected your PC" the first time, because the app isn't code-signed: click **More info → Run anyway**.
+
 ## Play online
 
 The game runs entirely in the browser and is published as a private claude.ai artifact:

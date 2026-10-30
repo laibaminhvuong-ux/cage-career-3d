@@ -3,3 +3,4 @@ save/
 desktop/node_modules/
 desktop/site/
 desktop/package-lock.json
+desktop/release/

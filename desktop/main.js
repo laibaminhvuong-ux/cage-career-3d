@@ -1,7 +1,7 @@
 // Cage Career 3D as a desktop app: the same game as the website, run by Electron so it can insist
 // on the computer's dedicated graphics card (browsers on laptops often pick the weaker built-in
 // one), never throttle when the window loses focus, and fill the screen.
-const { app, BrowserWindow, Menu, net, protocol, shell } = require("electron");
+const { app, BrowserWindow, Menu, dialog, net, protocol, shell } = require("electron");
 const fs = require("fs");
 const path = require("path");
 const { pathToFileURL } = require("url");
@@ -20,6 +20,29 @@ app.commandLine.appendSwitch("disable-backgrounding-occluded-windows");
 // the game is served from app://game/ (not file://, where modules, fetch and storage misbehave)
 protocol.registerSchemesAsPrivileged([{ scheme: "app", privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } }]);
 const SITE = path.join(__dirname, "site");
+const RELEASES = "https://github.com/laibaminhvuong-ux/cage-career-3d/releases/latest";
+
+/** Is version a newer than b? ("1.13.0" vs "1.12.0") */
+function newer(a, b) {
+  const pa = a.split(".").map(Number), pb = b.split(".").map(Number);
+  for (let i = 0; i < 3; i++) if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) > (pb[i] || 0);
+  return false;
+}
+
+/** On startup, ask GitHub for the latest release; if it's newer, offer to download it. */
+async function checkForUpdate(win) {
+  try {
+    const r = await net.fetch("https://api.github.com/repos/laibaminhvuong-ux/cage-career-3d/releases/latest", { headers: { "User-Agent": "cage-career-3d" } });
+    if (!r.ok) return;
+    const latest = String((await r.json()).tag_name || "").replace(/^v/, "");
+    if (!/^\d+\.\d+/.test(latest) || !newer(latest, app.getVersion())) return;
+    const { response } = await dialog.showMessageBox(win, {
+      type: "info", buttons: ["Download", "Later"], defaultId: 0, cancelId: 1, title: "Update available",
+      message: `Cage Career 3D ${latest} is out`, detail: `You have ${app.getVersion()}. Download the new version to get the latest features (your saves stay).`,
+    });
+    if (response === 0) shell.openExternal(RELEASES);
+  } catch { /* offline: try again next launch */ }
+}
 
 app.whenReady().then(() => {
   protocol.handle("app", (req) => {
@@ -35,12 +58,12 @@ app.whenReady().then(() => {
     backgroundColor: "#0b0d12", title: "Cage Career 3D", icon: path.join(SITE, "icons", "icon-512.png"),
     webPreferences: { backgroundThrottling: false, contextIsolation: true, sandbox: true },
   });
-  win.once("ready-to-show", () => { win.maximize(); win.show(); });
-  // the first launch offers Minh Vuong's career (the game asks before loading it)
-  const flag = path.join(app.getPath("userData"), "launched");
-  const first = !fs.existsSync(flag);
-  try { fs.writeFileSync(flag, "1"); } catch { /* read-only profile: ask again next time */ }
-  win.loadURL("app://game/index.html" + (first ? "?career=minh-vuong" : ""));
+  win.once("ready-to-show", () => {
+    win.maximize();
+    win.show();
+    setTimeout(() => checkForUpdate(win), 4000);
+  });
+  win.loadURL("app://game/index.html");
   // F11 fullscreen; links to the web open in the real browser
   win.webContents.on("before-input-event", (e, input) => {
     if (input.type === "keyDown" && input.key === "F11") {

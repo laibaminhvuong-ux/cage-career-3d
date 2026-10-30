@@ -2,11 +2,52 @@
   "name": "cage-career-3d",
   "productName": "Cage Career 3D",
   "version": "1.12.0",
-  "description": "Cage Career 3D, the desktop app",
+  "description": "Cage Career 3D: an MMA career game",
+  "author": "laibaminhvuong",
   "main": "main.js",
   "private": true,
   "devDependencies": {
     "@electron/packager": "18.3.6",
-    "electron": "33.2.0"
+    "electron": "33.2.0",
+    "electron-builder": "25.1.8"
+  },
+  "build": {
+    "appId": "com.laibaminhvuong.cagecareer3d",
+    "productName": "Cage Career 3D",
+    "copyright": "Cage Career 3D",
+    "files": [
+      "main.js",
+      "site/**/*"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "site/icons/icon-512.png",
+      "artifactName": "Cage-Career-3D-${version}-portable.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Cage Career 3D",
+      "artifactName": "Cage-Career-3D-Setup-${version}.${ext}"
+    }
   }
 }

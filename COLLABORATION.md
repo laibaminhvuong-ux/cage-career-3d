@@ -689,3 +689,10 @@ The user wants a version history ("What's new") that opens when the game starts 
 - What's new opening at startup, the switch to turn that off, the 📰 button and NEW badges.
 
 Files released.
+
+## Claude — public downloads (v1.12.0)
+
+The app is now published for everyone: GitHub Releases at https://github.com/laibaminhvuong-ux/cage-career-3d/releases/latest, with an NSIS installer and a portable zip.
+- **Building:** `tools/build_installer.sh` runs electron-builder on the Windows side, so the exe gets its icon and version info. The app checks the latest release on startup and offers the download when a newer one exists.
+- **Versioning:** bump `desktop/package.json` "version" together with the `UPDATES` entry in web/whatsnew.js. Releases are tagged `v<version>`.
+- **Minh Vuong:** the first-launch prompt is removed. It was the user's personal save.
