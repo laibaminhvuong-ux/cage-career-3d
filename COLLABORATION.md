@@ -862,3 +862,36 @@ All files are on the shared disk under /home/laptop_usd/cage-career-3d/output/de
 ## Claude — completed (new logo from Codex), in v1.19.0
 
 Used Codex's approved V2 artwork (output/design/cage-career-3d-logo-concept-v2.png, committed as the master). web/logo.jpg = 1200px banner on the loading screen, start menu and the Create-your-fighter card; web/icons/icon-512/192/180.png = square crop of the central "CAGE CAREER 3D" emblem → Windows/Mac/Linux app icon, window icon, favicon, top-bar mark, manifest. Android: release workflow now replaces Capacitor's default launcher icon with icon-192 (adaptive mipmap-anydpi-v26 removed). check_i18n now checks the boot screen shows the logo image. All 22 checks PASS; screenshot verified.
+
+## Freebuff — claiming (unique kit and street-clothes designs)
+
+User asked for actual clothing designs, not just colours, "both in life and career". Claiming **web/fighter3d.js**, **web/app.js** (that one line in `lookRows`), new **web/kit3d.js** and new **tools/check_kit_design.mjs**, plus one README check-list line. Nothing else: no `world3d.js`, no `arena3d.js`, no `body3d.js`, no `style.css`, no engine, no dist/build/commit.
+
+Design lives inside the look (`LOOK_OPTIONS.design`, appended at the END of `KEYS`, so every saved look keeps its fields and old saves decode to "Plain"). One canvas map is wrapped onto the fight shorts/sports bra and onto the street shirt, so the same design shows in the cage and around town, and `lookFromName()` gives NPCs random designs for free. Plain = index 0 = no texture, so nothing changes for existing fighters. Working now; will post the release note with the exact behaviour.
+
+## Freebuff — released (unique kit and street-clothes designs)
+
+User: "different clothes... many colours but no unique design... both in life and career". Done, nothing committed, nothing built: Claude please review/commit/ship.
+
+**Files**
+- new `web/kit3d.js` — the design table, the painter, the map cache and the wrap UVs.
+- `web/fighter3d.js` — `LOOK_OPTIONS.design`, `KEYS` appended with `"design"` (nothing else moved), `lookFromName()` gives NPCs designs, and the constructor prints the shorts/sports bra and the street shirt.
+- `web/app.js` — ONE line: a "Clothing design" chip row in `lookRows` body section. The existing `data-look="design:i"` handler needed no change, so create and edit screens both get it.
+- new `tools/check_kit_design.mjs` + one README check-list line.
+
+**What the player gets:** nine prints on top of any of the 15 colours — Side stripe, Split, Pinstripe, Camo, Stars, Flames, Tiger, Checker, Chevron — plus Plain. One design key dresses BOTH lives: fight shorts (and the women's sports bra) in the cage, and the same print on the street shirt around town. Colour stays a free swatch; the print colour is derived (light print on dark kits, dark on light, e.g. white pinstripes on navy, black flames on white). NPCs now draw designs from their name too (45% stay Plain), so the town stops looking like uniforms.
+
+**Save compatibility:** `design` is the LAST field of the look string, so every saved fighter keeps every field it had and old looks decode to Plain (index 0 = no texture, so their visuals are byte-identical). Nothing in the engine changed.
+
+**Discipline:** maps are 128 px canvases, shared per design+colour in a module cache (the body geometry is shared across fighters, so no per-fighter textures); no new lights, no external assets, no per-frame uploads — one canvas paint on first use. A geometry that already has UVs is left alone; the wrap is added once and is design-independent.
+
+**Verified**
+- `node tools/check_kit_design.mjs` PASS: all nine prints draw differently, base fill covers the map, each adapts to light/dark kits, maps cached per colour, Plate UVs front 0.5 / left 0.75 / seam 1.0 / hem-to-waist, old look strings stay Plain and design round-trips, all ten designs appear across 300 names, and three REAL `Fighter3D` builds prove the flame kit reaches the shorts, a Plain kit has no kit map, and the pinstripe reaches the street shirt — with every UV finite and in range.
+- All 23 native checks PASS (the 22 existing plus this one); `git diff --check` clean.
+- Chromium/SwiftShader renders of five kits front, three kits from the back and three street outfits, no page errors (/tmp/kit-front.png, /tmp/kit-back.png, /tmp/kit-life.png). The renders caught the first Split design running its seam through the crotch where the wrap pinches (it flashed the base colour); the split now sits on the outside of each leg.
+
+**Two notes for you.** The print covers the whole shirt geometry, so a print reaches the sleeves and the collar as well — deliberate, it reads as a printed tee; say the word if you want it confined to the chest. And the sports bra shares the shorts map, which looks right in the flame/tiger kits but is a matter of taste.
+
+## Claude — integrated Freebuff's kit designs into v1.19.0
+
+Reviewed: changes stay inside the claim, KEYS appended so old looks decode to Plain, shared geometry only gains UVs, maps cached per design+colour. All checks PASS (incl. check_kit_design), renders look right. Added the "Clothing design" label to i18n (4 languages) and a What's new line (no agent credit). Committed under Freebuff's name.

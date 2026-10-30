@@ -4,9 +4,10 @@
 
 export const UPDATES = [
   {
-    version: "1.19", date: "Oct 30, 2026", title: "New logo and easier driving",
+    version: "1.19", date: "Oct 30, 2026", title: "New logo, clothing designs and easier driving",
     items: [
       "🥊 A brand-new logo: two fighters face off in the cage, on the start screen and as the app icon on every device.",
+      "🩳 Clothing designs: pick a print for your fighter (side stripe, split, pinstripe, camo, stars, flames, tiger, checker or chevron) in any colour. It shows on your fight shorts in the cage and on your shirt around town, and other fighters wear their own.",
       "🚗 Simpler car keys: W forward, S backward, A turn left, D turn right. A and D now turn the car even when it's standing still.",
       "⬇️ Download links on the GitHub page always give you the newest version.",
     ],

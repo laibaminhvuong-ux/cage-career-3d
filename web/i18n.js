@@ -46,6 +46,7 @@ export const ROWS = [
   ["Body type", "Dáng người", "Tipo de cuerpo", "Tipo de corpo", "Morphologie"],
   ["Abs", "Cơ bụng", "Abdominales", "Abdômen", "Abdos"],
   ["Fight shorts", "Quần đấu", "Pantalón de pelea", "Shorts de luta", "Short de combat"],
+  ["Clothing design", "Họa tiết quần áo", "Diseño de la ropa", "Estampa da roupa", "Motif des vêtements"],
   ["Accessories", "Phụ kiện", "Accesorios", "Acessórios", "Accessoires"],
   ["Headband", "Băng đô", "Cinta", "Faixa", "Bandeau"],
   ["Feet", "Bàn chân", "Pies", "Pés", "Pieds"],
