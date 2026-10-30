@@ -99,7 +99,7 @@ for (const [src, want] of SAMPLES) {
 
 const raw = fs.readFileSync(new URL("../web/index.html", import.meta.url), "utf8");
 assert.ok(/class="brand"[^>]*translate="no"/.test(raw), "the top-bar brand should stay translate=no");
-assert.ok(/class="boot-mark"[^>]*translate="no"/.test(raw), "the boot-screen brand should stay translate=no");
+assert.ok(/id="boot"[^>]*>\s*<img class="logo-banner"/.test(raw), "the boot screen shows the logo image (no text brand to translate)");
 const body = blankNoTranslate(raw.slice(raw.indexOf("<body")));
 
 const strings = new Set();

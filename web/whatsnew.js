@@ -4,8 +4,9 @@
 
 export const UPDATES = [
   {
-    version: "1.19", date: "Oct 30, 2026", title: "Easier driving",
+    version: "1.19", date: "Oct 30, 2026", title: "New logo and easier driving",
     items: [
+      "🥊 A brand-new logo: two fighters face off in the cage, on the start screen and as the app icon on every device.",
       "🚗 Simpler car keys: W forward, S backward, A turn left, D turn right. A and D now turn the car even when it's standing still.",
       "⬇️ Download links on the GitHub page always give you the newest version.",
     ],

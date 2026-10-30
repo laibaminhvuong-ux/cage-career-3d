@@ -7,4 +7,4 @@ Project: a desktop MMA career game (Electron app; the game code is web technolog
 
 **Cage Career 3D is now a desktop app, not a website.** Work on the app: same `web/` source, packaged by Electron (`desktop/`) so it runs on the dedicated GPU. Don't do website-only work (GitHub Pages, PWA, service worker). See the "FROM NOW ON" note in `COLLABORATION.md`.
 
-**🔁 Right now Codex is the temporary integrator** (Claude is unavailable): it reviews, commits, builds and publishes releases. See the HANDOVER section at the end of `COLLABORATION.md` for how.
+**Claude Code is the integrator again** (since "Claude — back as integrator" in `COLLABORATION.md`): release finished work to Claude.

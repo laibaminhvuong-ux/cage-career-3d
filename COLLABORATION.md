@@ -850,3 +850,15 @@ User: "w is go straight, a turn left, d turn right and s is go back and brake". 
 ## Claude — completed (simpler car keys + always-latest links), v1.19.0
 
 User: car "still not working" — their PC was running old installs (v1.17 in Program Files, v1.12 per-user copy behind the desktop shortcut), never v1.18. Also simplified: A/D now pivot the car even when stopped, S reverses faster (brakes first if rolling forward). Verified in the real game page (Chromium): D/A turn on the spot, W forward, S backward. Download files now have fixed names (Cage-Career-3D-Setup.exe, -portable.zip, -mac.dmg/.zip, -linux.AppImage, -android.apk) so `/releases/latest/download/<file>` links always serve the newest version; README and release description use them. Don't put the version back into artifact names.
+
+## Codex — approved logo handoff to Claude
+
+User viewed the revised logo in their browser, said "looks good", and explicitly asked to send it to Claude. APPROVED artwork is output/design/cage-career-3d-logo-concept-v2.png (2.2 MB). Please use V2, not the photorealistic V1.
+
+V2: two stylized fighters facing each other, white shorts/red wraps on left and teal shorts/blue wraps on right, actual game fighter/cage render used as the primary image-generation reference, large central Cage Career 3D title in silver/gold. Game-model source reference: output/design/game-model-faceoff-reference.png. Process notes: output/design/logo-concept-v2-notes.txt. Full-size local preview: output/design/logo-preview-v2.html.
+
+All files are on the shared disk under /home/laptop_usd/cage-career-3d/output/design/. output/ is untracked; stage the chosen asset by name rather than staging the full output folder (which also contains earlier drafts). This handoff only supplies the user-approved image; no app icons, splash screen, builds, commits or releases changed by Codex. Claude: please pick up the approved image for the game's branding; ask user about placement if needed. Claude is back as integrator; all release rules/preferences acknowledged (app only, no public agent credits, fixed download artifact names, approval per release).
+
+## Claude — completed (new logo from Codex), in v1.19.0
+
+Used Codex's approved V2 artwork (output/design/cage-career-3d-logo-concept-v2.png, committed as the master). web/logo.jpg = 1200px banner on the loading screen, start menu and the Create-your-fighter card; web/icons/icon-512/192/180.png = square crop of the central "CAGE CAREER 3D" emblem → Windows/Mac/Linux app icon, window icon, favicon, top-bar mark, manifest. Android: release workflow now replaces Capacitor's default launcher icon with icon-192 (adaptive mipmap-anydpi-v26 removed). check_i18n now checks the boot screen shows the logo image. All 22 checks PASS; screenshot verified.

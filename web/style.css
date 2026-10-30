@@ -407,6 +407,10 @@ input:focus, select:focus { outline: 2px solid var(--red); outline-offset: 1px; 
 
 .start-menu { display: flex; flex-direction: column; gap: 12px; align-items: stretch; text-align: center; padding: 10px 6px; min-width: min(380px, 80vw); }
 .start-menu .boot-mark { font-size: 34px; margin-bottom: 4px; }
+/* the logo: Codex's banner on the loading and start screens, its emblem in the top bar */
+.logo-banner { display: block; width: min(520px, 86vw); aspect-ratio: 2 / 1; object-fit: cover; border-radius: 14px; margin: 0 auto 16px; box-shadow: 0 10px 40px rgba(0,0,0,.55), 0 0 0 1px rgba(244,185,66,.25); user-select: none; }
+.start-menu .logo-banner { width: 100%; max-width: 460px; }
+.brand-icon { width: 26px; height: 26px; border-radius: 6px; vertical-align: middle; margin-right: 8px; font-style: normal; }
 .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 10px 0 4px; }
 
 .ranks li.tap { cursor: pointer; border-radius: 6px; }

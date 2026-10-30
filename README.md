@@ -1,5 +1,7 @@
 # Cage Career 3D — MMA Career Sim
 
+![Cage Career 3D](web/logo.jpg)
+
 A Java + HTML MMA career simulator, now with 3D fighters and music. Create a fighter at 21,
 grind the regional circuit, earn a Contender Series shot, sign with the GFC, climb the rankings
 and chase the belt before Father Time catches up — and watch every fight play out in a 3D octagon.

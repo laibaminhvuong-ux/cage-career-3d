@@ -7,12 +7,12 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <title>Cage Career 3D</title>
   <link rel="manifest" href="manifest.json">
-  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="icon" href="icons/icon-192.png" type="image/png">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <header class="topbar">
-    <div class="brand" translate="no">CAGE<span>CAREER</span><sup>3D</sup></div>
+    <div class="brand" translate="no"><img class="brand-icon" src="icons/icon-192.png" alt="">CAGE<span>CAREER</span><sup>3D</sup></div>
     <div class="topright">
       <div id="topstats" class="topstats"></div>
       <button class="btn small gold" data-world id="lifeBtn">🌆 Life</button>
@@ -29,7 +29,7 @@
 
   <div id="fpsMeter" class="fps-meter hidden" translate="no"></div>
   <div id="boot" class="boot">
-    <div class="boot-mark" translate="no">CAGE<span>CAREER</span><sup>3D</sup></div>
+    <img class="logo-banner" src="logo.jpg" alt="Cage Career 3D" draggable="false">
     <div class="muted">Loading your fighters…</div>
   </div>
 
@@ -37,6 +37,7 @@
     <!-- Fighter creation -->
     <section id="create" class="hidden">
       <div class="card create-card">
+        <img class="logo-banner" src="logo.jpg" alt="Cage Career 3D" draggable="false">
         <h1>Create your fighter</h1>
         <div id="createSaves"></div>
         <p class="muted">Start at 21 on the regional circuit with nothing but a garage gym and a dream. Win, earn a Contender Series shot, sign with the GFC and chase the belt.</p>

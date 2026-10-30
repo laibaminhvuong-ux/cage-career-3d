@@ -936,7 +936,7 @@ function renderModal() {
   } else if (modal.kind === "start") {
     body.innerHTML = `
       <div class="start-menu">
-        <div class="boot-mark">CAGE<span>CAREER</span><sup>3D</sup></div>
+        <img class="logo-banner" src="logo.jpg" alt="Cage Career 3D" draggable="false">
         <p class="muted">Welcome back. What do you want to do?</p>
         ${s.exists ? `<button class="btn primary big" data-closemodal>▶ Continue as ${nm(s.fighter.displayName)}</button>` : ""}
         <button class="btn big" data-newsave>➕ Start a new fighter</button>

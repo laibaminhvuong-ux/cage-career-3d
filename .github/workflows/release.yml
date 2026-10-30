@@ -71,6 +71,9 @@ jobs:
           npm install --no-audit --no-fund
           npx cap add android
           npx cap sync android
+          # launcher icon: the game's logo emblem instead of Capacitor's default
+          rm -rf android/app/src/main/res/mipmap-anydpi-v26
+          for d in android/app/src/main/res/mipmap-*; do for n in ic_launcher ic_launcher_round ic_launcher_foreground; do cp ../web/icons/icon-192.png "$d/$n.png"; done; done
           cd android
           sed -i "s/versionName \".*\"/versionName \"${TAG#v}\"/" app/build.gradle
           ./gradlew assembleDebug --no-daemon

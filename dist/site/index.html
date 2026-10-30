@@ -12,7 +12,7 @@
   <link rel="apple-touch-icon" href="icons/icon-180.png">
   <title>Cage Career 3D</title>
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="icon" href="icons/icon-192.png" type="image/png">
   <style>
 :root {
   --bg: #0e1014;
@@ -423,6 +423,10 @@ input:focus, select:focus { outline: 2px solid var(--red); outline-offset: 1px; 
 
 .start-menu { display: flex; flex-direction: column; gap: 12px; align-items: stretch; text-align: center; padding: 10px 6px; min-width: min(380px, 80vw); }
 .start-menu .boot-mark { font-size: 34px; margin-bottom: 4px; }
+/* the logo: Codex's banner on the loading and start screens, its emblem in the top bar */
+.logo-banner { display: block; width: min(520px, 86vw); aspect-ratio: 2 / 1; object-fit: cover; border-radius: 14px; margin: 0 auto 16px; box-shadow: 0 10px 40px rgba(0,0,0,.55), 0 0 0 1px rgba(244,185,66,.25); user-select: none; }
+.start-menu .logo-banner { width: 100%; max-width: 460px; }
+.brand-icon { width: 26px; height: 26px; border-radius: 6px; vertical-align: middle; margin-right: 8px; font-style: normal; }
 .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 10px 0 4px; }
 
 .ranks li.tap { cursor: pointer; border-radius: 6px; }
@@ -678,7 +682,7 @@ input:focus, select:focus { outline: 2px solid var(--red); outline-offset: 1px; 
 </head>
 <body>
   <header class="topbar">
-    <div class="brand" translate="no">CAGE<span>CAREER</span><sup>3D</sup></div>
+    <div class="brand" translate="no"><img class="brand-icon" src="icons/icon-192.png" alt="">CAGE<span>CAREER</span><sup>3D</sup></div>
     <div class="topright">
       <div id="topstats" class="topstats"></div>
       <button class="btn small gold" data-world id="lifeBtn">🌆 Life</button>
@@ -695,7 +699,7 @@ input:focus, select:focus { outline: 2px solid var(--red); outline-offset: 1px; 
 
   <div id="fpsMeter" class="fps-meter hidden" translate="no"></div>
   <div id="boot" class="boot">
-    <div class="boot-mark" translate="no">CAGE<span>CAREER</span><sup>3D</sup></div>
+    <img class="logo-banner" src="logo.jpg" alt="Cage Career 3D" draggable="false">
     <div class="muted">Loading your fighters…</div>
   </div>
 
@@ -703,6 +707,7 @@ input:focus, select:focus { outline: 2px solid var(--red); outline-offset: 1px; 
     <!-- Fighter creation -->
     <section id="create" class="hidden">
       <div class="card create-card">
+        <img class="logo-banner" src="logo.jpg" alt="Cage Career 3D" draggable="false">
         <h1>Create your fighter</h1>
         <div id="createSaves"></div>
         <p class="muted">Start at 21 on the regional circuit with nothing but a garage gym and a dream. Win, earn a Contender Series shot, sign with the GFC and chase the belt.</p>

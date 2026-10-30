@@ -16,6 +16,7 @@ subprocess.run([esbuild, os.path.join(web, "app.js"), "--bundle", "--format=esm"
 for f in ["icon-180.png", "icon-192.png", "icon-512.png"]:
     shutil.copy(os.path.join(web, "icons", f), os.path.join(out, "icons", f))
 shutil.copy(os.path.join(web, "icon.svg"), os.path.join(out, "icon.svg"))
+shutil.copy(os.path.join(web, "logo.jpg"), os.path.join(out, "logo.jpg"))
 # ready-made careers players can download and load
 shutil.copytree(os.path.join(web, "saves"), os.path.join(out, "saves"))
 open(os.path.join(out, ".nojekyll"), "w").close()
@@ -81,7 +82,7 @@ manifest = {
 }
 json.dump(manifest, open(os.path.join(out, "manifest.webmanifest"), "w"), indent=2)
 
-files = ["./", "index.html", "game.js", "manifest.webmanifest", "icon.svg", "icons/icon-180.png", "icons/icon-192.png", "icons/icon-512.png"]
+files = ["./", "index.html", "game.js", "manifest.webmanifest", "icon.svg", "icons/icon-180.png", "icons/icon-192.png", "icons/icon-512.png", "logo.jpg"]
 digest = hashlib.sha256()
 for f in files[1:]:
     digest.update(open(os.path.join(out, f), "rb").read())
