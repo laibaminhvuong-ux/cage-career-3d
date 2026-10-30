@@ -10,6 +10,7 @@ export const UPDATES = [
       "🌙 Prefer it calm? Settings → Background music → Chill brings back the relaxed track.",
       "⬆️ Updates install inside the game: when a new version is out, the game asks you, downloads it, installs it and restarts. Your saves stay.",
       "💓 A heartbeat kick keeps the tension up between rounds.",
+      "🎶 Six new walkout music styles: hip-hop, heavy rock, phonk, cinematic orchestra, Brazilian percussion and industrial techno, nine entrance tracks in total (by Codex).",
       "📱 Now on every device: Windows, Mac, Linux and Android, plus a Jump button on touch screens.",
     ],
   },

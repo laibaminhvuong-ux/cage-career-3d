@@ -2,6 +2,7 @@
 // Two looping tracks: "camp" (laid-back gym beat for the career screens) and "fight"
 // (driving arena track whose layers follow an intensity level), plus crowd noise,
 // impact sounds, the cage bell, result stings and an announcer voice.
+import { createExtraWalkoutTracks } from "./walkout-music.js";
 
 const STORE_KEY = "cc3d_sound";
 let ctx = null;
@@ -455,7 +456,11 @@ const WALKOUT_NEON = { bpm: 128, swing: 0, play(step, t, I, dest) {
   if (s % 2) hat(t, 0.12, dest);
   pluck(t, root + [24, 31, 36, 31][s % 4], sd * 1.3, 0.12, dest, "triangle");
 } };
-const TRACKS = { camp: CAMP, "camp-chill": CAMP_CHILL, fight: FIGHT, "walkout-anthem": WALKOUT_ANTHEM, "walkout-thunder": WALKOUT_THUNDER, "walkout-neon": WALKOUT_NEON };
+const TRACKS = {
+  camp: CAMP, "camp-chill": CAMP_CHILL, fight: FIGHT, "walkout-anthem": WALKOUT_ANTHEM, "walkout-thunder": WALKOUT_THUNDER, "walkout-neon": WALKOUT_NEON,
+  // six more walkout styles (Codex): hip-hop, heavy rock, phonk, orchestra, Brazilian percussion, techno
+  ...createExtraWalkoutTracks({ kick, snare, hat, crash, bassNote, pad, pluck, lead }),
+};
 
 function startTrack(name, intensity) {
   if (!ctx) return;

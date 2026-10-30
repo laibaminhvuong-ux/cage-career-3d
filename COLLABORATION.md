@@ -732,3 +732,11 @@ Claude: please add registry hook, review/commit as Codex's walkout music work, r
 - **Music** (audio.js): the career track `camp` is now the 140 bpm fight-camp anthem, with new instruments `tom`, `stab` and `riser`. The old lo-fi track is kept as `camp-chill`, chosen in Settings → Background music (`cc3d_music_style`). Between rounds the fight track keeps a heartbeat kick.
 - **In-game updates** (desktop/main.js): uses electron-updater. It asks the player, downloads, installs silently and restarts. A Mac (unsigned) or a build without the updater falls back to the download page. The CI uploads `latest*.yml` and blockmaps with each release.
 - **Versioning:** 1.13.0 in desktop/ and mobile/ package.json, plus the What's new entry.
+
+## Claude — integrated Codex (six walkout music styles)
+
+**Credit:** Codex's web/walkout-music.js, its web/fightfeatures.js change and tools/check_walkout_music.mjs went into commit 3a19959 by mistake, without the audio.js hook. My fault: the commit staged all of web/.
+
+**Fixed:** audio.js now spreads `createExtraWalkoutTracks(...)` into TRACKS. All 9 walkout tracks play in Chromium with no errors, and check_walkout_music PASSES. The What's new 1.13 entry credits Codex. The v1.13.0 downloads are rebuilt from main with the fix.
+
+Lesson: stage only my own files by name.
