@@ -662,6 +662,18 @@ input:focus, select:focus { outline: 2px solid var(--red); outline-offset: 1px; 
 .mentor-line { font-size: 13px; color: var(--muted); margin: 2px 0 8px; }
 .mentor-line b { color: var(--gold); }
 
+/* ---------- what's new */
+.whatsnew h2 { margin-bottom: 2px; }
+.wn-version { border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; margin: 10px 0; }
+.wn-version.latest { border-color: var(--gold); box-shadow: 0 0 0 1px rgba(244, 185, 66, .25) inset; }
+.wn-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.wn-head b { color: var(--gold); }
+.wn-title { font-weight: 700; }
+.wn-date { margin-left: auto; font-size: 12px; }
+.wn-version ul { margin: 6px 0 0; padding-left: 18px; }
+.wn-version li { margin: 3px 0; font-size: 14px; line-height: 1.4; }
+.wn-auto { display: flex; align-items: center; gap: 8px; margin: 14px 0 6px; font-size: 14px; }
+
 </style>
 </head>
 <body>
@@ -673,6 +685,7 @@ input:focus, select:focus { outline: 2px solid var(--red); outline-offset: 1px; 
       <button class="btn small ghost" data-saves>💾 Saves</button>
       <button class="btn small ghost" data-hof>🏛 Hall of Fame</button>
       <button class="btn small ghost" data-trophies title="Trophies" aria-label="Trophies">🏆</button>
+      <button class="btn small ghost" data-whatsnew title="What's new" aria-label="What's new">📰</button>
       <button class="btn small ghost" data-help title="How to play">❓</button>
       <button class="btn small ghost sound-btn" data-sound aria-label="Toggle sound">🔊</button>
       <button class="btn small ghost" data-phone title="Phone" aria-label="Phone">📱</button>
@@ -772,7 +785,7 @@ input:focus, select:focus { outline: 2px solid var(--red); outline-offset: 1px; 
     <div id="worldStage" class="stage-host world-stage"></div>
     <div class="world-hud" id="worldHud"></div>
     <div class="world-bottom" id="worldBottom"></div>
-    <div class="world-help">Tap the ground or use WASD to walk · Shift to run · drag to look around</div>
+    <div class="world-help">Tap the ground or use WASD to walk · Shift to run · Space to jump · E to use things · drag to look around</div>
   </div>
 
   <!-- Shared modal: save slots, staff market, trash talk, division change, Hall of Fame -->
